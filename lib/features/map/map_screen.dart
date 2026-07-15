@@ -26,6 +26,7 @@ class MapScreen extends StatelessWidget {
           initialZoom: offlineArea?.minZoom.toDouble(),
           showControls: true,
           controlsTop: 104,
+          autoFit: true,
         ),
         Positioned(
           top: 16,

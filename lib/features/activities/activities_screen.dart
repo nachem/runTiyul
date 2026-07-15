@@ -125,6 +125,8 @@ class ActivityDetailScreen extends StatelessWidget {
             child: TrailMap(
               store: store,
               track: activity.samples.map((sample) => sample.latLng).toList(),
+              showControls: true,
+              autoFit: true,
             ),
           ),
           Padding(

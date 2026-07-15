@@ -377,6 +377,7 @@ class AppRepository {
     'created_at': area.createdAt.toUtc().toIso8601String(),
     'updated_at': area.updatedAt.toUtc().toIso8601String(),
     'last_error': area.lastError,
+    'source_format': area.sourceFormat.name,
   };
 
   OfflineArea _areaFromRow(Map<String, Object?> row) {
@@ -399,6 +400,16 @@ class AppRepository {
       createdAt: DateTime.parse(row['created_at']! as String),
       updatedAt: DateTime.parse(row['updated_at']! as String),
       lastError: row['last_error'] as String?,
+      sourceFormat: _sourceFormat(row['source_format'] as String?),
     );
+  }
+
+  OfflineSourceFormat _sourceFormat(String? name) {
+    if (name == null) return OfflineSourceFormat.rasterTiles;
+    try {
+      return OfflineSourceFormat.values.byName(name);
+    } on ArgumentError {
+      return OfflineSourceFormat.rasterTiles;
+    }
   }
 }

@@ -17,9 +17,10 @@ class AppDatabase {
     final opened = await _factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
         onCreate: _createSchema,
+        onUpgrade: _upgradeSchema,
       ),
     );
     _database = opened;
@@ -96,7 +97,8 @@ class AppDatabase {
         actual_bytes INTEGER NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        last_error TEXT
+        last_error TEXT,
+        source_format TEXT
       )
     ''');
     await db.execute('''
@@ -125,5 +127,17 @@ class AppDatabase {
         value TEXT NOT NULL
       )
     ''');
+  }
+
+  static Future<void> _upgradeSchema(
+    Database db,
+    int oldVersion,
+    int newVersion,
+  ) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE offline_areas ADD COLUMN source_format TEXT',
+      );
+    }
   }
 }

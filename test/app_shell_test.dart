@@ -2,7 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trail_runner/app/app.dart';
 import 'package:trail_runner/features/map/trail_map.dart';
+import 'package:trail_runner/services/map_provider.dart';
 import 'package:trail_runner/services/tile_store.dart';
+
+const _streetsLayer = MapProviderConfig(
+  id: 'streets',
+  label: 'Streets',
+  urlTemplate: 'https://example.invalid/{z}/{x}/{y}.png',
+  attribution: 'Streets contributors',
+  offlineDownloadsAllowed: false,
+  isDevelopmentOsmOverride: false,
+);
 
 void main() {
   testWidgets('navigation bar exposes every primary feature', (tester) async {
@@ -43,7 +53,12 @@ void main() {
             alignment: Alignment.topRight,
             child: TrailMapControls(
               mode: MapTileMode.auto,
+              layers: const [],
+              activeLayerId: '',
+              onLayerSelected: (_) {},
               offlineAvailable: false,
+              trailsVisible: true,
+              onToggleTrails: () {},
               onModeSelected: (mode) => selectedMode = mode,
               onZoomIn: () => zoomedIn = true,
               onZoomOut: () => zoomedOut = true,
@@ -79,7 +94,12 @@ void main() {
           body: SingleChildScrollView(
             child: TrailMapControls(
               mode: MapTileMode.offline,
+              layers: const [],
+              activeLayerId: '',
+              onLayerSelected: (_) {},
               offlineAvailable: true,
+              trailsVisible: true,
+              onToggleTrails: () {},
               onModeSelected: (_) {},
               onZoomIn: null,
               onZoomOut: null,
@@ -103,5 +123,41 @@ void main() {
           .onPressed,
       isNull,
     );
+  });
+
+  testWidgets('base layer picker switches the active online layer', (
+    tester,
+  ) async {
+    String? selectedLayer;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topRight,
+            child: TrailMapControls(
+              mode: MapTileMode.auto,
+              layers: const [_streetsLayer, MapProviderConfig.esriWorldImagery],
+              activeLayerId: 'streets',
+              onLayerSelected: (id) => selectedLayer = id,
+              offlineAvailable: false,
+              trailsVisible: true,
+              onToggleTrails: () {},
+              onModeSelected: (_) {},
+              onZoomIn: () {},
+              onZoomOut: () {},
+              onFitContent: () {},
+              onCurrentLocation: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Base map: Streets'));
+    await tester.pumpAndSettle();
+    expect(find.text('Satellite'), findsOneWidget);
+    await tester.tap(find.text('Satellite'));
+    await tester.pumpAndSettle();
+    expect(selectedLayer, 'esri-world-imagery');
   });
 }

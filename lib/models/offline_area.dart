@@ -2,6 +2,12 @@ import '../core/geo/geo_bounds.dart';
 
 enum OfflineAreaStatus { planned, downloading, paused, complete, failed }
 
+/// How an offline area's tiles were obtained. `rasterTiles` is the per-tile
+/// HTTP download; `convertedVector` is free vector data downloaded and
+/// rasterized to PNG on the device. Both produce raster tiles rendered by
+/// `flutter_map`.
+enum OfflineSourceFormat { rasterTiles, convertedVector }
+
 class OfflineArea {
   const OfflineArea({
     required this.id,
@@ -17,6 +23,7 @@ class OfflineArea {
     required this.createdAt,
     required this.updatedAt,
     this.lastError,
+    this.sourceFormat = OfflineSourceFormat.rasterTiles,
   });
 
   final String id;
@@ -32,6 +39,7 @@ class OfflineArea {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? lastError;
+  final OfflineSourceFormat sourceFormat;
 
   double get progress => totalTiles == 0 ? 0 : completedTiles / totalTiles;
 }

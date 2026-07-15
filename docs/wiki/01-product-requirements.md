@@ -88,9 +88,10 @@ notes.
 | MAP-005 | Missing offline coverage shall be obvious. | The UI differentiates an unavailable tile from a blank or fully loaded tile. |
 | MAP-006 | The tile source shall be configurable behind an application service. | UI and domain code do not hard-code a provider URL. |
 | MAP-007 | Map rendering shall keep required provider attribution. | Attribution is correct for both online and downloaded content. |
-| MAP-008 | The primary map shall provide one-tap zoom, current-location centering, and fit/reset controls. | The user can zoom in/out, center on a fresh location fix, and fit current location plus route/checkpoint content without gestures. |
+| MAP-008 | The primary map shall provide one-tap zoom, current-location centering, and fit/reset controls. | The user can zoom in/out, center on a fresh location fix, and fit current location plus route/checkpoint content without gestures. When opened without a selected route or area, the map centers on the current location at a neighborhood zoom once a fix is available. |
 | MAP-009 | The user shall be able to choose Auto, Online, or Offline map rendering. | Auto prefers downloaded tiles and falls back online; Online bypasses local tiles; Offline never requests the network and is always selectable so the user can find downloaded areas. The choice survives restart. |
 | MAP-010 | Offline mode shall expose saved-area bounds and constrain zoom to downloaded levels. | Selecting Offline fits available areas when possible; a focused area cannot zoom below its minimum or above its maximum downloaded zoom, preventing an avoidable empty view. |
+| MAP-011 | The user shall be able to switch the displayed base map between the configured provider and additional online-only layers (for example satellite/orthophoto imagery). | The active layer is credited correctly and the choice survives restart; online-only imagery layers are not bulk-downloaded, and offline coverage and downloads remain bound to the downloadable provider. |
 | MAP-011 | Trail and offline-area previews shall use the primary Map destination. | Selecting a trail or saved offline area switches to the main map with all controls; an offline area shows its bounds and an action to edit and redownload changed bounds. |
 
 ### 4.3 Route import, creation, and management
@@ -246,6 +247,10 @@ optional per-download layer with its own source and license, detailed in the
   bulk/offline downloads.
 - Production must use a provider plan that explicitly allows offline tile
   download, or infrastructure operated by the application owner.
+- Additional online-only display layers (for example Esri World Imagery
+  satellite/orthophoto tiles) may be offered for interactive viewing where the
+  source's terms permit display with attribution. They must be credited to their
+  own source and must not be bulk-downloaded or cached for offline use.
 - Provider headers, API keys, rate limits, tile retention, and attribution must
   be configurable and honored.
 

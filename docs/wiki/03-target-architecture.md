@@ -260,6 +260,10 @@ Each calculation belongs in pure Dart and needs synthetic unit tests.
 4. Cache according to provider terms and application policy.
 5. Return an explicit missing/error tile when unavailable.
 
+Online rendering resolves tiles from the user's selected base layer, while
+saved/offline tiles resolve from the downloadable provider; online-only layers
+(for example satellite imagery) are display-only and are never downloaded.
+
 Do not bury download policy in a widget. Define:
 
 - `MapTileProviderConfig`
@@ -307,6 +311,13 @@ container, renders them with native MapLibre, and offers optional terrain
 proposed and requires a physical-device renderer and extraction spike, an
 approved data, style, and terrain license chain, and a project-controlled source
 build and range-capable host before adoption.
+
+As a first, fully-on-device step, a pure-Dart vector-to-raster conversion is now
+implemented: free vector MBTiles tiles are rasterized to PNG on the device with
+`vector_tile_renderer` and rendered by the existing raster layer (see
+`02-implementation-status.md`). This deliberately avoids the `pmtiles` package,
+whose protobuf 6 requirement conflicts with the vector renderer's protobuf 3.
+Native MapLibre rendering and terrain remain the longer-term direction.
 
 The complete migration design, integrity model, supply chain, tests, and rollout
 gates are in

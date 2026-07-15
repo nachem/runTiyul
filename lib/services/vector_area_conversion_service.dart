@@ -1,41 +1,60 @@
-import 'dart:async';
 import 'dart:io';
-
-import 'package:http/http.dart' as http;
 
 import '../core/geo/tile_math.dart';
 import '../data/app_repository.dart';
 import '../models/offline_area.dart';
 import 'map_provider.dart';
 import 'tile_store.dart';
+import 'vector_tile_rasterizer.dart';
+import 'vector_tile_source.dart';
 
-class OfflineDownloadService {
-  OfflineDownloadService({
+/// Downloads free vector map data and converts a selected area's tiles into
+/// raster PNGs on the device, storing them in the local [TileStore] so the
+/// existing offline renderer and storage management keep working unchanged.
+///
+/// This is the on-device realization of "download the free maps, convert if
+/// needed, and save what is possible to render locally": each vector tile is
+/// rasterized by [VectorTileRasterizer] at download time. It mirrors
+/// `OfflineDownloadService` so status, progress and cancellation behave the
+/// same as a per-tile raster download.
+class VectorAreaConversionService {
+  VectorAreaConversionService({
     required this.repository,
     required this.store,
     required this.config,
-    http.Client? client,
-  }) : _client = client ?? http.Client();
+    VectorTileRasterizer? rasterizer,
+    Future<VectorTileSource> Function(String source)? openSource,
+  }) : rasterizer = rasterizer ?? VectorTileRasterizer(),
+       _openSource = openSource ?? _defaultOpenSource;
 
   final AppRepository repository;
   final TileStore store;
   final MapProviderConfig config;
-  final http.Client _client;
+  final VectorTileRasterizer rasterizer;
+  final Future<VectorTileSource> Function(String source) _openSource;
   final Set<String> _cancelled = {};
+
+  static Future<VectorTileSource> _defaultOpenSource(String source) async {
+    if (HttpVectorTileSource.looksLikeTileUrl(source)) {
+      return HttpVectorTileSource.open(source);
+    }
+    final file = await VectorSourceStore.ensureLocal(source);
+    return MbtilesVectorTileSource.openFile(file);
+  }
 
   void cancel(String areaId) => _cancelled.add(areaId);
 
-  void dispose() => _client.close();
-
-  Future<OfflineArea> download(
+  Future<OfflineArea> convert(
     OfflineArea initial,
     TilePlan plan, {
     required void Function(OfflineArea area) onProgress,
+    String? sourceOverride,
   }) async {
-    if (!config.offlineDownloadsAllowed) {
-      throw StateError(
-        'This map provider is not configured to permit offline downloads.',
-      );
+    final source = (sourceOverride != null && sourceOverride.isNotEmpty)
+        ? sourceOverride
+        : config.vectorSourceUrl;
+    if (source.isEmpty) {
+      throw StateError('No vector source is configured for conversion.');
     }
     _cancelled.remove(initial.id);
     var area = _copyArea(
@@ -48,18 +67,16 @@ class OfflineDownloadService {
 
     var completed = 0;
     var bytes = 0;
-    var nextIndex = 0;
     Object? firstError;
-
-    Future<void> worker() async {
-      while (nextIndex < plan.coordinates.length &&
-          !_cancelled.contains(area.id) &&
-          firstError == null) {
-        final coordinate = plan.coordinates[nextIndex++];
+    VectorTileSource? tileSource;
+    try {
+      tileSource = await _openSource(source);
+      for (final coordinate in plan.coordinates) {
+        if (_cancelled.contains(area.id) || firstError != null) break;
         try {
-          final tileBytes = await _downloadTile(area, coordinate);
+          final written = await _writeTile(area, tileSource, coordinate);
           completed++;
-          bytes += tileBytes;
+          bytes += written;
           area = _copyArea(area, completedTiles: completed, actualBytes: bytes);
           await repository.saveOfflineArea(area);
           onProgress(area);
@@ -67,9 +84,12 @@ class OfflineDownloadService {
           firstError ??= error;
         }
       }
+    } on Object catch (error) {
+      firstError ??= error;
+    } finally {
+      await tileSource?.close();
     }
 
-    await Future.wait(List.generate(4, (_) => worker()));
     if (_cancelled.contains(area.id)) {
       area = _copyArea(area, status: OfflineAreaStatus.paused);
     } else if (firstError != null) {
@@ -86,7 +106,11 @@ class OfflineDownloadService {
     return area;
   }
 
-  Future<int> _downloadTile(OfflineArea area, TileCoordinate coordinate) async {
+  Future<int> _writeTile(
+    OfflineArea area,
+    VectorTileSource source,
+    TileCoordinate coordinate,
+  ) async {
     final file = store.fileFor(
       config.id,
       coordinate.z,
@@ -94,48 +118,27 @@ class OfflineDownloadService {
       coordinate.y,
     );
     if (!await file.exists()) {
+      final mvt = await source.readTile(
+        coordinate.z,
+        coordinate.x,
+        coordinate.y,
+      );
+      // A null tile means the source has no data there (for example open sea);
+      // there is nothing to rasterize, so skip it without failing. A present
+      // but empty tile still rasterizes to the theme background.
+      if (mvt == null) return 0;
+
+      final png = await rasterizer.rasterize(mvt, coordinate.z);
       await file.parent.create(recursive: true);
-      http.Response? response;
-      Object? lastError;
-      for (var attempt = 0; attempt < 3; attempt++) {
-        try {
-          response = await _client
-              .get(
-                config.tileUri(coordinate.z, coordinate.x, coordinate.y),
-                headers: {'User-Agent': 'TrailRunner/1.0'},
-              )
-              .timeout(const Duration(seconds: 15));
-          if (response.statusCode == 200 &&
-              response.bodyBytes.isNotEmpty &&
-              (response.headers['content-type']?.startsWith('image/') ??
-                  false)) {
-            break;
-          }
-          lastError = HttpException(
-            'Tile request returned HTTP ${response.statusCode}.',
-          );
-          if (response.statusCode < 500 && response.statusCode != 429) break;
-        } on Object catch (error) {
-          lastError = error;
-        }
-        await Future<void>.delayed(Duration(milliseconds: 300 * (attempt + 1)));
-      }
-      if (response == null ||
-          response.statusCode != 200 ||
-          response.bodyBytes.isEmpty ||
-          !(response.headers['content-type']?.startsWith('image/') ?? false)) {
-        throw lastError ?? const HttpException('Tile download failed.');
-      }
       final temporary = File('${file.path}.part');
-      await temporary.writeAsBytes(response.bodyBytes, flush: true);
+      await temporary.writeAsBytes(png, flush: true);
       await temporary.rename(file.path);
     }
 
     final length = await file.length();
-    final key = '${config.id}/${coordinate.key}';
     await repository.attachTile(
       areaId: area.id,
-      tileKey: key,
+      tileKey: '${config.id}/${coordinate.key}',
       providerId: config.id,
       zoom: coordinate.z,
       x: coordinate.x,

@@ -1,18 +1,20 @@
 # Long-Term Offline Map Implementation (client extraction + PMTiles)
 
-Status: proposed target design; not implemented  
+Status: design proposal; on-device vector→raster conversion slice implemented, native MapLibre/terrain not implemented  
 Decision date: 2026-07-14  
 Applies to: MAP-004 through MAP-009, OFF-001 through OFF-012, and STO-001
 through STO-007
 
 This guide defines a long-term path from the current per-tile raster downloader
-to legal, download-on-demand offline maps built by extracting the user's
-selected rectangle from a hosted PMTiles source and rendering it with native
-MapLibre. It is an implementation plan, not evidence that PMTiles, vector
-rendering, an extraction pipeline, or a production download service currently
-exists in the application. See
-[Implemented Details and Current Status](02-implementation-status.md) for the
-verified current behavior.
+to legal, download-on-demand offline maps. An initial fully-on-device slice is
+implemented differently from the original PMTiles plan: free **vector** MBTiles
+tiles are read on the device and rasterized to PNG with `vector_tile_renderer`
+behind `TRAIL_VECTOR_MBTILES`, then stored and rendered through the existing
+raster layer. This avoids the `pmtiles` package, whose protobuf 6 requirement
+conflicts with the vector renderer's protobuf 3. Native MapLibre **vector**
+rendering, terrain, and a production hosted source remain unbuilt. See
+[Implemented Details and Current Status](02-implementation-status.md) for exactly
+what exists today.
 
 ## 1. Feasibility decision
 
