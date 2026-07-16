@@ -328,9 +328,13 @@ Limitations:
 
 - Application ID: `com.bernoulli.trailrunner.trail_runner`.
 - Label: `RunTiyul`.
-- Launcher icon: generated from the square, aspect-preserving
-  `assets/branding/app_icon.png` derivative of the repository's `RunTiyul.png`
-  source image.
+- Launcher icon: generated from the tightly framed, square,
+  aspect-preserving `assets/branding/app_icon.png` derivative of the
+  repository's `RunTiyul.png` source image. Transparent source margins are
+  cropped before fitting so the artwork remains prominent on the launcher.
+  Android 8+ uses a full-size adaptive foreground over a branded blue
+  background rather than allowing launchers to wrap the legacy bitmap in a
+  white compatibility plate.
 - Java/Kotlin target: 17.
 - Fine, coarse, background location, foreground service, foreground location
   service, notification, wake-lock, and internet permissions are declared.
