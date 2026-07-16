@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RunTiyul — Offline-first trail running for Android &amp; iOS</title>
+  <meta name="description" content="RunTiyul is a free, open-source, offline-first trail running app. Download map areas for the backcountry, import GPX routes, record GPS activities, and navigate off-grid. No account, no tracking." />
+  <meta name="theme-color" content="#0b1020" />
+  <link rel="icon" href="assets/RunTiyul-icon.png" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/RunTiyul-icon.png" />
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="RunTiyul — Offline-first trail running" />
+  <meta property="og:description" content="Free & open-source trail running: offline maps, GPX routes, GPS recording, and off-grid navigation. Android &amp; iOS." />
+  <meta property="og:image" content="https://nachem.github.io/RunTiyul/assets/RunTiyul.png" />
+  <meta property="og:url" content="https://nachem.github.io/RunTiyul/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="RunTiyul — Offline-first trail running" />
+  <meta name="twitter:description" content="Free & open-source trail running: offline maps, GPX routes, GPS recording, and off-grid navigation." />
+  <meta name="twitter:image" content="https://nachem.github.io/RunTiyul/assets/RunTiyul.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#features">Skip to content</a>
+
+  <!-- ===================== Header ===================== -->
+  <header class="site-header" id="top">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="RunTiyul home">
+        <img class="brand-mark" src="assets/RunTiyul.png" alt="" width="34" height="40" />
+        <span class="brand-name">Run<span class="brand-accent">Tiyul</span></span>
+      </a>
+
+      <nav class="nav" aria-label="Primary">
+        <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navMenu" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+        <ul class="nav-menu" id="navMenu">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#download">Download</a></li>
+          <li><a href="#open-source">Open source</a></li>
+          <li><a href="#faq">FAQ</a></li>
+        </ul>
+      </nav>
+
+      <div class="header-actions">
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle color theme" title="Toggle theme">
+          <svg class="icon-sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4V2m0 20v-2m8-8h2M2 12h2m13.66-5.66 1.41-1.41M4.93 19.07l1.41-1.41m0-11.32L4.93 4.93m14.14 14.14-1.41-1.41M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
+          <svg class="icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
+        </button>
+        <a class="btn btn-ghost btn-github" href="https://github.com/nachem/RunTiyul" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="M12 .5A11.5 11.5 0 0 0 .5 12 11.5 11.5 0 0 0 8.5 23c.6.1.8-.26.8-.57v-2c-3.2.7-3.9-1.54-3.9-1.54-.53-1.34-1.3-1.7-1.3-1.7-1.06-.72.08-.71.08-.71 1.17.08 1.79 1.2 1.79 1.2 1.04 1.78 2.73 1.27 3.4.97.1-.76.4-1.27.74-1.56-2.56-.29-5.26-1.28-5.26-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.43-2.7 5.4-5.28 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.2.68.81.56A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span>Star</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ===================== Hero ===================== -->
+    <section class="hero">
+      <div class="hero-bg" aria-hidden="true">
+        <svg class="topo" viewBox="0 0 1200 600" preserveAspectRatio="xMidYMid slice">
+          <g fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M-50 120 C 200 40, 380 200, 600 140 S 1000 40, 1260 160"/>
+            <path d="M-50 200 C 220 130, 400 280, 620 220 S 1010 120, 1260 240"/>
+            <path d="M-50 300 C 240 230, 420 360, 640 300 S 1020 210, 1260 330"/>
+            <path d="M-50 400 C 260 330, 440 460, 660 400 S 1030 310, 1260 430"/>
+            <path d="M-50 500 C 280 440, 460 560, 680 500 S 1040 420, 1260 520"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="container hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">
+            <span class="dot"></span> Free &amp; open source · Android &amp; iOS
+          </p>
+          <h1 class="hero-title">Run wild.<br /><span class="grad">Stay found.</span></h1>
+          <p class="hero-by">
+            An open-source trail companion by
+            <a href="#open-source"><strong>Bernoulli&nbsp;Software</strong></a>
+          </p>
+          <p class="hero-sub">
+            RunTiyul is an offline-first trail-running companion. Download the map
+            before you lose signal, follow your route with live GPS, and record
+            every run — no account, no tracking, nothing left behind.
+          </p>
+
+          <div class="hero-cta">
+            <a class="btn btn-primary" id="ctaAndroid" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path d="M17.6 9.48 19.44 6.3a.4.4 0 1 0-.7-.4l-1.86 3.22a11.36 11.36 0 0 0-9.76 0L5.26 5.9a.4.4 0 1 0-.7.4L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52ZM7 15.25a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Zm10 0a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Z"/></svg>
+              <span>Download APK</span>
+            </a>
+            <a class="btn btn-dark" id="ctaIos" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.ipa">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20"><path d="M16.36 12.65c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.19-1.72-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.62 1.1 8.79.73 1.06 1.6 2.25 2.74 2.2 1.1-.04 1.52-.71 2.85-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.08 2.65-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.3-.88-2.32-3.48ZM14.2 6.24c.6-.74 1.01-1.76.9-2.79-.87.04-1.94.59-2.57 1.32-.56.64-1.05 1.68-.92 2.67.97.08 1.97-.49 2.59-1.2Z"/></svg>
+              <span>Download for iOS</span>
+            </a>
+          </div>
+          <p class="cta-note" id="ctaNote">
+            iOS build is unsigned (sideload with AltStore / Sideloadly). ·
+            <a href="#download">Install help</a>
+          </p>
+
+          <ul class="hero-stats">
+            <li><strong>100%</strong><span>Offline capable</span></li>
+            <li><strong>0</strong><span>Accounts or ads</span></li>
+            <li><strong>GPX</strong><span>Import &amp; export</span></li>
+          </ul>
+        </div>
+
+        <div class="hero-visual">
+          <div class="glow"></div>
+          <div class="hero-card">
+            <img src="assets/RunTiyul.png" alt="RunTiyul mascot: a fox in trail-running gear" width="380" height="451" />
+          </div>
+          <div class="chip chip-1">
+            <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
+            Offline map ready
+          </div>
+          <div class="chip chip-2">
+            <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M13 3 4 14h6l-1 7 9-11h-6l1-7z"/></svg>
+            8.4 km · 42:10
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Trust strip ===================== -->
+    <section class="trust" aria-label="Highlights">
+      <div class="container trust-inner">
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.4 8 11 4.6-1.6 8-6 8-11V5l-8-3Zm-1 14-4-4 1.4-1.4L11 13.2l4.6-4.6L17 10l-6 6Z"/></svg> Offline-first</span>
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5Z"/></svg> No account needed</span>
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8h-1V6A5 5 0 0 0 7 6v2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2Zm-9-2a3 3 0 0 1 6 0v2H9V6Z"/></svg> Privacy-first</span>
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5Zm0 7L2 14l10 5 10-5-10-5Z"/></svg> Open source (MIT)</span>
+        <span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6c-2.5 4.5-9.5 9-9.5 9Z"/></svg> Free forever</span>
+      </div>
+    </section>
+
+    <!-- ===================== Features ===================== -->
+    <section class="section" id="features">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="kicker">Everything for the trail</p>
+          <h2>Built for where the pavement ends</h2>
+          <p class="section-lead">
+            The whole run — plan, download, navigate, record, review — works with
+            zero bars of signal.
+          </p>
+        </div>
+
+        <div class="feature-grid">
+          <article class="card reveal">
+            <div class="card-icon i-blue">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 9 2 3 4v16l6-2 6 2 6-2V2l-6 2Zm0 14.2-6-2V5.8l6 2v10.4Z"/></svg>
+            </div>
+            <h3>Offline maps</h3>
+            <p>Draw a rectangle around your route, pick zoom levels, see the size estimate, and download. It renders in airplane mode — even at the trailhead with no coverage.</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon i-orange">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm-1 7V3.5L18.5 9H13ZM8 13h8v2H8v-2Zm0 4h8v2H8v-2Z"/></svg>
+            </div>
+            <h3>GPX routes &amp; builder</h3>
+            <p>Import a GPX from an event or friend, or tap the map to sketch your own route. Save, rename, duplicate, and reload with faithful geometry.</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon i-green">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 10.6 4 2.3-1 1.7-5-2.9V6h2v6.6Z"/></svg>
+            </div>
+            <h3>GPS activity recording</h3>
+            <p>Start, pause, resume, and finish. Track distance, moving time, pace, and elevation gain with implausible points filtered out and progress saved as you go.</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon i-blue">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 3-7 18-3-7-7-3 17-8Z"/></svg>
+            </div>
+            <h3>On-route navigation</h3>
+            <p>See your route line, recorded track, and live position at a glance. Optional off-route and junction alerts keep you honest — with north-up or course-up.</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon i-orange">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 0 0-9 9H1l4 4 4-4H6a7 7 0 1 1 2 4.9l-1.5 1.3A9 9 0 1 0 13 3Z"/></svg>
+            </div>
+            <h3>History &amp; GPX export</h3>
+            <p>Every finished run is saved locally with its map and summary. Export any activity back to GPX to open in your favorite tools.</p>
+          </article>
+
+          <article class="card reveal">
+            <div class="card-icon i-green">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1 3 5v6c0 5 3.8 9.7 9 11 5.2-1.3 9-6 9-11V5l-9-4Zm0 10.9h7c-.5 3.9-3.2 7.4-7 8.6V12H5V6.3l7-3.1v8.7Z"/></svg>
+            </div>
+            <h3>Private by design</h3>
+            <p>Routes, activities, and maps stay on your device. No sign-up, no telemetry, no location uploads — your tracks are yours.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== How it works ===================== -->
+    <section class="section section-alt" id="how">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="kicker">Three steps to the summit</p>
+          <h2>Plan on Wi-Fi. Run off-grid.</h2>
+        </div>
+
+        <ol class="steps">
+          <li class="step reveal">
+            <span class="step-num">1</span>
+            <h3>Plan &amp; download</h3>
+            <p>Import or draw a route, box the area on the map, and download the tiles while you still have signal.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">2</span>
+            <h3>Run &amp; record</h3>
+            <p>Lock your phone and go. RunTiyul follows your route and records the run even without a network connection.</p>
+          </li>
+          <li class="step reveal">
+            <span class="step-num">3</span>
+            <h3>Review &amp; export</h3>
+            <p>Back home, review the track and stats, then export to GPX or free up storage by removing old map areas.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ===================== Download ===================== -->
+    <section class="section" id="download">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="kicker">Get RunTiyul</p>
+          <h2>Download the app</h2>
+          <p class="section-lead" id="releaseMeta">Grab the latest build from GitHub Releases — the same public artifacts our CI publishes.</p>
+        </div>
+
+        <div class="download-grid">
+          <article class="dl-card reveal">
+            <div class="dl-top">
+              <div class="dl-os">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width="26" height="26"><path d="M17.6 9.48 19.44 6.3a.4.4 0 1 0-.7-.4l-1.86 3.22a11.36 11.36 0 0 0-9.76 0L5.26 5.9a.4.4 0 1 0-.7.4L6.4 9.48A10.8 10.8 0 0 0 1 18h22a10.8 10.8 0 0 0-5.4-8.52ZM7 15.25a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Zm10 0a1.1 1.1 0 1 1 0-2.2 1.1 1.1 0 0 1 0 2.2Z"/></svg>
+                <div>
+                  <h3>Android</h3>
+                  <p class="dl-meta">.apk · sideload / adb install</p>
+                </div>
+              </div>
+              <span class="badge badge-ready">Ready to run</span>
+            </div>
+            <ol class="dl-steps">
+              <li>Download <code>RunTiyul.apk</code>.</li>
+              <li>Allow "install unknown apps" for your browser or file manager.</li>
+              <li>Open the file to install — or run <code>adb install RunTiyul.apk</code>.</li>
+            </ol>
+            <a class="btn btn-primary btn-block" id="dlAndroid" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk">Download APK</a>
+          </article>
+
+          <article class="dl-card reveal">
+            <div class="dl-top">
+              <div class="dl-os">
+                <svg viewBox="0 0 24 24" aria-hidden="true" width="26" height="26"><path d="M16.36 12.65c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.19-1.72-1.36-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.62 1.1 8.79.73 1.06 1.6 2.25 2.74 2.2 1.1-.04 1.52-.71 2.85-.71 1.32 0 1.7.71 2.86.69 1.18-.02 1.93-1.08 2.65-2.14.84-1.23 1.18-2.42 1.2-2.48-.03-.01-2.3-.88-2.32-3.48ZM14.2 6.24c.6-.74 1.01-1.76.9-2.79-.87.04-1.94.59-2.57 1.32-.56.64-1.05 1.68-.92 2.67.97.08 1.97-.49 2.59-1.2Z"/></svg>
+                <div>
+                  <h3>iOS</h3>
+                  <p class="dl-meta">.ipa · unsigned, sideload</p>
+                </div>
+              </div>
+              <span class="badge badge-beta">Sideload</span>
+            </div>
+            <ol class="dl-steps">
+              <li>Download <code>RunTiyul.ipa</code>.</li>
+              <li>Install with <a href="https://altstore.io/" target="_blank" rel="noopener">AltStore</a> or <a href="https://sideloadly.io/" target="_blank" rel="noopener">Sideloadly</a> using your Apple ID.</li>
+              <li>Trust the developer profile in <em>Settings → General → VPN &amp; Device Management</em>.</li>
+            </ol>
+            <a class="btn btn-dark btn-block" id="dlIos" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.ipa">Download IPA</a>
+          </article>
+        </div>
+
+        <p class="download-foot">
+          Prefer to see everything?
+          <a href="https://github.com/nachem/RunTiyul/releases/latest" target="_blank" rel="noopener">Browse all releases &amp; checksums on GitHub →</a>
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================== Open source ===================== -->
+    <section class="section section-alt" id="open-source">
+      <div class="container os-inner">
+        <div class="os-copy reveal">
+          <p class="kicker">Open by default · by Bernoulli Software</p>
+          <h2>A trail app you can trust — because you can read it</h2>
+          <p>
+            RunTiyul is crafted by <strong>Bernoulli Software</strong> with Flutter and
+            released under the MIT license. The releases you download are produced by
+            the CI you can inspect in this repository. No mystery binaries, no hidden
+            trackers.
+          </p>
+          <ul class="os-list">
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg> Reproducible APK &amp; IPA built by GitHub Actions</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg> Map data © OpenStreetMap contributors, with in-app attribution</li>
+            <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2Z"/></svg> Contributions welcome — issues, PRs, and ideas</li>
+          </ul>
+
+          <div class="maintainer-card">
+            <div class="maintainer-head">
+              <svg viewBox="0 0 24 24" aria-hidden="true" width="22" height="22"><path d="M16 11a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm-8 0a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-2.7 0-8 1.3-8 4v3h9v-3c0-1 .4-1.9 1.1-2.7A13.5 13.5 0 0 0 8 13Zm8 0c-.5 0-1.1 0-1.7.1A5.2 5.2 0 0 1 16 17v3h8v-3c0-2.7-5.3-4-8-4Z"/></svg>
+              <h3>Want to help maintain RunTiyul?</h3>
+            </div>
+            <p>
+              We're looking for maintainers and contributors. New here? The easiest
+              first step: open an issue or leave a comment on the
+              <a href="https://github.com/nachem/RunTiyul/issues" target="_blank" rel="noopener">issues page</a>
+              introducing yourself and asking to become a maintainer.
+            </p>
+            <div class="maintainer-cta">
+              <a class="btn btn-primary" href="https://github.com/nachem/RunTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul&body=Hi%20Bernoulli%20Software%2C%20I%27d%20like%20to%20contribute%2Fbecome%20a%20maintainer.%20Here%27s%20a%20bit%20about%20me%3A" target="_blank" rel="noopener">Comment to become a maintainer</a>
+              <a class="btn btn-ghost" href="https://github.com/nachem/RunTiyul/blob/main/README.md#contributing--maintainers" target="_blank" rel="noopener">Contributing guide</a>
+            </div>
+          </div>
+
+          <div class="os-cta">
+            <a class="btn btn-primary" href="https://github.com/nachem/RunTiyul" target="_blank" rel="noopener">View on GitHub</a>
+            <a class="btn btn-ghost" href="https://github.com/nachem/RunTiyul/blob/main/README.md" target="_blank" rel="noopener">Read the docs</a>
+          </div>
+        </div>
+        <div class="os-visual reveal">
+          <div class="stack-card">
+            <span class="stack-title">Tech stack</span>
+            <ul class="stack-list">
+              <li><span>Flutter</span><small>Cross-platform UI</small></li>
+              <li><span>flutter_map</span><small>Slippy map &amp; tiles</small></li>
+              <li><span>geolocator</span><small>GPS activity recording</small></li>
+              <li><span>sqflite</span><small>Local-first storage</small></li>
+              <li><span>Riverpod</span><small>State management</small></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== FAQ ===================== -->
+    <section class="section" id="faq">
+      <div class="container">
+        <div class="section-head reveal">
+          <p class="kicker">Good to know</p>
+          <h2>Frequently asked</h2>
+        </div>
+
+        <div class="faq">
+          <details class="reveal">
+            <summary>Is RunTiyul really free?</summary>
+            <p>Yes. It's free and open source under the MIT license. There are no ads, no subscriptions, and no paid tiers.</p>
+          </details>
+          <details class="reveal">
+            <summary>Why is the iOS build "unsigned"?</summary>
+            <p>Publishing to the App Store requires a paid Apple Developer account and signing certificates. The <code>.ipa</code> is provided so you can sideload it yourself with AltStore or Sideloadly using your own Apple ID.</p>
+          </details>
+          <details class="reveal">
+            <summary>Is it safe to install the APK?</summary>
+            <p>The APK is built in the open by this repository's GitHub Actions workflow and published as a GitHub Release asset. You can review the workflow and verify checksums on the releases page.</p>
+          </details>
+          <details class="reveal">
+            <summary>Does it collect my location or data?</summary>
+            <p>No. Routes, activities, and downloaded maps are stored locally on your device. RunTiyul does not require an account and does not upload your location history.</p>
+          </details>
+          <details class="reveal">
+            <summary>Which devices are supported?</summary>
+            <p>Android and iOS. The Android build is verified on an emulator today; physical-device and iOS runtime verification are in progress — see the project wiki for current status.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Final CTA ===================== -->
+    <section class="final-cta">
+      <div class="container final-inner reveal">
+        <h2>Your next trail is waiting.</h2>
+        <p>Download the map tonight. Chase the sunrise tomorrow.</p>
+        <div class="hero-cta center">
+          <a class="btn btn-primary" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk">Download for Android</a>
+          <a class="btn btn-dark" href="https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.ipa">Download for iOS</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== Footer ===================== -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <a class="brand" href="#top">
+          <img class="brand-mark" src="assets/RunTiyul.png" alt="" width="27" height="32" />
+          <span class="brand-name">Run<span class="brand-accent">Tiyul</span></span>
+        </a>
+        <p>Offline-first trail running.<br />Free &amp; open source.</p>
+        <p class="footer-by">by <strong>Bernoulli Software</strong></p>
+      </div>
+      <nav class="footer-cols" aria-label="Footer">
+        <div>
+          <h4>Product</h4>
+          <a href="#features">Features</a>
+          <a href="#download">Download</a>
+          <a href="#faq">FAQ</a>
+        </div>
+        <div>
+          <h4>Project</h4>
+          <a href="https://github.com/nachem/RunTiyul" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/nachem/RunTiyul/releases/latest" target="_blank" rel="noopener">Releases</a>
+          <a href="https://github.com/nachem/RunTiyul/issues" target="_blank" rel="noopener">Report an issue</a>
+          <a href="https://github.com/nachem/RunTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul" target="_blank" rel="noopener">Become a maintainer</a>
+        </div>
+        <div>
+          <h4>Legal</h4>
+          <a href="https://github.com/nachem/RunTiyul/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">Map data © OSM</a>
+        </div>
+      </nav>
+    </div>
+    <div class="container footer-bottom">
+      <p>© <span id="year">2026</span> Bernoulli Software. Built with Flutter. Map data © OpenStreetMap contributors.</p>
+      <p class="footer-note">Not affiliated with any commercial mapping or fitness platform.</p>
+    </div>
+  </footer>
+
+  <script src="main.js" defer></script>
+</body>
+</html>
