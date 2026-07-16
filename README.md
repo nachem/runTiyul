@@ -10,15 +10,15 @@
 lose signal, follow your route with live GPS, and record every run. No account,
 no tracking.**
 
-_An open-source app by **[Bernoulli Software](https://github.com/nachem/RunTiyul)**._
+_An open-source app by **[Bernoulli Software](https://github.com/nachem/runTiyul)**._
 
-[![Website](https://img.shields.io/badge/website-nachem.github.io%2FRunTiyul-4f7ff0?style=flat-square)](https://nachem.github.io/RunTiyul/)
-[![Download APK](https://img.shields.io/badge/Android-Download%20APK-3ddc84?style=flat-square&logo=android&logoColor=white)](https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk)
-[![Download IPA](https://img.shields.io/badge/iOS-Download%20IPA-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.ipa)
+[![Website](https://img.shields.io/badge/website-nachem.github.io%2FRunTiyul-4f7ff0?style=flat-square)](https://nachem.github.io/runTiyul/)
+[![Download APK](https://img.shields.io/badge/Android-Download%20APK-3ddc84?style=flat-square&logo=android&logoColor=white)](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk)
+[![Download IPA](https://img.shields.io/badge/iOS-Download%20IPA-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.ipa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f97316?style=flat-square)](LICENSE)
 [![Built with Flutter](https://img.shields.io/badge/Built%20with-Flutter-027DFD?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 
-**[🌐 Website](https://nachem.github.io/RunTiyul/) · [⬇️ Download](https://github.com/nachem/RunTiyul/releases/latest) · [📖 Wiki](docs/wiki/INDEX.md) · [🤝 Become a maintainer](https://github.com/nachem/RunTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul)**
+**[🌐 Website](https://nachem.github.io/runTiyul/) · [⬇️ Download](https://github.com/nachem/runTiyul/releases/latest) · [📖 Wiki](docs/wiki/INDEX.md) · [🤝 Become a maintainer](https://github.com/nachem/runTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul)**
 
 </div>
 
@@ -51,12 +51,12 @@ airplane mode, and nothing about your runs leaves your device.
 ## Download
 
 Public, permanent builds are published as **GitHub Release** assets, and the
-same links are surfaced on the [website](https://nachem.github.io/RunTiyul/):
+same links are surfaced on the [website](https://nachem.github.io/runTiyul/):
 
 | Platform | File | Link |
 | --- | --- | --- |
-| Android | `RunTiyul.apk` | [Download APK](https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk) |
-| iOS (unsigned) | `RunTiyul.ipa` | [Download IPA](https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.ipa) |
+| Android | `RunTiyul.apk` | [Download APK](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk) |
+| iOS (unsigned) | `RunTiyul.ipa` | [Download IPA](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.ipa) |
 
 **Android:** enable "install unknown apps" for your browser/file manager, then
 open the `.apk` (or `adb install RunTiyul.apk`).
@@ -153,13 +153,13 @@ contributors**. Whether you want to fix a bug, improve the docs, verify iOS, or
 help steward the project long-term — you're welcome here.
 
 **New here and want to help maintain RunTiyul?** The easiest first step is to
-[open an issue or leave a comment](https://github.com/nachem/RunTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul&body=Hi%20Bernoulli%20Software%2C%20I%27d%20like%20to%20contribute%2Fbecome%20a%20maintainer.%20Here%27s%20a%20bit%20about%20me%3A)
+[open an issue or leave a comment](https://github.com/nachem/runTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul&body=Hi%20Bernoulli%20Software%2C%20I%27d%20like%20to%20contribute%2Fbecome%20a%20maintainer.%20Here%27s%20a%20bit%20about%20me%3A)
 introducing yourself and asking to become a maintainer.
 
 Ways to contribute:
 
 1. **Report bugs & request features** on the
-   [issues page](https://github.com/nachem/RunTiyul/issues).
+   [issues page](https://github.com/nachem/runTiyul/issues).
 2. **Open a pull request** — fork, branch, run `flutter analyze` and
    `flutter test`, then submit.
 3. **Improve the wiki** under `docs/wiki/` following [`AGENTS.md`](AGENTS.md).

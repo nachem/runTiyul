@@ -17,7 +17,7 @@ describes what is **implemented in the repository**, not planned work.
 | Repository visibility | Public | Implemented |
 
 The download links used by the site and README point at stable asset names via
-`https://github.com/nachem/RunTiyul/releases/latest/download/RunTiyul.apk` and
+`https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
 `...RunTiyul.ipa`. These 404 until the first `v*` release has been built.
 
 ## 2. Website (`site/`)
@@ -37,7 +37,7 @@ The download links used by the site and README point at stable asset names via
   privacy-first local storage). Copy must not claim unverified capabilities;
   keep it aligned with [implementation status](02-implementation-status.md).
 
-Deployed URL (once Pages is enabled): `https://nachem.github.io/RunTiyul/`.
+Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 
 ## 3. CI workflows
 

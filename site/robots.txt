@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://nachem.github.io/RunTiyul/sitemap.xml
+Sitemap: https://nachem.github.io/runTiyul/sitemap.xml
