@@ -17,6 +17,7 @@ import '../data/app_repository.dart';
 import '../models/offline_area.dart';
 import '../models/run_activity.dart';
 import '../models/trail_route.dart';
+import '../services/download_foreground_service.dart';
 import '../services/gpx_service.dart';
 import '../services/location_service.dart';
 import '../services/map_provider.dart';
@@ -24,7 +25,9 @@ import '../services/navigation_monitor.dart';
 import '../services/offline_download_service.dart';
 import '../services/route_trail_builder.dart';
 import '../services/tile_store.dart';
+import '../services/trail_extractor.dart';
 import '../services/vector_area_conversion_service.dart';
+import '../services/vector_terrain_baker.dart';
 
 class AppStore extends ChangeNotifier {
   static const _mapTileModeSetting = 'map_tile_mode';
@@ -32,6 +35,10 @@ class AppStore extends ChangeNotifier {
   static const _vectorSourceSetting = 'vector_source_url';
   static const _snapRoutesSetting = 'snap_routes_to_trails';
   static const _navAlertConfigSetting = 'nav_alert_config';
+  static const _offlineAreaOrderSetting = 'offline_area_order';
+  static const _legacyTerrainCleanupSetting = 'legacy_terrain_cleanup_v1';
+  static const _publicRasterDevUnlockSetting =
+      'public_raster_dev_downloads_unlocked';
 
   AppStore._({
     required this.repository,
@@ -40,6 +47,8 @@ class AppStore extends ChangeNotifier {
     required this.downloader,
     required this.vectorConverter,
     required this.routeTrailBuilder,
+    required this.backgroundDownloads,
+    required this._publicRasterDevUnlockCompiled,
   });
 
   final AppRepository repository;
@@ -48,6 +57,11 @@ class AppStore extends ChangeNotifier {
   final OfflineDownloadService downloader;
   final VectorAreaConversionService vectorConverter;
   final RouteTrailBuilder routeTrailBuilder;
+
+  /// Keeps downloads alive while the app is backgrounded (an Android foreground
+  /// service; a no-op on other platforms).
+  final DownloadForegroundService backgroundDownloads;
+  final bool _publicRasterDevUnlockCompiled;
   final GpxService _gpxService = const GpxService();
   final LocationService _locationService = const LocationService();
   final GeoDistance _distance = const GeoDistance();
@@ -60,6 +74,8 @@ class AppStore extends ChangeNotifier {
   String activeMapLayerId = '';
   String vectorSourceUrl = '';
   bool snapRoutesToTrails = true;
+  bool publicRasterDevDownloadsUnlocked = false;
+
   NavAlertConfig navAlertConfig = const NavAlertConfig();
   NavStatus navStatus = NavStatus.idle;
   TrailRoute? selectedRoute;
@@ -69,23 +85,76 @@ class AppStore extends ChangeNotifier {
   bool loading = true;
   String? errorMessage;
 
+  /// Areas the app currently wants downloaded: added when a download starts and
+  /// removed once it completes or the user pauses it. A failed or interrupted
+  /// area stays here so it can be auto-resumed when the app next returns to the
+  /// foreground.
+  final Set<String> _intendedDownloads = {};
+
+  /// Areas whose download loop is in flight on this isolate right now.
+  final Set<String> _runningDownloads = {};
+
+  /// Whether the keep-alive foreground service is currently requested.
+  bool _backgroundServiceActive = false;
+
   /// True when a vector map data source is configured (the in-app setting or the
   /// `TRAIL_VECTOR_MBTILES` build default), so offline areas are built by
   /// on-device vector-to-raster conversion.
   bool get usesVectorSource => vectorSourceUrl.isNotEmpty;
 
-  /// Offline downloads are allowed when the raster provider permits them or a
-  /// vector source is configured (whose data license permits offline use).
+  /// Offline downloads are allowed when at least one raster provider is enabled
+  /// for this build or a vector source is configured.
   bool get offlineDownloadsAllowed =>
-      mapProvider.offlineDownloadsAllowed || usesVectorSource;
+      rasterDownloadProviders.isNotEmpty || usesVectorSource;
 
-  /// The selectable base map layers: the configured downloadable provider plus
-  /// any online-only imagery/basemap layers. Offline downloads always target
-  /// [mapProvider]; the online-only layers are for viewing.
-  List<MapProviderConfig> get baseLayers => [
-    mapProvider,
-    ...MapProviderConfig.onlineImageryLayers,
+  /// The source format used when a download does not choose one explicitly:
+  /// on-device vector conversion when a vector source is configured, otherwise a
+  /// per-tile raster download.
+  OfflineSourceFormat get _defaultSourceFormat => usesVectorSource
+      ? OfflineSourceFormat.convertedVector
+      : OfflineSourceFormat.rasterTiles;
+
+  /// The selectable online base maps. CyclOSM includes provider-rendered
+  /// contours and hillshade, so viewing it never downloads separate height data.
+  List<MapProviderConfig> get baseLayers {
+    final candidates = [
+      mapProvider,
+      MapProviderConfig.cyclOsm(),
+      ...MapProviderConfig.onlineImageryLayers,
+    ];
+    final seen = <String>{};
+    return [
+      for (final layer in candidates)
+        if (seen.add(layer.id)) layer,
+    ];
+  }
+
+  /// Whether this build can expose the seven-tap internal-release unlock.
+  bool get publicRasterDevUnlockAvailable =>
+      _publicRasterDevUnlockCompiled && !publicRasterDevDownloadsUnlocked;
+
+  /// Raster sources currently allowed for area download. Debug providers carry
+  /// their permission directly; an internal release can grant the same local
+  /// policy after the persisted developer unlock is confirmed.
+  List<MapProviderConfig> get rasterDownloadProviders => [
+    for (final layer in baseLayers)
+      if (layer.offlineDownloadsAllowed)
+        layer
+      else if (publicRasterDevDownloadsUnlocked &&
+          layer.isPublicDevelopmentRaster)
+        layer.withDevelopmentDownloadEnabled(),
   ];
+
+  /// Resolves a persisted provider id to the current provider configuration.
+  MapProviderConfig? mapProviderById(String id) {
+    for (final layer in rasterDownloadProviders) {
+      if (layer.id == id) return layer;
+    }
+    for (final layer in baseLayers) {
+      if (layer.id == id) return layer;
+    }
+    return null;
+  }
 
   /// The base layer currently shown for online rendering and attribution.
   /// Defaults to [mapProvider] when nothing valid is selected.
@@ -112,6 +181,9 @@ class AppStore extends ChangeNotifier {
       repository: repository,
       store: tileStore,
       config: provider,
+      terrainBaker: TerrariumVectorTerrainBaker(
+        config: MapProviderConfig.terrainSource(),
+      ),
     );
     final store = AppStore._(
       repository: repository,
@@ -119,7 +191,17 @@ class AppStore extends ChangeNotifier {
       mapProvider: provider,
       downloader: downloader,
       vectorConverter: vectorConverter,
-      routeTrailBuilder: RouteTrailBuilder(),
+      routeTrailBuilder: RouteTrailBuilder(
+        // Route snapping and Follow-trails routing use trails plus roads of any
+        // kind, so a route can stitch onto residential streets and service
+        // roads as well as paths and tracks.
+        extractor: const TrailExtractor(
+          trailClasses: TrailExtractor.trailAndRoadClasses,
+        ),
+      ),
+      backgroundDownloads: DownloadForegroundService(),
+        publicRasterDevUnlockCompiled:
+          MapProviderConfig.publicRasterDevUnlockCompiled,
     );
     await store.reload();
     return store;
@@ -129,22 +211,36 @@ class AppStore extends ChangeNotifier {
     required AppRepository repository,
     required TileStore tileStore,
     required MapProviderConfig mapProvider,
+    OfflineDownloadService? downloader,
+    VectorAreaConversionService? vectorConverter,
+    DownloadForegroundService? backgroundDownloads,
+    bool publicRasterDevUnlockCompiled = false,
   }) async {
     final store = AppStore._(
       repository: repository,
       tileStore: tileStore,
       mapProvider: mapProvider,
-      downloader: OfflineDownloadService(
-        repository: repository,
-        store: tileStore,
-        config: mapProvider,
+      downloader:
+          downloader ??
+          OfflineDownloadService(
+            repository: repository,
+            store: tileStore,
+            config: mapProvider,
+          ),
+      vectorConverter:
+          vectorConverter ??
+          VectorAreaConversionService(
+            repository: repository,
+            store: tileStore,
+            config: mapProvider,
+          ),
+      routeTrailBuilder: RouteTrailBuilder(
+        extractor: const TrailExtractor(
+          trailClasses: TrailExtractor.trailAndRoadClasses,
+        ),
       ),
-      vectorConverter: VectorAreaConversionService(
-        repository: repository,
-        store: tileStore,
-        config: mapProvider,
-      ),
-      routeTrailBuilder: RouteTrailBuilder(),
+      backgroundDownloads: backgroundDownloads ?? DownloadForegroundService(),
+      publicRasterDevUnlockCompiled: publicRasterDevUnlockCompiled,
     );
     await store.reload();
     return store;
@@ -157,6 +253,8 @@ class AppStore extends ChangeNotifier {
       routes = await repository.loadRoutes();
       activities = await repository.loadActivities();
       offlineAreas = await repository.loadOfflineAreas();
+      offlineAreas = await _applySavedOfflineOrder(offlineAreas);
+      await _cleanupLegacyTerrainStorage();
       final savedMapMode = await repository.loadSetting(_mapTileModeSetting);
       mapTileMode =
           MapTileMode.values
@@ -178,6 +276,11 @@ class AppStore extends ChangeNotifier {
           : mapProvider.vectorSourceUrl;
       final savedSnap = await repository.loadSetting(_snapRoutesSetting);
       snapRoutesToTrails = savedSnap == null ? true : savedSnap == 'true';
+      final savedPublicRasterUnlock = await repository.loadSetting(
+        _publicRasterDevUnlockSetting,
+      );
+      publicRasterDevDownloadsUnlocked =
+          _publicRasterDevUnlockCompiled && savedPublicRasterUnlock == 'true';
       final savedNav = await repository.loadSetting(_navAlertConfigSetting);
       if (savedNav != null && savedNav.isNotEmpty) {
         try {
@@ -496,6 +599,23 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// Permanently enables public-raster development downloads on this device for
+  /// an explicitly compiled internal-release build. Returns false in normal
+  /// release builds, where the capability does not exist.
+  Future<bool> enablePublicRasterDevDownloads() async {
+    if (!_publicRasterDevUnlockCompiled) return false;
+    try {
+      await repository.saveSetting(_publicRasterDevUnlockSetting, 'true');
+      publicRasterDevDownloadsUnlocked = true;
+      errorMessage = null;
+      notifyListeners();
+      return true;
+    } on Object catch (error) {
+      _setError('Could not enable developer raster downloads: $error');
+      return false;
+    }
+  }
+
   /// Persists whether saved routes are snapped onto nearby real trails.
   Future<void> setSnapRoutesToTrails(bool value) async {
     try {
@@ -774,32 +894,46 @@ class AppStore extends ChangeNotifier {
     required int minZoom,
     required int maxZoom,
     int maxTiles = 1200,
+    OfflineSourceFormat? format,
+    String? providerId,
   }) async {
     try {
       final plan = TilePlanner(
         maxTiles: maxTiles,
       ).plan(bounds, minZoom, maxZoom);
       final now = DateTime.now().toUtc();
+      final sourceFormat = format ?? _defaultSourceFormat;
+      final sourceProviderId =
+          sourceFormat == OfflineSourceFormat.convertedVector
+          ? mapProvider.id
+          : providerId ?? mapProvider.id;
+      if (sourceFormat == OfflineSourceFormat.rasterTiles) {
+        final rasterProvider = mapProviderById(sourceProviderId);
+        if (rasterProvider == null || !rasterProvider.offlineDownloadsAllowed) {
+          throw StateError(
+            'Raster provider $sourceProviderId is not enabled for downloads.',
+          );
+        }
+      }
       final area = OfflineArea(
         id: OfflineAreaId.generate().value,
         name: name.trim().isEmpty ? 'Offline area' : name.trim(),
         bounds: bounds,
         minZoom: minZoom,
         maxZoom: maxZoom,
-        providerId: mapProvider.id,
+        providerId: sourceProviderId,
         status: OfflineAreaStatus.planned,
         totalTiles: plan.tileCount,
         completedTiles: 0,
         actualBytes: 0,
         createdAt: now,
         updatedAt: now,
-        sourceFormat: usesVectorSource
-            ? OfflineSourceFormat.convertedVector
-            : OfflineSourceFormat.rasterTiles,
+        sourceFormat: sourceFormat,
       );
       await repository.saveOfflineArea(area);
       offlineAreas = [area, ...offlineAreas];
       notifyListeners();
+      unawaited(_persistOfflineAreaOrder());
       unawaited(_runDownload(area, plan));
     } on Object catch (error) {
       _setError('Could not create offline area: $error');
@@ -813,6 +947,8 @@ class AppStore extends ChangeNotifier {
     required int minZoom,
     required int maxZoom,
     int maxTiles = 1200,
+    OfflineSourceFormat? format,
+    String? providerId,
   }) async {
     try {
       final plan = TilePlanner(
@@ -820,25 +956,40 @@ class AppStore extends ChangeNotifier {
       ).plan(bounds, minZoom, maxZoom);
       downloader.cancel(area.id);
       vectorConverter.cancel(area.id);
+      final sourceFormat = format ?? area.sourceFormat;
+      final sourceProviderId =
+          sourceFormat == OfflineSourceFormat.convertedVector
+          ? mapProvider.id
+          : providerId ?? area.providerId;
+      if (sourceFormat == OfflineSourceFormat.rasterTiles) {
+        final rasterProvider = mapProviderById(sourceProviderId);
+        if (rasterProvider == null || !rasterProvider.offlineDownloadsAllowed) {
+          throw StateError(
+            'Raster provider $sourceProviderId is not enabled for downloads.',
+          );
+        }
+      }
       final updated = OfflineArea(
         id: area.id,
         name: name.trim().isEmpty ? 'Offline area' : name.trim(),
         bounds: bounds,
         minZoom: minZoom,
         maxZoom: maxZoom,
-        providerId: mapProvider.id,
+        providerId: sourceProviderId,
         status: OfflineAreaStatus.planned,
         totalTiles: plan.tileCount,
         completedTiles: 0,
         actualBytes: 0,
         createdAt: area.createdAt,
         updatedAt: DateTime.now().toUtc(),
-        sourceFormat: usesVectorSource
-            ? OfflineSourceFormat.convertedVector
-            : OfflineSourceFormat.rasterTiles,
+        sourceFormat: sourceFormat,
+      );
+      final namespace = offlineTileNamespace(
+        updated.providerId,
+        updated.sourceFormat,
       );
       final retainedKeys = plan.coordinates
-          .map((coordinate) => '${mapProvider.id}/${coordinate.key}')
+          .map((coordinate) => '$namespace/${coordinate.key}')
           .toSet();
       final orphanPaths = await repository.replaceOfflineAreaPlan(
         updated,
@@ -869,25 +1020,80 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> _runDownload(OfflineArea area, TilePlan plan) async {
+    _intendedDownloads.add(area.id);
+    _runningDownloads.add(area.id);
+    _updateBackgroundService();
     try {
+      final OfflineArea result;
       if (area.sourceFormat == OfflineSourceFormat.convertedVector) {
-        await vectorConverter.convert(
+        result = await vectorConverter.convert(
           area,
           plan,
           onProgress: _replaceOfflineArea,
           sourceOverride: vectorSourceUrl,
         );
       } else {
-        await downloader.download(area, plan, onProgress: _replaceOfflineArea);
+        final rasterProvider = mapProviderById(area.providerId);
+        if (rasterProvider == null) {
+          throw StateError(
+            'The saved raster provider ${area.providerId} is not configured.',
+          );
+        }
+        result = await downloader.download(
+          area,
+          plan,
+          provider: rasterProvider,
+          onProgress: _replaceOfflineArea,
+        );
+      }
+      // A completed area is done; a paused one was cancelled by the user. Both
+      // should stop being auto-resumed. A failed/interrupted area stays intended
+      // so it resumes when the app next returns to the foreground.
+      if (result.status == OfflineAreaStatus.complete ||
+          result.status == OfflineAreaStatus.paused) {
+        _intendedDownloads.remove(area.id);
       }
     } on Object catch (error) {
       _setError('Offline download failed: $error');
+    } finally {
+      _runningDownloads.remove(area.id);
+      _updateBackgroundService();
     }
   }
 
   void cancelDownload(OfflineArea area) {
+    _intendedDownloads.remove(area.id);
     downloader.cancel(area.id);
     vectorConverter.cancel(area.id);
+  }
+
+  /// Resumes downloads that were interrupted (for example by the OS suspending
+  /// the app in the background) but were not paused by the user. Safe to call
+  /// repeatedly; it never resumes a completed area or one already in flight.
+  Future<void> resumeInterruptedDownloads() async {
+    final pending = _intendedDownloads
+        .difference(_runningDownloads)
+        .toList(growable: false);
+    for (final id in pending) {
+      final area = offlineAreas.where((item) => item.id == id).firstOrNull;
+      if (area == null || area.status == OfflineAreaStatus.complete) {
+        _intendedDownloads.remove(id);
+        continue;
+      }
+      await resumeDownload(area);
+    }
+  }
+
+  /// Starts the keep-alive foreground service while any download is running and
+  /// stops it once none remain, so the OS keeps the process alive in the
+  /// background only for as long as it is needed.
+  void _updateBackgroundService() {
+    final shouldRun = _runningDownloads.isNotEmpty;
+    if (shouldRun == _backgroundServiceActive) return;
+    _backgroundServiceActive = shouldRun;
+    unawaited(
+      shouldRun ? backgroundDownloads.start() : backgroundDownloads.stop(),
+    );
   }
 
   Future<void> deleteOfflineArea(OfflineArea area) async {
@@ -902,6 +1108,7 @@ class AppStore extends ChangeNotifier {
       offlineAreas = offlineAreas.where((item) => item.id != area.id).toList();
       if (focusedOfflineArea?.id == area.id) focusedOfflineArea = null;
       notifyListeners();
+      unawaited(_persistOfflineAreaOrder());
     } on Object catch (error) {
       _setError('Could not delete offline area: $error');
     }
@@ -913,6 +1120,82 @@ class AppStore extends ChangeNotifier {
         .toList();
     if (focusedOfflineArea?.id == area.id) focusedOfflineArea = area;
     notifyListeners();
+  }
+
+  /// Reorders saved offline areas. Index 0 is the top area, drawn over the ones
+  /// beneath it where they overlap on the map. [newIndex] is the target index
+  /// after the moved item is removed (the `onReorderItem` convention).
+  Future<void> reorderOfflineAreas(int oldIndex, int newIndex) async {
+    if (oldIndex < 0 || oldIndex >= offlineAreas.length) return;
+    final list = [...offlineAreas];
+    final moved = list.removeAt(oldIndex);
+    final target = newIndex.clamp(0, list.length);
+    list.insert(target, moved);
+    offlineAreas = list;
+    notifyListeners();
+    await _persistOfflineAreaOrder();
+  }
+
+  /// Applies the saved user ordering to [areas], keeping any areas absent from
+  /// the saved order after the ordered ones.
+  Future<List<OfflineArea>> _applySavedOfflineOrder(
+    List<OfflineArea> areas,
+  ) async {
+    final saved = await repository.loadSetting(_offlineAreaOrderSetting);
+    if (saved == null || saved.isEmpty) return areas;
+    List<String> orderedIds;
+    try {
+      orderedIds = (jsonDecode(saved) as List).cast<String>();
+    } on Object {
+      return areas;
+    }
+    final byId = {for (final area in areas) area.id: area};
+    final ordered = <OfflineArea>[];
+    for (final id in orderedIds) {
+      final area = byId.remove(id);
+      if (area != null) ordered.add(area);
+    }
+    ordered.addAll(byId.values);
+    return ordered;
+  }
+
+  Future<void> _persistOfflineAreaOrder() async {
+    try {
+      await repository.saveSetting(
+        _offlineAreaOrderSetting,
+        jsonEncode(offlineAreas.map((area) => area.id).toList()),
+      );
+    } on Object {
+      // Ordering is a convenience; ignore persistence failures.
+    }
+  }
+
+  /// Removes raw elevation data created by the superseded runtime contour
+  /// overlay. Current topography is baked into converted vector PNGs, so neither
+  /// the raw `aws-terrarium` files nor the browsing cache are needed anymore.
+  Future<void> _cleanupLegacyTerrainStorage() async {
+    final completed = await repository.loadSetting(
+      _legacyTerrainCleanupSetting,
+    );
+    if (completed == 'true') return;
+    try {
+      final paths = await repository.removeTilesForProvider(
+        MapProviderConfig.terrariumTerrain.id,
+      );
+      for (final relativePath in paths) {
+        final file = File(p.join(tileStore.root.path, relativePath));
+        if (await file.exists()) await file.delete();
+      }
+      for (final namespace in const ['aws-terrarium', 'aws-terrarium-cache']) {
+        final directory = tileStore.dirFor(namespace);
+        if (await directory.exists()) await directory.delete(recursive: true);
+      }
+      await repository.deleteSetting('show_contours');
+      await repository.deleteSetting('terrain_cache_limit_bytes');
+      await repository.saveSetting(_legacyTerrainCleanupSetting, 'true');
+    } on Object {
+      // Best effort and retryable: do not block app startup on cleanup failure.
+    }
   }
 
   void clearError() {
@@ -929,7 +1212,9 @@ class AppStore extends ChangeNotifier {
   void dispose() {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
+    if (_backgroundServiceActive) unawaited(backgroundDownloads.stop());
     downloader.dispose();
+    vectorConverter.dispose();
     super.dispose();
   }
 }

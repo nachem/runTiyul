@@ -29,6 +29,10 @@ void main() {
   });
 
   group('MapProviderConfig.fromEnvironment', () {
+    test('compiles the release developer unlock capability by default', () {
+      expect(MapProviderConfig.publicRasterDevUnlockCompiled, isTrue);
+    });
+
     test('defaults to the OpenFreeMap vector source and allows downloads', () {
       final provider = MapProviderConfig.fromEnvironment();
 
@@ -36,6 +40,25 @@ void main() {
       expect(provider.usesVectorSource, isTrue);
       expect(provider.offlineDownloadsAllowed, isTrue);
       expect(provider.attribution, contains('OpenFreeMap'));
+    });
+  });
+
+  group('MapProviderConfig.cyclOsm', () {
+    test('uses the keyless CyclOSM endpoint and correct attribution', () {
+      final provider = MapProviderConfig.cyclOsm();
+
+      expect(provider.id, 'cyclosm');
+      expect(provider.label, 'CyclOSM');
+      expect(provider.urlTemplate, contains('tile-cyclosm.openstreetmap.fr'));
+      expect(provider.attribution, contains('CyclOSM'));
+      expect(provider.attribution, contains('OpenStreetMap contributors'));
+    });
+
+    test('debug builds expose only a development raster download', () {
+      final provider = MapProviderConfig.cyclOsm();
+
+      expect(provider.offlineDownloadsAllowed, isTrue);
+      expect(provider.isDevelopmentOsmOverride, isTrue);
     });
   });
 }

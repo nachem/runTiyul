@@ -31,8 +31,16 @@ class OfflineDownloadService {
     OfflineArea initial,
     TilePlan plan, {
     required void Function(OfflineArea area) onProgress,
+    MapProviderConfig? provider,
   }) async {
-    if (!config.offlineDownloadsAllowed) {
+    final activeConfig = provider ?? config;
+    if (initial.providerId != activeConfig.id) {
+      throw StateError(
+        'Offline area provider ${initial.providerId} does not match '
+        '${activeConfig.id}.',
+      );
+    }
+    if (!activeConfig.offlineDownloadsAllowed) {
       throw StateError(
         'This map provider is not configured to permit offline downloads.',
       );
@@ -57,7 +65,7 @@ class OfflineDownloadService {
           firstError == null) {
         final coordinate = plan.coordinates[nextIndex++];
         try {
-          final tileBytes = await _downloadTile(area, coordinate);
+          final tileBytes = await _downloadTile(area, coordinate, activeConfig);
           completed++;
           bytes += tileBytes;
           area = _copyArea(area, completedTiles: completed, actualBytes: bytes);
@@ -86,9 +94,17 @@ class OfflineDownloadService {
     return area;
   }
 
-  Future<int> _downloadTile(OfflineArea area, TileCoordinate coordinate) async {
+  Future<int> _downloadTile(
+    OfflineArea area,
+    TileCoordinate coordinate,
+    MapProviderConfig activeConfig,
+  ) async {
+    final namespace = offlineTileNamespace(
+      activeConfig.id,
+      OfflineSourceFormat.rasterTiles,
+    );
     final file = store.fileFor(
-      config.id,
+      namespace,
       coordinate.z,
       coordinate.x,
       coordinate.y,
@@ -101,7 +117,7 @@ class OfflineDownloadService {
         try {
           response = await _client
               .get(
-                config.tileUri(coordinate.z, coordinate.x, coordinate.y),
+                activeConfig.tileUri(coordinate.z, coordinate.x, coordinate.y),
                 headers: {'User-Agent': 'TrailRunner/1.0'},
               )
               .timeout(const Duration(seconds: 15));
@@ -132,11 +148,11 @@ class OfflineDownloadService {
     }
 
     final length = await file.length();
-    final key = '${config.id}/${coordinate.key}';
+    final key = '$namespace/${coordinate.key}';
     await repository.attachTile(
       areaId: area.id,
       tileKey: key,
-      providerId: config.id,
+      providerId: namespace,
       zoom: coordinate.z,
       x: coordinate.x,
       y: coordinate.y,

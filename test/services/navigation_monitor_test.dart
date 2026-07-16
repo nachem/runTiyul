@@ -70,9 +70,7 @@ void main() {
     expect(first.junctionAhead, isNotNull);
 
     expect(
-      monitor
-          .update(near, route: line, junctions: const [junction])
-          .triggered,
+      monitor.update(near, route: line, junctions: const [junction]).triggered,
       NavAlert.none,
     );
     expect(
@@ -82,9 +80,7 @@ void main() {
       isNull,
     );
     expect(
-      monitor
-          .update(near, route: line, junctions: const [junction])
-          .triggered,
+      monitor.update(near, route: line, junctions: const [junction]).triggered,
       NavAlert.junction,
     );
   });

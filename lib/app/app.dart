@@ -53,8 +53,29 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   late var _index = widget.initialIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning to the foreground: resume any download the OS interrupted while
+    // the app was backgrounded.
+    if (state == AppLifecycleState.resumed) {
+      unawaited(widget.store.resumeInterruptedDownloads());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

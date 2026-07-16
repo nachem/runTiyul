@@ -1,28 +1,32 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:trail_runner/services/trail_extractor.dart';
 import 'package:trail_runner/services/trail_network.dart';
 import 'package:trail_runner/services/trail_router.dart';
 
 void main() {
-  test('snaps onto the trail line between sparse vertices, not to a vertex', () {
-    // A single ~445 m segment with vertices only at its ends.
-    final router = TrailRouter(
-      TrailNetwork(const [
-        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
-      ]),
-    );
+  test(
+    'snaps onto the trail line between sparse vertices, not to a vertex',
+    () {
+      // A single ~445 m segment with vertices only at its ends.
+      final router = TrailRouter(
+        TrailNetwork(const [
+          TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
+        ]),
+      );
 
-    // Tap ~22 m off the MIDDLE of the segment: ~223 m from either vertex but
-    // right next to the trail line.
-    final anchor = router.snap(const LatLng(0.0002, 0.002), maxMeters: 40);
+      // Tap ~22 m off the MIDDLE of the segment: ~223 m from either vertex but
+      // right next to the trail line.
+      final anchor = router.snap(const LatLng(0.0002, 0.002), maxMeters: 40);
 
-    expect(anchor, isNotNull);
-    expect(anchor!.segmentIndex, 0);
-    // Projected onto the line (latitude ~0) at the tapped longitude.
-    expect(anchor.point.latitude, closeTo(0, 1e-5));
-    expect(anchor.point.longitude, closeTo(0.002, 1e-4));
-    expect(anchor.distanceMeters, lessThan(40));
-  });
+      expect(anchor, isNotNull);
+      expect(anchor!.segmentIndex, 0);
+      // Projected onto the line (latitude ~0) at the tapped longitude.
+      expect(anchor.point.latitude, closeTo(0, 1e-5));
+      expect(anchor.point.longitude, closeTo(0.002, 1e-4));
+      expect(anchor.distanceMeters, lessThan(40));
+    },
+  );
 
   test('returns null when the query is not near any trail', () {
     final router = TrailRouter(
@@ -32,6 +36,63 @@ void main() {
     );
 
     expect(router.snap(const LatLng(0.01, 0.01), maxMeters: 40), isNull);
+  });
+
+  test('prefers the previous waypoint category when a tap is near both', () {
+    // A trail (at the equator) and a road ~33 m north of it run parallel.
+    final router = TrailRouter(
+      TrailNetwork(const [
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0.0003, 0), LatLng(0.0003, 0.004)],
+          kind: 'primary',
+        ),
+      ]),
+    );
+
+    // ~11 m from the road, ~22 m from the trail: both within snap distance.
+    const tap = LatLng(0.0002, 0.002);
+
+    // With no preference the nearest way (the road) wins.
+    expect(router.snap(tap)!.category, WayCategory.road);
+
+    // Preferring the previous waypoint's category keeps the anchor on that kind
+    // of way even when the other kind is closer.
+    expect(
+      router.snap(tap, preferCategory: WayCategory.trail)!.category,
+      WayCategory.trail,
+    );
+    expect(
+      router.snap(tap, preferCategory: WayCategory.road)!.category,
+      WayCategory.road,
+    );
+  });
+
+  test('bridges straight instead of an unreasonable cross-trail detour', () {
+    // Two parallel trails ~111 m apart, joined only by a long connector at the
+    // far (east) end, so the only network path between their near ends loops
+    // ~2 km around.
+    final router = TrailRouter(
+      TrailNetwork(const [
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.01)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0.001, 0), LatLng(0.001, 0.01)],
+          kind: 'primary',
+        ),
+        TrailPolyline(
+          points: [LatLng(0, 0.01), LatLng(0.001, 0.01)],
+          kind: 'path',
+        ),
+      ]),
+    );
+
+    final a = router.snap(const LatLng(0, 0.001))!; // near end of trail 0
+    final b = router.snap(const LatLng(0.001, 0.001))!; // near end of trail 1
+    final route = router.buildRoute([a, b]);
+
+    // The ~2 km loop is rejected as an unreasonable detour: the leg bridges the
+    // ~111 m gap with a straight segment instead.
+    expect(route, [a.point, b.point]);
   });
 
   test('route between two anchors on the same trail follows the trail', () {

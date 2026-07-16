@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/geo/distance.dart';
 import '../core/geo/polyline_snap.dart';
+import 'trail_extractor.dart';
 import 'trail_network.dart';
 
 /// A point snapped onto a trail's *line* (not just its vertices): it lies on the
@@ -13,12 +14,16 @@ class TrailAnchor {
     required this.trailIndex,
     required this.segmentIndex,
     required this.point,
+    required this.category,
     this.distanceMeters = 0,
   });
 
   final int trailIndex;
   final int segmentIndex;
   final LatLng point;
+
+  /// Whether the snapped way is a trail or a road.
+  final WayCategory category;
 
   /// How far the original query was from the trail line.
   final double distanceMeters;
@@ -106,27 +111,44 @@ class TrailRouter {
 
   /// The nearest point on any trail *line* within [maxMeters], or null. Uses
   /// segment projection so a query on a trail between vertices still snaps.
-  TrailAnchor? snap(LatLng query, {double maxMeters = 40}) {
+  ///
+  /// When [preferCategory] is set and the query is within [maxMeters] of a way
+  /// in that category, that way wins even if a way of another category is
+  /// closer. This keeps a built route on the same kind of way (a trail versus a
+  /// road) as its previous waypoint when a tap sits near both.
+  TrailAnchor? snap(
+    LatLng query, {
+    double maxMeters = 40,
+    WayCategory? preferCategory,
+  }) {
     TrailAnchor? best;
-    var bestMeters = maxMeters;
+    TrailAnchor? preferred;
     for (var i = 0; i < _network.trails.length; i++) {
+      final trail = _network.trails[i];
       final projection = nearestOnPolyline(
         query,
-        _network.trails[i].points,
+        trail.points,
         distance: distance,
       );
-      if (projection == null) continue;
-      if (projection.distanceMeters <= bestMeters) {
-        bestMeters = projection.distanceMeters;
-        best = TrailAnchor(
-          trailIndex: i,
-          segmentIndex: projection.segmentIndex,
-          point: projection.point,
-          distanceMeters: projection.distanceMeters,
-        );
+      if (projection == null || projection.distanceMeters > maxMeters) continue;
+      final anchor = TrailAnchor(
+        trailIndex: i,
+        segmentIndex: projection.segmentIndex,
+        point: projection.point,
+        category: TrailExtractor.categoryOf(trail.kind),
+        distanceMeters: projection.distanceMeters,
+      );
+      if (best == null || anchor.distanceMeters < best.distanceMeters) {
+        best = anchor;
+      }
+      if (preferCategory != null &&
+          anchor.category == preferCategory &&
+          (preferred == null ||
+              anchor.distanceMeters < preferred.distanceMeters)) {
+        preferred = anchor;
       }
     }
-    return best;
+    return preferred ?? best;
   }
 
   /// Stitches [anchors] into a route that follows the trail network between
@@ -146,11 +168,34 @@ class TrailRouter {
     return route;
   }
 
+  /// A cross-trail bridge longer than this multiple of the direct hop (plus a
+  /// small slack) is treated as an unreasonable detour and replaced by a
+  /// straight segment, so a short real-world crossing is never swapped for a
+  /// long loop through the network. Same-trail legs are never capped, so real
+  /// switchbacks along one trail are preserved.
+  static const double _maxBridgeDetourFactor = 6;
+  static const double _maxBridgeDetourSlackMeters = 40;
+
   List<LatLng> _leg(TrailAnchor a, TrailAnchor b) {
     if (a.trailIndex == b.trailIndex) {
       return _alongTrail(a.trailIndex, a, b);
     }
-    return _graphPath(a, b) ?? [a.point, b.point];
+    final path = _graphPath(a, b);
+    if (path == null) return [a.point, b.point];
+    final direct = distance.metersBetween(a.point, b.point);
+    if (_pathLength(path) >
+        direct * _maxBridgeDetourFactor + _maxBridgeDetourSlackMeters) {
+      return [a.point, b.point];
+    }
+    return path;
+  }
+
+  double _pathLength(List<LatLng> points) {
+    var total = 0.0;
+    for (var i = 1; i < points.length; i++) {
+      total += distance.metersBetween(points[i - 1], points[i]);
+    }
+    return total;
   }
 
   /// The portion of a single trail between two anchors, following the trail's

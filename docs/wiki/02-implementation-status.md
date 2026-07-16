@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-15  
+Snapshot date: 2026-07-16<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -27,9 +27,19 @@ guidance are not implemented.
 A long-term offline-map architecture is documented in
 `06-offline-map-packages.md`. An on-device vector-to-raster conversion slice is
 now implemented (see the feature matrix): free vector MBTiles tiles are
-rasterized to PNG on the device and rendered by the existing raster layer. A
-native MapLibre renderer, terrain layer, source manifest, build pipeline, and
-production hosting remain proposals only.
+rasterized to PNG on the device and rendered by the existing raster layer. The
+render theme extends the package's OSM Liberty style with trail/path emphasis
+and mountain-peak labels for running use, and rewrites every place, road, water,
+and POI label to English (preferring `name:en`, then `name:latin`, then
+`name_en`, then the local `name`) so downloaded maps read in Latin script
+regardless of region. Topography is implemented in two deliberately separate
+ways: **CyclOSM** is an online raster base layer whose provider tiles already
+contain terrain cartography, while converted-vector offline areas fetch free
+Terrarium elevation only during conversion and bake pure-Dart contour lines,
+elevation labels, and hillshade into their final PNG tiles. There is no runtime
+terrain overlay, browsing elevation cache, or retained raw elevation package.
+A native MapLibre renderer, source manifest, build pipeline, and production
+hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
@@ -38,13 +48,13 @@ production hosting remain proposals only.
 | Flutter Android project | Implemented and emulator verified | Debug APK built and launched on Android 14 API 34. |
 | Flutter iOS project | Configured, not runtime verified | Location descriptions and background location mode exist; no macOS/Xcode validation was available. |
 | Material application shell | Implemented | Five primary destinations use Material 3 `NavigationBar`. |
-| Online map display | Implemented; base-layer switch analyzer/test only | `flutter_map` tile layer, pan/zoom, provider configuration, and source-accurate attribution: a custom provider is no longer credited to OpenStreetMap, and offline previews credit the downloaded area's provider. A base-layer picker on every map surface switches the online tiles between the configured (downloadable) provider ("Streets") and additional online-only layers — currently **Esri World Imagery** satellite/orthophoto ("Satellite") — crediting the active layer, and both sources when Auto layers imagery over the saved base. The choice persists in `app_settings`. Online-only imagery is never downloaded: offline coverage, previews, and downloads stay bound to `mapProvider`. |
+| Online map display | Implemented; base-layer switch analyzer/test only | `flutter_map` tile layer, pan/zoom, provider configuration, and source-accurate attribution: a custom provider is no longer credited to OpenStreetMap, and offline previews credit each area's persisted provider. The base-layer picker offers configured **Streets**, **CyclOSM** (cycle/topographic raster with provider-baked contours/hillshade), and online-only **Esri World Imagery** satellite/orthophoto. The choice persists in `app_settings`. Viewing CyclOSM fetches only CyclOSM raster tiles, never separate elevation/Terrarium data; satellite remains view-only. |
 | Map camera controls | Implemented; primary map emulator verified, other surfaces analyzer/test only | Zoom in/out, fit content, fresh-GPS recenter, and a show/hide toggle for the saved trail overlays now appear on every map surface (primary, route detail, manual editor, activity detail, and recording). The primary, route-detail, and activity-detail maps auto-fit their content when opened. A map opened without primary content or an explicit center (for example the primary Explore view or a free-run recording) instead opens centered on the runner's current location at a neighborhood zoom (`z15`), fetching a fix if none is cached and falling back to a wide region only when no location is available. |
 | Map source choice | Implemented; auto layering analyzer/test only | Auto now draws the saved (offline) map as a base with the live online map layered on top, so connected users get the freshest, most detailed tiles and fall back to the saved map where there is no connectivity; Online bypasses files; Offline makes no network requests, is always selectable, and fits/displays downloaded-area bounds for discovery. Choice persists in `app_settings`. |
-| Offline zoom limits | Implemented; overzoom analyzer/test only | Offline areas constrain zoom-out to their downloaded minimum, but zooming in past the downloaded maximum now scales (overzooms) the deepest saved tiles up to z19 instead of going blank, so the map keeps zooming; only zoom-out at the minimum is disabled. |
+| Offline zoom limits | Implemented; overzoom analyzer/test only | Offline mode now uses the same zoom range as the online map: zoom-out is no longer locked at the downloaded minimum, and zooming in past the downloaded maximum scales (overzooms) the deepest saved tiles up to z19 instead of going blank. Where the current offline area lacks coverage (below the downloaded minimum), tiles render transparent in pure Offline mode; Auto fills them from the online layer. Auto-fit and the **Show on map** preview floor the camera at the downloaded minimum zoom (`offlineAwareFitZoom`), so previewing an area downloaded only at deep zoom levels no longer lands on a blank (gray) map below its coverage. Previewing an area that is still downloading now uses a download-progress-independent map key (`offlineAreaMapKey`), so the per-tile `updatedAt` bump no longer recreates the whole map and its controls on every downloaded tile (which had left the preview a flickering gray screen with no controls). |
 | Current GPS location | Implemented, emulator permission verified | Location service and map marker exist; denied/settings flows are surfaced as errors but not comprehensively device-tested. |
 | GPX import | Implemented, parser unit-tested | Uses the platform `file_selector`; the native picker was not exercised in the emulator verification. |
-| Manual route creation | Implemented; move/delete + save-fix + edit + follow-trails analyzer/test only | Map taps add ordered waypoints; undo, name, save, and dashed straight-line display work. A new route opens centered on the runner's current location at a closer zoom. The name field is pre-filled and no longer required (empty saves auto-name "Route N"), and the editor now closes only after a successful save, so a drawn route always lands in the list. Long-pressing selects the nearest waypoint (highlighted) to move (tap to reposition) or delete. An existing route can be reopened for editing from its detail screen (Edit waypoints), loading its points to add/move/delete and saving in place. A **Follow trails** mode (toggled beside Checkpoints) loads the real trail network for the visible area and snaps each tap onto a trail *line*, then builds the route *along* real trails between anchors — the same trail's own geometry when two anchors share a trail, or a shortest path through junctions across connected trails; trail data auto-downloads for the viewed area (with a Reload action) and anchors can be undone or deleted. |
+| Manual route creation | Implemented; move/delete + save-fix + edit + follow-trails analyzer/test only | Map taps add ordered waypoints; undo, name, save, and dashed straight-line display work. A new route opens centered on the runner's current location at a closer zoom. While editing, the map no longer auto-refits when points are added or moved, so the zoom the runner set is kept. The name field is pre-filled with "Route N" and required in the editor: Save is disabled and an inline "Enter a route name" prompt shows while the field is empty (the store-level save still auto-names an empty name as a safety net). The editor closes only after a successful save, so a drawn route always lands in the list. Long-pressing selects the nearest waypoint (highlighted) to move (tap to reposition) or delete. An existing route can be reopened for editing from its detail screen (Edit waypoints), loading its points to add/move/delete and saving in place. A **Follow trails** mode (toggled beside Checkpoints) loads the real trail network for the visible area and snaps each tap onto a trail *line*, then builds the route *along* real trails between anchors — the same trail's own geometry when two anchors share a trail, or a shortest path through junctions across connected trails; trail data auto-downloads for the viewed area (with a Reload action) and anchors can be undone or deleted. Switching between Checkpoints and Follow trails keeps the points already placed — anchors become free waypoints and free waypoints are snapped back onto the network — so toggling the mode changes only how the next point is added rather than resetting the route. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. |
 | Route progress/off-route alerts | Not implemented | Version 1 currently provides visual line-following only. |
@@ -54,14 +64,18 @@ production hosting remain proposals only.
 | Activity recovery | Implemented | Samples and summaries are written incrementally; interrupted active activities reload as paused. |
 | Activity history/detail/delete | Implemented; list/detail emulator verified, detail-map controls analyzer/test only | Completed activity appears in history with summary; the detail track map now uses the full map controls and auto-fits the recorded track. |
 | Activity GPX export | Implemented and serialization-tested | Activity samples export as a GPX 1.1 track through the native save dialog; the native dialog was not emulator-tested. |
-| Offline area selection | Implemented; adjustable cap + confirm + source picker analyzer/test only | Two map corners and a zoom range; the panel shows a live tiles / estimated storage / estimated time summary. The tile safety cap is adjustable (1.2k/2.5k/5k/10k presets, default 1,200), and starting a download opens a confirmation dialog summarizing area, zoom, tiles, storage, time, and source (with a large-download caution) before it begins. A Download source picker lists all base layers: downloadable ones (the OpenFreeMap vector provider) are selectable, and view-only layers (Esri satellite) are shown disabled with the licensing reason, so a download always targets a permitted source. |
+| Offline area selection | Implemented; adjustable cap + source picker analyzer/test only | Two map corners and a zoom range; the panel shows live tile/storage/time estimates, adjustable 1.2k/2.5k/5k/10k caps, and confirmation. The first setting is an always-visible two-choice picker: **MBTiles / vector** or **Current map: _layer_**. Current-map raster follows the layer selected with the map-layer button. Debug public Streets/CyclOSM are immediately enabled and labeled `DEV`. Release starts locked; seven taps on the disabled public current-map chip within four seconds opens an explicit warning/confirmation, then persists `public_raster_dev_downloads_unlocked=true` on that device. Satellite stays view-only and cannot be unlocked. The chosen `sourceFormat` and provider id persist per area for correct resume/render/delete. |
 | Offline map download | Implemented and emulator verified | Four bounded workers, timeout, transient retry, progress persistence, pause/cancel, and resume. |
-| Provider policy gate | Implemented | Raster downloads require an approved provider flag or the development-only OSM override; a configured vector source (the OpenFreeMap default) also enables downloads via on-device conversion. The standard VS Code debug launch supplies the development override; profile and release remain gated. |
-| On-device vector→raster conversion | Implemented; analyzer/unit-tested, not device-verified | The app defaults to the free **OpenFreeMap** OpenMapTiles vector endpoint (`https://tiles.openfreemap.org/planet`), overridable in-app (Offline maps → Download area → Set source) or via the `TRAIL_VECTOR_MBTILES` build flag. Downloading an area fetches its vector tiles per `z/x/y` from that endpoint (or reads a local/downloaded MBTiles) and rasterizes each to PNG on the device with `vector_tile_renderer`, then stores and renders them through the existing raster layer. Offline zoom past the vector maximum is supported by overzoom: vector sources are downloaded up to their z14 OpenMapTiles maximum, and zooming in past that scales (overzooms) the deepest saved tiles rather than going blank, while out-of-range/missing tiles are skipped. The rasterizer, MBTiles source (TMS/gzip), HTTP/TileJSON source, conversion, in-app setting, and default config are unit-tested. Full visual fidelity (labels, fonts, styling) still needs a real device. The `pmtiles` package was removed (protobuf 6 vs the vector renderer's protobuf 3). |
-| Trail-aware navigation | Implemented; analyzer/unit-tested, live behavior not device-verified | Saving a manual route optionally snaps it onto nearby real trails: the route is saved and listed immediately, then in the background the app fetches only the route's vector tiles, extracts the `transportation` path/track network, and stitches the route to it (snapping joins a trail within 25 m and then stays on it with hysteresis until the route is more than 50 m away, so it does not flick on and off sparse trails); a per-save toggle keeps the exact drawn line, and the saved route is only rewritten when snapping actually moves it (never to a degenerate under-two-point line), so a route is never lost or silently reshaped when no nearby trail exists. The same extraction feeds an interactive trail graph (`TrailRouter`, which snaps a tap onto the nearest trail *line* and finds shortest paths along trails) and a viewport loader (`networkForBounds`) that power the editor's Follow-trails mode. While recording along a selected route, off-route and junction alerts fire with haptic feedback and a banner; distance, persistence (GPS fixes), and on/off are configurable (Record → Alerts). Junctions come from the trail network built along the route. Geometry, extraction, snapping, the route-trail builder, and the alert monitor are unit-tested; live GPS/haptic behavior needs a device. |
-| Offline tile rendering | Implemented and offline verified | File-backed tiles are preferred; saved areas open on the primary Map tab with bounds, offline-only tiles, controls, and an edit-bounds action. |
+| Background map downloads | Implemented (Android); analyzer/test/build pass, not device-verified | An Android foreground service (`DownloadService`, `dataSync` type) started over a `trail_runner/download_service` MethodChannel keeps the process alive while any download runs, so downloads continue with the app backgrounded; the download loop stays on the Flutter main isolate. On every platform, a download interrupted while backgrounded auto-resumes when the app returns to the foreground (`AppStore.resumeInterruptedDownloads`, wired to `AppLifecycleState.resumed`) and keeps completed tiles; iOS has no keep-alive service and relies on this resume. Service start/stop toggling and interrupted-resume are unit-tested, `flutter analyze` is clean, and the debug APK builds with the native service; on-device background behavior remains unverified. |
+| Provider policy gate | Implemented | Raster authorization is independent from vector availability. Approved custom raster providers require `TRAIL_TILE_OFFLINE_ALLOWED=true`; public OSM standard and CyclOSM downloads are immediate only in debug (`ENABLE_DEV_OSM_DOWNLOADS`, default true). `ALLOW_PUBLIC_RASTER_DEV_UNLOCK` defaults true in this repository, so release includes the seven-tap developer capability but starts locked until the warning is confirmed; the unlock persists locally and promotes only OSM/CyclOSM, never Satellite/arbitrary providers. A future production build can compile it out with `ALLOW_PUBLIC_RASTER_DEV_UNLOCK=false`. DEV selections stay capped/labeled and remain non-production. |
+| On-device vector→raster conversion | Implemented; analyzer/unit-tested, not device-verified | The app defaults to the free **OpenFreeMap** OpenMapTiles vector endpoint (`https://tiles.openfreemap.org/planet`), overridable in-app or via `TRAIL_VECTOR_MBTILES`. Each selected vector tile is rasterized with `vector_tile_renderer`; tiles above the source maximum (typically z14) use crisp parent over-rendering through z16, then map display pixel-overzooms to z19. `TerrariumVectorTerrainBaker` fetches elevation only during this conversion: no terrain request below z10, z10-z13 fetched directly, and deeper output crops/reuses the z13 parent from a 64-entry in-memory rendered-overlay cache. `TerrainContourService` traces 10 m contours (50 m labeled index contours) and hillshade, which are composited into the final PNG. Raw Terrarium and intermediate overlay bytes are never written to disk. Missing terrain (404) leaves the base vector tile usable; other terrain failures fail the conversion for retry. Vector source, overzoom, terrain composition/parent reuse, provider-format metadata, and PNG output are unit-tested. Visual quality/performance still need a device. |
+| Trail-aware navigation | Implemented; analyzer/unit-tested, live behavior not device-verified | Saving a manual route optionally snaps it onto nearby real trails: the route is saved and listed immediately, then in the background the app fetches only the route's vector tiles, extracts the `transportation` network — trails (`path`, `track`) plus roads of any kind (`motorway`, `trunk`, `primary`, `secondary`, `tertiary`, `minor`, `service`; residential, unclassified, and living-street ways fall under `minor`) — and stitches the route to it (snapping joins a trail or road within 25 m and then stays on it with hysteresis until the route is more than 50 m away, so it does not flick on and off sparse ways), then a second pass rebuilds the stitched line as a path that follows the connected trail/road graph end-to-end (`RouteTrailBuilder.refineOntoNetwork` via `TrailRouter`), keeping the saved route entirely on real ways and bridging any stretch that left the network; a per-save toggle keeps the exact drawn line, and the saved route is only rewritten when snapping actually moves it (never to a degenerate under-two-point line), so a route is never lost or silently reshaped when no nearby trail exists. The same extraction feeds an interactive trail graph (`TrailRouter`, which snaps a tap onto the nearest trail *line* — or, when the tap is near both a trail and a road, onto the same category (trail vs road) as the previous waypoint so a route stays on one kind of way — and finds shortest paths along trails, capping an unreasonably long cross-trail detour with a straight bridge so a short crossing is never swapped for a long loop) and a viewport loader (`networkForBounds`) that power the editor's Follow-trails mode, so tapping to follow can route along roads as well as trails. While recording along a selected route, off-route and junction alerts fire with haptic feedback and a banner; distance, persistence (GPS fixes), and on/off are configurable (Record → Alerts). Junctions come from the trail network built along the route. Geometry, extraction, snapping, the route-trail builder, and the alert monitor are unit-tested; live GPS/haptic behavior needs a device. |
+| Offline tile rendering | Implemented and offline verified | File-backed tiles are preferred; saved areas open on the primary Map tab with bounds, offline-only tiles, controls, and an edit-bounds action. Saved tiles render through `OrderedOfflineTileProvider`: for each tile it returns the tile from the top-most (user-ordered) area whose bounds and zoom cover it, so overlapping areas layer with the top area drawn over the ones beneath. Focused selections and other saved-area bounds keep their colored border strokes but use fully transparent polygon fills, so overlapping boxes never tint or obscure the map. Base-map tiles are stored per download format (`offlineTileNamespace` → `<provider>-vec`/`<provider>-ras`) so converted-vector and OSM-raster areas at the same coordinate no longer collide. |
+| Render theme (trail emphasis) | Implemented; analyzer/unit-tested, not device-verified | On-device tiles are rasterized with a theme (`map_render_theme.dart`) that extends the package's built-in OSM Liberty OpenMapTiles style with two appended overlay groups: bold, high-contrast, dashed paths/tracks/footways with a light casing whose widths stay legible under overzoom, and mountain-peak name labels the base style omits. `preferEnglishLabels` rewrites every name-only `text-field` (place, road, water, POI, and peak) to the expression `coalesce(name:en, name:latin, name_en, name)`, so downloaded maps show English (Latin-script) labels where the OpenMapTiles data has them and fall back to the local name otherwise (never blank); road `{ref}` shields and other non-name tokens are left untouched. This applies to downloaded/offline tiles only — the online raster base map's labels are baked by the tile provider and stay in the local language. Rendering uses no remote sprites or glyphs, so it stays fully offline. |
+| Topographic data handling | Implemented; analyzer/unit-tested, not device-verified | Online/raster maps never fetch separate height data: CyclOSM's topography is baked by its provider, while other raster maps remain unchanged. Only converted-vector offline maps call the Terrarium baker described above, and only the final composited PNG counts toward area storage. The old live contour overlay, `TerrainTileCache`, raw per-area terrain downloader, map toggle, and Elevation-data card were removed. A one-time `legacy_terrain_cleanup_v1` migration deletes old `aws-terrarium` DB references/files, the `aws-terrarium-cache` directory, and obsolete settings without deleting offline areas or final map tiles. Converted areas credit both their basemap and Terrain Tiles source. |
 | Offline storage usage | Implemented | Actual file byte totals are persisted and shown per area and in aggregate. Each area card shows source and format chips and a Details popup listing source, format, zoom range, tiles, size, bounds, created/updated dates, and any last error. |
 | Overlap-safe deletion | Implemented | Shared tile references prevent removal while another area references a tile. |
+| Offline area ordering | Implemented; analyzer/unit-tested | The saved-areas list is drag-to-reorder (`ReorderableListView` with a drag handle); the order persists in `app_settings` (`offline_area_order`) and is restored on reload. Index 0 is the top area, which the ordered renderer draws over lower areas where they overlap. Reorder persistence and ordered tile resolution are unit-tested. |
 | Download crash recovery | Implemented and unit-tested | Areas left `downloading` after restart become `paused` and resumable. |
 | Free-space check/orphan cleanup | Not implemented | The app does not yet show available device bytes or reconcile orphaned files. |
 | Product documentation | Implemented | Requirements, architecture, AI instructions, local debugging, and current status are indexed. |
@@ -89,18 +103,22 @@ lib/
 |   `-- routes/                     Library, detail, and manual editor
 |-- models/                         Route, activity, and offline area entities
 |-- services/
+|   |-- download_foreground_service.dart  Keep-alive service for background downloads
 |   |-- gpx_service.dart            GPX route import and activity export
 |   |-- location_service.dart       Permission and position stream adapter
 |   |-- map_provider.dart           Compile-time provider configuration
+|   |-- map_render_theme.dart       Trail-emphasis + peak-label render theme
 |   |-- navigation_monitor.dart     Off-route and junction alert logic
+|   |-- terrain_contour_service.dart  Terrarium decode + contour/hillshade renderer
 |   |-- route_snapper.dart          Snaps a route onto nearby trails (hysteresis)
 |   |-- route_trail_builder.dart    Route/viewport trail-network builder
-|   |-- trail_extractor.dart        Extracts path/track trails from vector tiles
+|   |-- trail_extractor.dart        Extracts trail and road lines from vector tiles
 |   |-- trail_network.dart          Trails, nearest, and junction detection
 |   |-- trail_router.dart           Trail graph + shortest path (follow mode)
 |   |-- offline_download_service.dart
 |   |-- tile_store.dart             Deterministic files and map tile provider
 |   |-- vector_area_conversion_service.dart  On-device vector-to-raster area conversion
+|   |-- vector_terrain_baker.dart   Bake-time Terrarium fetch + PNG composition
 |   |-- vector_tile_rasterizer.dart On-device MVT-to-PNG rasterizer
 |   `-- vector_tile_source.dart     MBTiles vector source and one-time downloader
 `-- main.dart
@@ -133,8 +151,13 @@ removing shared files.
 Tile image files are stored under the application support directory:
 
 ```text
-offline_tiles/<provider-id>/<zoom>/<x>/<y>.png
+offline_tiles/<provider-id>-<format>/<zoom>/<x>/<y>.png
 ```
+
+The `<format>` suffix (`vec` for converted vector, `ras` for raster) keeps
+different-format areas from overwriting each other at the same coordinate while
+still deduplicating tiles that share a provider and format. It is produced by
+`offlineTileNamespace` and used by both downloaders and the ordered renderer.
 
 Schema version 2 adds a nullable `source_format` column to `offline_areas`
 through an explicit `onUpgrade` migration (`ALTER TABLE ... ADD COLUMN`); rows
@@ -155,9 +178,12 @@ fix. Its source menu offers:
   and show completed-area bounds so downloads can be found.
 
 Offline is always selectable. Selecting it fits completed downloaded areas when
-available. A focused area restricts pan/pinch and zoom buttons to its configured
-downloaded zoom range; zoom buttons disable at the minimum and maximum. The
-selected mode is stored in `app_settings` and restored after restart.
+available. A focused area fits its bounds, but offline mode shares the online
+map's zoom range: zoom-out is not locked at the downloaded minimum, and zoom-in
+overzooms the deepest saved tiles past the downloaded maximum up to z19 (only
+zoom-in disables, at z19). Areas below the downloaded minimum render transparent
+in pure Offline mode; Auto fills them from the online layer. The selected mode is
+stored in `app_settings` and restored after restart.
 
 A separate base-layer picker (present on every map surface) selects which online
 base map is shown: the configured downloadable provider ("Streets") or an
@@ -224,7 +250,9 @@ Limitations:
 ## 7. Offline maps and provider configuration
 
 The default map is the public OpenStreetMap standard service for interactive
-development display. Offline download is disabled by default.
+development display. CyclOSM is also available online and carries its own
+attribution; its raster tiles already contain topographic cartography, so no
+separate elevation request occurs while viewing it.
 
 Approved provider configuration:
 
@@ -248,20 +276,18 @@ flutter run -d emulator-5554 `
   --dart-define=TRAIL_VECTOR_MBTILES=https://maps.example.org/region.mbtiles
 ```
 
-Small development-only override:
+Small public-raster downloads are enabled by default in **debug builds only**.
+`ENABLE_DEV_OSM_DOWNLOADS` defaults to true in debug and is forced off by
+`kDebugMode` in profile/release; set it false to test the production gate:
 
 ```powershell
 flutter run -d emulator-5554 `
-  --dart-define=ENABLE_DEV_OSM_DOWNLOADS=true
+  --dart-define=ENABLE_DEV_OSM_DOWNLOADS=false
 ```
 
-The repository's `Running App` VS Code debug launch configuration supplies this
-override automatically. Profile and release launch configurations intentionally
-do not enable it.
-
-The override is visibly labeled as non-production and selections are capped at
-1,200 tiles. It does not make the public OSM tile service suitable for a
-released offline-download feature.
+The debug gate exposes OSM standard and CyclOSM as `DEV` raster choices with a
+compact warning. Selections remain capped; this does not make either public tile
+service suitable for a released offline-download feature.
 
 Download behavior:
 
@@ -273,6 +299,8 @@ Download behavior:
 - Responses require HTTP 200, non-empty content, and an image content type.
 - Files are written to `.part` and atomically renamed.
 - Progress and tile references are persisted.
+- Each raster area's provider id is persisted and resolved on resume; provider
+  plus format namespaces prevent OSM/CyclOSM/vector tile collisions.
 - Interrupted downloads recover as paused.
 - Saved areas open on the primary Map destination centered on their bounds.
 - The primary preview shows the bounding box and offers bounds/zoom editing.
@@ -282,9 +310,10 @@ Download behavior:
   focused previews to downloaded zoom levels.
 - Actual bytes and tile counts are displayed.
 - With `TRAIL_VECTOR_MBTILES` set, the same area workflow instead reads vector
-  tiles from a local or downloaded MBTiles and rasterizes each to PNG on the
-  device; the area records its `source_format` and the offline manager shows a
-  converted-vector chip.
+  tiles from a local/downloaded MBTiles or HTTP vector source, rasterizes each
+  to PNG, and bakes Terrarium-derived topography into the final image; the area
+  records its `source_format`, and the offline manager shows a **Topographic
+  vector** chip. No raw elevation tile is retained.
 
 Limitations:
 
@@ -314,17 +343,14 @@ Limitations:
 
 ## 9. Automated validation
 
-Validation on 2026-07-14 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-16 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
-| `flutter pub get` | Passed; restored the launcher-icon generator dependency. |
-| `dart run flutter_launcher_icons` | Passed; generated Android and iOS launcher icons from `RunTiyul.png` with alpha removed for iOS. |
-| `dart format lib test` | Passed; source formatted. |
-| `flutter analyze` | Passed; no issues found. |
-| All Flutter test files | Passed; 60 tests. |
+| Dart formatter on changed Dart files | Passed. |
+| `flutter analyze --no-pub` | Passed; no issues found. |
+| `flutter test` | Passed; 117 tests. |
 | `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
-| Branding metadata and iOS AppIcon manifest check | Passed; Android label and iOS display name are `RunTiyul`, all referenced iOS icon files exist, and iOS icons are alpha-free. |
 
 Automated coverage includes:
 
@@ -338,7 +364,13 @@ Automated coverage includes:
 - Primary navigation destinations and selection.
 - Map control actions, source menu states, and source-choice persistence.
 - Disabled offline zoom-bound controls and safe bounds-edit reconciliation.
+- Offline preview polygons remain present but use fully transparent fills.
 - Map provider OpenStreetMap-standard detection for attribution accuracy.
+- CyclOSM URL/attribution/debug policy, per-area CyclOSM download routing, and
+  separation of vector authorization from raster authorization.
+- Release developer-unlock capability default, locked-chip tap routing,
+  persisted unlock across reload, compile-out behavior, and exclusion of
+  Satellite from the promoted provider set.
 - On-device vector-to-raster rasterization to a valid PNG, MBTiles source reads
   (TMS flip and gzip), conversion into the tile store, and skipping of
   missing/out-of-range tiles.
@@ -348,10 +380,15 @@ Automated coverage includes:
   the on-device conversion path.
 - Default configuration selects the OpenFreeMap vector source and allows
   downloads.
+- Bake-time Terrarium composition, no requests below z10, z13 parent reuse for
+  deeper tiles, missing-terrain fallback, converted provider-format metadata,
+  and one-time cleanup of legacy raw terrain/cache storage.
 - Nearest-point-on-polyline projection; trail extraction from a synthetic
-  OpenMapTiles tile (class filter and lat/lng order); trail-network nearest and
+  OpenMapTiles tile (class filter including roads, and lat/lng order); trail-network nearest and
   junction queries; and route-to-trail snapping.
-- Route-trail builder tile coverage and empty-source handling; navigation
+- Route-trail builder tile coverage, empty-source handling, and on-network
+  graph refinement (bridging an off-network gap along connected ways);
+  navigation
   monitor off-route persistence, junction re-arm, and disabled states; and the
   snap/alert settings persistence.
 - Offline-area schema v1-to-v2 migration and `source_format` default.
@@ -398,17 +435,17 @@ Not verified:
   activity/route/editor/recording maps, and source-accurate attribution (added
   2026-07-14; verified only by `flutter analyze` and the test suite, not on a
   device or emulator).
-- On-device vector-to-raster conversion (added 2026-07-14): the rasterizer,
-  MBTiles source, and conversion service are unit-tested, but not exercised
-  against real regional data or on a device, so visual fidelity (labels, fonts,
-  styling) is unverified. Native MapLibre rendering and terrain remain
-  unimplemented.
+- On-device topographic vector conversion: rasterizer, MBTiles/HTTP sources,
+  terrain baker, and conversion service are unit-tested, but not exercised
+  against real regional data on a device; visual fidelity (labels, contours,
+  hillshade), speed, memory, and battery remain unverified. Native MapLibre
+  rendering remains unimplemented.
 
 ## 11. Immediate next priorities
 
-1. Verify the on-device vector-to-raster conversion on a device with real
-   regional MBTiles data, then decide between refining it (styles, labels,
-   fonts) and adding a native MapLibre renderer with terrain.
+1. Verify topographic vector-to-raster conversion on a device with real
+  regional data: CyclOSM visual comparison, contour labels/hillshade, z13
+  overzoom, conversion speed, memory, battery, and final storage size.
 2. Verify Android and iOS background recording on physical devices.
 3. Add route progress, off-route detection, and optional alerts.
 4. Add device free-space checks and orphaned tile reconciliation.

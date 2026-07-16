@@ -1,8 +1,16 @@
 # Long-Term Offline Map Implementation (client extraction + PMTiles)
 
-Status: design proposal; on-device vector→raster conversion slice implemented, native MapLibre/terrain not implemented  
+Status: design proposal; topographic on-device vector→raster slice implemented,
+native MapLibre/local terrain containers not implemented<br>
+Update 2026-07-16: CyclOSM provides online topographic raster viewing without a
+separate elevation request. For converted-vector offline areas only, Terrarium
+is fetched during conversion, decoded and rendered in memory, and its contours,
+labels, and hillshade are baked into the final PNG; raw elevation data is never
+retained. The earlier runtime overlay/cache/per-area terrain downloader was
+removed, with one-time cleanup for its old files and metadata. See
+[Implemented Details and Current Status](02-implementation-status.md).
 Decision date: 2026-07-14  
-Applies to: MAP-004 through MAP-009, OFF-001 through OFF-012, and STO-001
+Applies to: MAP-004 through MAP-012, OFF-001 through OFF-014, and STO-001
 through STO-007
 
 This guide defines a long-term path from the current per-tile raster downloader
@@ -10,7 +18,15 @@ to legal, download-on-demand offline maps. An initial fully-on-device slice is
 implemented differently from the original PMTiles plan: free **vector** MBTiles
 tiles are read on the device and rasterized to PNG with `vector_tile_renderer`
 behind `TRAIL_VECTOR_MBTILES`, then stored and rendered through the existing
-raster layer. This avoids the `pmtiles` package, whose protobuf 6 requirement
+raster layer. Because this rasterization runs on the device, the render theme
+(`map_render_theme.dart`) rewrites labels to English (Latin script) via
+`preferEnglishLabels`, choosing `coalesce(name:en, name:latin, name_en, name)`
+so downloaded areas read the same regardless of region and fall back to the
+local name where no English/Latin name exists. Online raster tiles keep the tile
+provider's baked-in local-language labels. The conversion then composites a
+Terrarium-derived topographic overlay into the final PNG without storing the
+source elevation tile. This avoids the `pmtiles` package,
+whose protobuf 6 requirement
 conflicts with the vector renderer's protobuf 3. Native MapLibre **vector**
 rendering, terrain, and a production hosted source remain unbuilt. See
 [Implemented Details and Current Status](02-implementation-status.md) for exactly
@@ -69,8 +85,9 @@ disproves it:
    inside those bounds from the hosted archive over HTTP range requests, then
    store them in a local per-area container. Bandwidth and storage scale with
    the selected area, not with a whole region.
-5. Optionally let the user also include **terrain (contours + hillshade)** for
-   the same rectangle from a separate hosted terrain archive.
+5. Keep terrain scoped to the offline topographic vector product. If a native
+  renderer needs a separate source archive, fetch/extract it only as part of
+  that offline workflow and do not expose a general online terrain download.
 6. Render locally with a **native MapLibre** engine using an offline style whose
    glyphs and sprites ship in the app. Offline mode must make no network request.
 7. Verify, resume, and reconcile every download; deleting an area must not break
@@ -90,7 +107,8 @@ prepare a small area around one trailhead rather than a whole state.
 - Storage and transfer scale with the selected area.
 - No per-region pre-build, signing, or catalog pipeline is required for v1.
 - A single hosted source archive can serve unlimited user-chosen areas.
-- The same flow extends to an optional terrain layer for the same bounds.
+- The same flow can obtain terrain input for the selected vector area without
+  expanding coverage beyond the user's rectangle.
 
 Pre-built regional packages (section 4.2) remain useful later for popular
 regions, but they are an optimization, not the primary mechanism.
@@ -141,24 +159,30 @@ the source id and version so it can be validated, updated, or reconciled later.
 This model needs no signed package catalog and no per-region build for v1: one
 hosted source archive serves any user-selected area.
 
-### 4.1 Optional terrain (contours + hillshade)
+### 4.1 Topography for converted-vector offline maps
 
-The Protomaps basemap has no contour or hillshade layer. Trail runners rely on
-terrain, so offer it as an explicit per-download option rather than forcing it on
-every area or omitting it.
+Implemented product decision (2026-07-16): there is no general terrain toggle,
+runtime elevation overlay, browsing terrain cache, or parallel raw-elevation
+package. Terrain belongs only to the **Topographic vector** offline type.
 
-- Present an **"Include terrain (contours + hillshade)"** toggle in the download
-  editor, defaulted from user preference.
-- When enabled, extract Terrarium-encoded RGB elevation tiles for the same
-  bounds and a suitable zoom range from a separate hosted terrain PMTiles (for
-  example a Mapterhorn-derived archive), into a parallel local container.
-- MapLibre renders a hillshade layer from the local terrain tiles and can derive
-  contour lines from the same elevation data.
-- Show the added storage before download; terrain increases an area's size and
-  must be reflected in the estimate and in actual usage.
-- Record the terrain source, version, attribution, and license separately from
-  the basemap; terrain datasets have their own terms.
-- Deleting an area removes its terrain tiles under the same overlap-safe rules.
+- `TerrariumVectorTerrainBaker` requests Terrarium only while converting the
+  selected vector area. It does not request terrain below z10, uses source tiles
+  through z13, and crops/reuses z13 parents for deeper output.
+- `TerrainContourService` decodes, traces 10 m contours with labeled 50 m index
+  lines, and creates hillshade entirely in memory.
+- The overlay is composited into the vector-rendered PNG; only that final PNG is
+  stored and counted. Raw Terrarium and intermediate overlay bytes are discarded.
+- A 404 leaves the base vector tile usable; transient/server failures fail the
+  conversion so normal retry/resume semantics remain honest.
+- Online maps and raster offline downloads never make a separate elevation
+  request. CyclOSM already carries provider-rendered topography in its raster.
+- Converted areas credit both the vector basemap and Terrain Tiles source.
+- Startup performs a one-time cleanup of raw `aws-terrarium` files/records,
+  the old cache directory, and obsolete settings from the superseded design.
+
+Any future native MapLibre or PMTiles implementation that proposes a retained
+terrain container or user-facing terrain toggle is a new product/architecture
+decision, not an instruction to restore the removed MVP behavior.
 
 ### 4.2 Optional pre-built regional packages (scale stage)
 

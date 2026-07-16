@@ -3,6 +3,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:trail_runner/core/geo/geo_bounds.dart';
 import 'package:trail_runner/core/geo/tile_math.dart';
 import 'package:trail_runner/services/route_trail_builder.dart';
+import 'package:trail_runner/services/trail_network.dart';
 import 'package:trail_runner/services/vector_tile_source.dart';
 
 class _EmptySource implements VectorTileSource {
@@ -81,5 +82,30 @@ void main() {
     expect(network.isEmpty, isTrue);
     expect(source.reads, greaterThan(0));
     expect(source.closed, isTrue);
+  });
+
+  test('refineOntoNetwork bridges an off-network gap along connected ways', () {
+    // Two collinear trails that meet at a shared junction at lon 0.002.
+    final network = TrailNetwork(const [
+      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+      TrailPolyline(points: [LatLng(0, 0.002), LatLng(0, 0.004)], kind: 'path'),
+    ]);
+    final builder = RouteTrailBuilder();
+
+    // The middle point is ~55 m north of the line (off any way); the ends are
+    // on it. The refined route should bridge across, staying on the network.
+    final refined = builder.refineOntoNetwork(
+      const [LatLng(0, 0), LatLng(0.0005, 0.002), LatLng(0, 0.004)],
+      network,
+    );
+
+    expect(refined.length, greaterThanOrEqualTo(2));
+    // Every point stays on the connected way (latitude ~0): the detour is gone.
+    for (final point in refined) {
+      expect(point.latitude, closeTo(0, 1e-4));
+    }
+    // It reached the far end through the shared junction.
+    expect(refined.last.longitude, closeTo(0.004, 1e-6));
+    expect(refined.any((p) => (p.longitude - 0.002).abs() < 1e-6), isTrue);
   });
 }

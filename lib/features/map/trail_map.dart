@@ -34,6 +34,7 @@ class TrailMap extends StatefulWidget {
     this.controlsTop = 16,
     this.constrainOfflineZoom = true,
     this.autoFit = false,
+    this.refitOnContentChange = true,
   });
 
   final AppStore store;
@@ -75,8 +76,14 @@ class TrailMap extends StatefulWidget {
   final bool constrainOfflineZoom;
 
   /// When true, the camera fits the primary content (route, track, waypoints,
-  /// or selection) once the map is laid out and whenever that content changes.
+  /// or selection) once the map is laid out and, when [refitOnContentChange],
+  /// again whenever that content changes.
   final bool autoFit;
+
+  /// When false, [autoFit] only frames the content once on first layout and
+  /// never re-fits as the content changes, so actively adding or moving points
+  /// does not reset the user's zoom.
+  final bool refitOnContentChange;
 
   @override
   State<TrailMap> createState() => _TrailMapState();
@@ -185,6 +192,7 @@ class _TrailMapState extends State<TrailMap> {
 
   void _maybeAutoFit() {
     if (!widget.autoFit) return;
+    if (!widget.refitOnContentChange) return;
     final signature = _contentSignature;
     if (signature == _lastAutoFitSignature) return;
     _lastAutoFitSignature = signature;
@@ -199,32 +207,36 @@ class _TrailMapState extends State<TrailMap> {
   /// focused downloaded area's source) when showing saved tiles, and both when
   /// Auto layers a different online layer over the saved base.
   String get _attributionText {
-    final savedProvider = widget.store.mapProvider;
     final activeLayer = widget.store.activeMapLayer;
     final focused = widget.store.focusedOfflineArea;
 
-    // A focused offline area previews downloaded tiles from its own source, so
-    // credit that source whenever those saved tiles can be on screen.
-    if (_tileMode != MapTileMode.online &&
-        focused != null &&
-        focused.providerId != savedProvider.id) {
-      return 'Downloaded tiles \u2022 ${focused.providerId}';
+    if (_tileMode != MapTileMode.online && focused != null) {
+      return _attributionForArea(focused);
     }
+
+    final savedAttributions = _completedOfflineAreas
+        .map(_attributionForArea)
+        .toSet();
 
     switch (_tileMode) {
       case MapTileMode.offline:
-        return savedProvider.attribution;
+        return savedAttributions.isEmpty
+            ? widget.store.mapProvider.attribution
+            : savedAttributions.join(' \u2022 ');
       case MapTileMode.online:
         return activeLayer.attribution;
       case MapTileMode.auto:
-        final showsSavedBase = _completedOfflineAreas.isNotEmpty;
-        if (showsSavedBase &&
-            savedProvider.attribution != activeLayer.attribution) {
-          return '${activeLayer.attribution} \u2022 '
-              '${savedProvider.attribution}';
-        }
-        return activeLayer.attribution;
+        return {activeLayer.attribution, ...savedAttributions}.join(' \u2022 ');
     }
+  }
+
+  String _attributionForProvider(String providerId) =>
+      widget.store.mapProviderById(providerId)?.attribution ?? providerId;
+
+  String _attributionForArea(OfflineArea area) {
+    final base = _attributionForProvider(area.providerId);
+    if (area.sourceFormat != OfflineSourceFormat.convertedVector) return base;
+    return '$base \u2022 ${MapProviderConfig.terrainSource().attribution}';
   }
 
   bool _hasOfflineCoverage(LatLng center, double zoom) {
@@ -232,7 +244,6 @@ class _TrailMapState extends State<TrailMap> {
     final roundedZoom = zoom.round();
     return widget.store.offlineAreas.any(
       (area) =>
-          area.providerId == widget.store.mapProvider.id &&
           area.status == OfflineAreaStatus.complete &&
           area.minZoom <= roundedZoom &&
           area.maxZoom >= roundedZoom &&
@@ -243,10 +254,16 @@ class _TrailMapState extends State<TrailMap> {
   List<OfflineArea> get _completedOfflineAreas => widget.store.offlineAreas
       .where(
         (area) =>
-            area.providerId == widget.store.mapProvider.id &&
             area.status == OfflineAreaStatus.complete &&
             !area.bounds.crossesAntimeridian,
       )
+      .toList();
+
+  /// Base-map areas whose saved tiles should render, in the user's top-first
+  /// order. Includes in-progress downloads so their partial tiles still show;
+  /// the ordered provider draws the top area over the ones beneath it.
+  List<OfflineArea> get _renderableOfflineAreas => widget.store.offlineAreas
+      .where((area) => !area.bounds.crossesAntimeridian)
       .toList();
 
   (double, double)? get _offlineZoomRange {
@@ -297,15 +314,12 @@ class _TrailMapState extends State<TrailMap> {
   }
 
   void _zoomBy(double delta) {
-    // Keep the lower bound at the downloaded minimum (there is no coverage
-    // below it) but allow zooming in to the overzoom cap so detail keeps
-    // scaling instead of the map going blank past the downloaded maximum.
-    final double minZoom = _tileMode == MapTileMode.offline
-        ? (_offlineZoomRange?.$1 ?? 1)
-        : 1;
+    // Offline mode uses the same zoom range as online: zooming out is not
+    // capped at the downloaded minimum, and zooming in overzooms the deepest
+    // saved tiles instead of going blank past the downloaded maximum.
     _controller.move(
       _controller.camera.center,
-      (_controller.camera.zoom + delta).clamp(minZoom, 19).toDouble(),
+      (_controller.camera.zoom + delta).clamp(1, 19).toDouble(),
     );
   }
 
@@ -383,18 +397,31 @@ class _TrailMapState extends State<TrailMap> {
       ]);
     }
 
+    // In offline mode the map only has saved tiles within the downloaded zoom
+    // range, so fitting to a zoom below that range leaves the camera on a blank
+    // (gray) map. Floor the fit at the downloaded minimum so "Show on map"
+    // always lands on real tiles, even when the area was downloaded only at
+    // deep zoom levels.
+    final offlineRange = widget.constrainOfflineZoom ? _offlineZoomRange : null;
+    final fit = offlineAwareFitZoom(
+      offlineMode: _tileMode == MapTileMode.offline,
+      offlineRange: offlineRange,
+    );
+
     if (points.length > 1) {
       _controller.fitCamera(
         CameraFit.coordinates(
           coordinates: points,
           padding: const EdgeInsets.all(56),
-          maxZoom: 16,
+          minZoom: fit.min ?? 0,
+          maxZoom: fit.max,
         ),
       );
       return;
     }
     if (points.isNotEmpty) {
-      _controller.move(points.first, 15);
+      final target = fit.min == null || fit.min! < 15 ? 15.0 : fit.min!;
+      _controller.move(points.first, target);
       return;
     }
     if (includeLocation) {
@@ -410,10 +437,9 @@ class _TrailMapState extends State<TrailMap> {
   /// not. Offline mode scales the deepest saved tiles so zooming past what was
   /// downloaded still shows the map instead of going blank.
   List<Widget> _buildTileLayers((double, double)? offlineZoomRange) {
-    // Saved/offline tiles always come from the downloadable base provider; the
-    // online tiles come from the user's selected base layer (for example the
-    // satellite imagery layer). Switching layers changes what is fetched online
-    // while offline coverage stays bound to the downloaded provider.
+    // Saved tiles can come from any provider persisted on an offline area. The
+    // ordered provider resolves the matching provider/format namespace; online
+    // tiles still come from the user's currently selected base layer.
     final savedProvider = widget.store.mapProvider;
     final onlineProvider = widget.store.activeMapLayer;
     final savedMaxNative = offlineZoomRange?.$2.round();
@@ -422,10 +448,9 @@ class _TrailMapState extends State<TrailMap> {
       key: const ValueKey('tiles-saved'),
       urlTemplate: savedProvider.urlTemplate,
       userAgentPackageName: 'com.bernoulli.trailrunner.trail_runner',
-      tileProvider: OfflineFirstTileProvider(
+      tileProvider: OrderedOfflineTileProvider(
         store: widget.store.tileStore,
-        config: savedProvider,
-        mode: MapTileMode.offline,
+        areas: _renderableOfflineAreas,
       ),
       maxNativeZoom: savedMaxNative ?? 19,
       maxZoom: 19,
@@ -486,11 +511,9 @@ class _TrailMapState extends State<TrailMap> {
           options: MapOptions(
             initialCenter: _defaultCenter,
             initialZoom: _defaultZoom,
-            minZoom: _tileMode == MapTileMode.offline
-                ? offlineZoomRange?.$1
-                : null,
-            // Allow zooming in past what was downloaded; the deepest saved
-            // tiles are scaled (overzoomed) instead of the map going blank.
+            // Offline mode shares the online map's zoom range: no lower lock at
+            // the downloaded minimum, and zooming in past the downloaded
+            // maximum overzooms the deepest saved tiles instead of going blank.
             maxZoom: 19,
             onTap: widget.onTap == null
                 ? null
@@ -524,7 +547,7 @@ class _TrailMapState extends State<TrailMap> {
                       LatLng(selectionBounds.south, selectionBounds.east),
                       LatLng(selectionBounds.south, selectionBounds.west),
                     ],
-                    color: Theme.of(context).colorScheme.primary.withAlpha(45),
+                    color: Colors.transparent,
                     borderColor: Theme.of(context).colorScheme.primary,
                     borderStrokeWidth: 3,
                   ),
@@ -543,7 +566,7 @@ class _TrailMapState extends State<TrailMap> {
                           LatLng(area.bounds.south, area.bounds.east),
                           LatLng(area.bounds.south, area.bounds.west),
                         ],
-                        color: Colors.teal.withAlpha(28),
+                        color: Colors.transparent,
                         borderColor: Colors.teal,
                         borderStrokeWidth: 2,
                       ),
@@ -671,12 +694,7 @@ class _TrailMapState extends State<TrailMap> {
               onToggleTrails: () => setState(() => _showTrails = !_showTrails),
               onModeSelected: (mode) => unawaited(_selectTileMode(mode)),
               onZoomIn: _cameraZoom >= 19 ? null : () => _zoomBy(1),
-              onZoomOut:
-                  _tileMode == MapTileMode.offline &&
-                      offlineZoomRange != null &&
-                      _cameraZoom <= offlineZoomRange.$1
-                  ? null
-                  : () => _zoomBy(-1),
+              onZoomOut: _cameraZoom <= 1 ? null : () => _zoomBy(-1),
               onFitContent: _fitContent,
               onCurrentLocation: _centerOnCurrentLocation,
             ),
@@ -858,6 +876,23 @@ class TrailMapControls extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The zoom clamp used when auto-fitting the camera so it never lands where no
+/// tiles exist. In offline mode the saved map only has tiles within the
+/// downloaded [offlineRange]; fitting below its minimum shows a blank (gray)
+/// map, so the fit is floored at that minimum (and the cap is raised to match
+/// when a download starts deeper than [maxCap]). Returns a null minimum when
+/// online tiles can fill any zoom, so online/auto fitting is unaffected.
+@visibleForTesting
+({double? min, double max}) offlineAwareFitZoom({
+  required bool offlineMode,
+  required (double, double)? offlineRange,
+  double maxCap = 16,
+}) {
+  if (!offlineMode || offlineRange == null) return (min: null, max: maxCap);
+  final floor = offlineRange.$1;
+  return (min: floor, max: floor > maxCap ? floor : maxCap);
 }
 
 extension on MapTileMode {

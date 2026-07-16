@@ -260,15 +260,19 @@ Each calculation belongs in pure Dart and needs synthetic unit tests.
 4. Cache according to provider terms and application policy.
 5. Return an explicit missing/error tile when unavailable.
 
-Online rendering resolves tiles from the user's selected base layer, while
-saved/offline tiles resolve from the downloadable provider; online-only layers
-(for example satellite imagery) are display-only and are never downloaded.
+Online rendering resolves tiles from the user's selected base layer. Saved
+tiles resolve from each area's persisted provider id plus source format, so
+areas from different raster providers and vector conversion can coexist.
+Provider policy decides whether a layer is view-only, development-downloadable,
+or production-downloadable; widgets only present those decisions.
 
 Do not bury download policy in a widget. Define:
 
 - `MapTileProviderConfig`
 - `TileCoordinate`
 - `TileStore`
+- `VectorTerrainBaker` (transient Terrarium fetch/render/composite step used
+  only by converted-vector offline generation; no raw elevation persistence)
 - `TileClient`
 - `TileDownloadPlanner`
 - `TileDownloadQueue`
@@ -299,7 +303,23 @@ label the result as an estimate.
 - Validate response status, content type, and non-empty bytes.
 - Persist progress in batches without losing completed work.
 - Cancellation stops new requests and leaves a resumable state.
+- Keep the process alive during downloads with a platform foreground service
+  where available (Android `dataSync` service via a MethodChannel), and resume
+  downloads interrupted in the background when the app next returns to the
+  foreground; the download loop stays on the main isolate and never loses
+  completed tiles.
 - Completion requires every required tile to be valid or explicitly reconciled.
+
+Topographic data rules for the implemented raster renderer:
+
+- Online and raster-offline maps never request a separate elevation source.
+  A topographic raster provider such as CyclOSM carries its cartography in the
+  provider tile itself.
+- Converted-vector areas may fetch Terrarium only inside the conversion
+  workflow. Decode, contour/hillshade rendering, and parent-tile reuse remain
+  in memory; only the final composited PNG enters `TileStore` and SQLite.
+- Terrain attribution is retained alongside basemap attribution even though raw
+  terrain files are discarded.
 
 ### 9.3 Long-term extraction architecture
 
@@ -313,11 +333,14 @@ approved data, style, and terrain license chain, and a project-controlled source
 build and range-capable host before adoption.
 
 As a first, fully-on-device step, a pure-Dart vector-to-raster conversion is now
-implemented: free vector MBTiles tiles are rasterized to PNG on the device with
-`vector_tile_renderer` and rendered by the existing raster layer (see
-`02-implementation-status.md`). This deliberately avoids the `pmtiles` package,
-whose protobuf 6 requirement conflicts with the vector renderer's protobuf 3.
-Native MapLibre rendering and terrain remain the longer-term direction.
+implemented: free vector MBTiles/HTTP tiles are rasterized to PNG with
+`vector_tile_renderer`, then Terrarium-derived contours and hillshade are baked
+into that PNG before storage (see `02-implementation-status.md`). This
+deliberately avoids the `pmtiles` package, whose protobuf 6 requirement
+conflicts with the vector renderer's protobuf 3. Native MapLibre rendering
+remains a longer-term direction; it must preserve the same provider-policy,
+attribution, and no-unnecessary-raw-terrain-retention rules unless a future
+approved architecture explicitly changes them.
 
 The complete migration design, integrity model, supply chain, tests, and rollout
 gates are in

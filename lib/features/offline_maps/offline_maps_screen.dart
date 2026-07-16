@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -53,6 +55,27 @@ class OfflineMapsScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (store.offlineAreas.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.swap_vert,
+                    size: 16,
+                    color: Theme.of(context).colorScheme.outline,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Drag to reorder. The top map is drawn over lower maps '
+                      'where they overlap.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: store.offlineAreas.isEmpty
                 ? Center(
@@ -82,15 +105,25 @@ class OfflineMapsScreen extends StatelessWidget {
                       ),
                     ),
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                : ReorderableListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
                     itemCount: store.offlineAreas.length,
+                    onReorderItem: (oldIndex, newIndex) =>
+                        store.reorderOfflineAreas(oldIndex, newIndex),
                     itemBuilder: (context, index) {
                       final area = store.offlineAreas[index];
                       return _AreaCard(
+                        key: ValueKey(area.id),
                         store: store,
                         area: area,
                         onPreview: onPreview,
+                        dragHandle: ReorderableDragStartListener(
+                          index: index,
+                          child: const Icon(Icons.drag_handle),
+                        ),
                       );
                     },
                   ),
@@ -103,13 +136,13 @@ class OfflineMapsScreen extends StatelessWidget {
 
 String _offlineFormatLabel(OfflineSourceFormat format) => switch (format) {
   OfflineSourceFormat.rasterTiles => 'Raster tiles',
-  OfflineSourceFormat.convertedVector => 'Converted vector',
+  OfflineSourceFormat.convertedVector => 'Topographic vector',
 };
 
 String _offlineFormatDetail(OfflineSourceFormat format) => switch (format) {
   OfflineSourceFormat.rasterTiles => 'Raster tiles (PNG)',
   OfflineSourceFormat.convertedVector =>
-    'Vector tiles rasterized on device (PNG)',
+    'Vector tiles with baked contours + hillshade (PNG)',
 };
 
 class _AreaCard extends StatelessWidget {
@@ -117,11 +150,16 @@ class _AreaCard extends StatelessWidget {
     required this.store,
     required this.area,
     required this.onPreview,
+    this.dragHandle,
+    super.key,
   });
 
   final AppStore store;
   final OfflineArea area;
   final ValueChanged<OfflineArea> onPreview;
+
+  /// A drag affordance shown in the card header when the list is reorderable.
+  final Widget? dragHandle;
 
   @override
   Widget build(BuildContext context) {
@@ -141,6 +179,10 @@ class _AreaCard extends StatelessWidget {
                   ),
                 ),
                 Chip(label: Text(area.status.name.toUpperCase())),
+                if (dragHandle != null) ...[
+                  const SizedBox(width: 4),
+                  dragHandle!,
+                ],
               ],
             ),
             Text(
@@ -241,6 +283,8 @@ class _AreaCard extends StatelessWidget {
   }
 
   String _sourceLabel(String providerId) {
+    final configured = store.mapProviderById(providerId);
+    if (configured != null) return configured.label;
     switch (providerId) {
       case 'openstreetmap-standard':
         return 'OpenStreetMap standard';
@@ -406,6 +450,63 @@ class _ConfirmRow extends StatelessWidget {
   }
 }
 
+/// The two user-facing offline source modes. Unavailable modes stay visible so
+/// the release developer unlock can be discovered deliberately without making
+/// view-only providers appear downloadable.
+class OfflineDownloadSourcePicker extends StatelessWidget {
+  const OfflineDownloadSourcePicker({
+    super.key,
+    required this.vectorAvailable,
+    required this.activeMapLayer,
+    required this.currentMapDownloadAllowed,
+    required this.selectedFormat,
+    required this.onSelected,
+    this.onLockedCurrentMapTap,
+  });
+
+  final bool vectorAvailable;
+  final MapProviderConfig activeMapLayer;
+  final bool currentMapDownloadAllowed;
+  final OfflineSourceFormat selectedFormat;
+  final ValueChanged<OfflineSourceFormat> onSelected;
+  final VoidCallback? onLockedCurrentMapTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final devSuffix = activeMapLayer.isDevelopmentOsmOverride
+        ? ' \u00b7 DEV'
+        : '';
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        ChoiceChip(
+          key: const ValueKey('download-source-vector'),
+          avatar: const Icon(Icons.layers_outlined, size: 18),
+          label: const Text('MBTiles / vector'),
+          selected: selectedFormat == OfflineSourceFormat.convertedVector,
+          onSelected: vectorAvailable
+              ? (_) => onSelected(OfflineSourceFormat.convertedVector)
+              : null,
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: currentMapDownloadAllowed ? null : onLockedCurrentMapTap,
+          child: ChoiceChip(
+            key: const ValueKey('download-source-current-map'),
+            avatar: const Icon(Icons.map_outlined, size: 18),
+            label: Text('Current map: ${activeMapLayer.label}$devSuffix'),
+            selected: selectedFormat == OfflineSourceFormat.rasterTiles,
+            onSelected: currentMapDownloadAllowed
+                ? (_) => onSelected(OfflineSourceFormat.rasterTiles)
+                : null,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class OfflineAreaEditor extends StatefulWidget {
   const OfflineAreaEditor({super.key, required this.store, this.area});
 
@@ -423,13 +524,16 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
   RangeValues _zooms = const RangeValues(12, 15);
   var _saving = false;
   int _maxTiles = 1200;
-  late String _sourceLayerId;
+  late OfflineSourceFormat _selectedFormat;
+  int _publicRasterUnlockTaps = 0;
+  Timer? _publicRasterUnlockResetTimer;
 
   static const _tileLimits = [1200, 2500, 5000, 10000];
 
   @override
   void initState() {
     super.initState();
+    widget.store.addListener(_handleStoreChanged);
     final area = widget.area;
     _nameController = TextEditingController(text: area?.name ?? 'Trail map');
     if (area != null) {
@@ -437,12 +541,119 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
       _secondCorner = LatLng(area.bounds.south, area.bounds.east);
       _zooms = RangeValues(area.minZoom.toDouble(), area.maxZoom.toDouble());
     }
-    // Default the download source to the active layer when it can be
-    // downloaded, otherwise the configured downloadable provider.
+    // Default to the area's existing format when editing, otherwise on-device
+    // vector conversion when a vector source is configured.
+    final preferred =
+        area?.sourceFormat ??
+        (widget.store.usesVectorSource
+            ? OfflineSourceFormat.convertedVector
+            : OfflineSourceFormat.rasterTiles);
+    _selectedFormat = preferred;
+    if (_selectedFormat == OfflineSourceFormat.convertedVector &&
+        !widget.store.usesVectorSource) {
+      _selectedFormat = OfflineSourceFormat.rasterTiles;
+    } else if (_selectedFormat == OfflineSourceFormat.rasterTiles &&
+        _currentRasterProvider == null &&
+        widget.store.usesVectorSource) {
+      _selectedFormat = OfflineSourceFormat.convertedVector;
+    }
+  }
+
+  void _handleStoreChanged() {
+    if (!mounted) return;
+    setState(() {
+      if (_selectedFormat == OfflineSourceFormat.rasterTiles &&
+          _currentRasterProvider == null &&
+          widget.store.usesVectorSource) {
+        _selectedFormat = OfflineSourceFormat.convertedVector;
+      }
+    });
+  }
+
+  /// True when the selected format converts free vector tiles on the device.
+  bool get _usesVector =>
+      _selectedFormat == OfflineSourceFormat.convertedVector;
+
+  MapProviderConfig? get _currentRasterProvider {
     final active = widget.store.activeMapLayer;
-    _sourceLayerId = active.offlineDownloadsAllowed
-        ? active.id
-        : widget.store.mapProvider.id;
+    for (final provider in widget.store.rasterDownloadProviders) {
+      if (provider.id == active.id) return provider;
+    }
+    return null;
+  }
+
+  bool get _isDevRaster =>
+      !_usesVector &&
+      (_currentRasterProvider?.isDevelopmentOsmOverride ?? false);
+
+  Future<void> _handleLockedCurrentMapTap() async {
+    final active = widget.store.activeMapLayer;
+    if (!active.isPublicDevelopmentRaster) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${active.label} is view-only and its provider does not allow '
+            'offline caching. Select Streets/CyclOSM or use MBTiles / vector.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!widget.store.publicRasterDevUnlockAvailable) return;
+
+    _publicRasterUnlockResetTimer?.cancel();
+    _publicRasterUnlockTaps++;
+    _publicRasterUnlockResetTimer = Timer(const Duration(seconds: 4), () {
+      _publicRasterUnlockTaps = 0;
+    });
+    final remaining = 7 - _publicRasterUnlockTaps;
+    if (remaining > 0) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            duration: const Duration(milliseconds: 650),
+            content: Text(
+              'Developer raster unlock: $remaining more '
+              'tap${remaining == 1 ? '' : 's'}.',
+            ),
+          ),
+        );
+      return;
+    }
+
+    _publicRasterUnlockResetTimer?.cancel();
+    _publicRasterUnlockTaps = 0;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Enable developer raster downloads?'),
+        content: const Text(
+          'Public OpenStreetMap and CyclOSM tile services are not production '
+          'offline-download backends. Enable this only for small development '
+          'tests. The developer unlock will remain enabled on this device.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Enable DEV downloads'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final enabled = await widget.store.enablePublicRasterDevDownloads();
+    if (!mounted || !enabled) return;
+    setState(() => _selectedFormat = OfflineSourceFormat.rasterTiles);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Developer raster downloads enabled on this device.'),
+      ),
+    );
   }
 
   GeoBounds? get _bounds {
@@ -453,20 +664,9 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
         : GeoBounds.fromPoints(first, second);
   }
 
-  /// The layer the area will be downloaded from (always a downloadable one).
-  MapProviderConfig get _sourceLayer => widget.store.baseLayers.firstWhere(
-    (layer) => layer.id == _sourceLayerId,
-    orElse: () => widget.store.mapProvider,
-  );
-
-  /// Base layers that can be viewed but not downloaded (provider licensing).
-  List<MapProviderConfig> get _viewOnlyLayers => widget.store.baseLayers
-      .where((layer) => !layer.offlineDownloadsAllowed)
-      .toList();
-
   static const _minSelectableZoom = 8.0;
 
-  double get _maxSelectableZoom => widget.store.usesVectorSource ? 14.0 : 17.0;
+  double get _maxSelectableZoom => _usesVector ? 16.0 : 17.0;
 
   RangeValues get _effectiveZooms {
     final max = _maxSelectableZoom;
@@ -493,10 +693,10 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
   /// device is CPU-bound and roughly sequential; raster tiles download over the
   /// network with about four workers in parallel.
   (Duration, Duration) _estimatedTime(int tiles) {
-    if (widget.store.usesVectorSource) {
+    if (_usesVector) {
       return (
-        Duration(milliseconds: tiles * 80),
-        Duration(milliseconds: tiles * 180),
+        Duration(milliseconds: tiles * 120),
+        Duration(milliseconds: tiles * 300),
       );
     }
     return (
@@ -521,8 +721,30 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
   String _limitLabel(int tiles) =>
       '${(tiles / 1000).toStringAsFixed(tiles % 1000 == 0 ? 0 : 1)}k';
 
+  String get _downloadTitle => _usesVector
+      ? 'Topographic vector map \u2014 converted on device'
+      : '${widget.store.activeMapLayer.label} raster';
+
+  String get _downloadSubtitle {
+    if (_usesVector) {
+      return 'Vector data is rendered on device with contours and hillshade '
+          'baked into each offline tile. Raw height data is not retained.';
+    }
+    if (_currentRasterProvider == null) {
+      return 'The current map layer cannot be downloaded. Select Streets or '
+          'CyclOSM with the map-layer button, or use MBTiles / vector.';
+    }
+    if (_currentRasterProvider!.id == 'cyclosm') {
+      return 'CyclOSM tiles already include provider-rendered topography; no '
+          'separate height data is downloaded.';
+    }
+    return 'Per-tile raster download with no separate height data.';
+  }
+
   @override
   void dispose() {
+    _publicRasterUnlockResetTimer?.cancel();
+    widget.store.removeListener(_handleStoreChanged);
     _nameController.dispose();
     super.dispose();
   }
@@ -569,7 +791,14 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
     controller.dispose();
     if (url != null) {
       await widget.store.setVectorSourceUrl(url);
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          if (!widget.store.usesVectorSource &&
+              _selectedFormat == OfflineSourceFormat.convertedVector) {
+            _selectedFormat = OfflineSourceFormat.rasterTiles;
+          }
+        });
+      }
     }
   }
 
@@ -595,17 +824,16 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
               '${_effectiveZooms.start.round()}\u2013'
                   '${_effectiveZooms.end.round()}',
             ),
-            _ConfirmRow('Tiles', '${plan.tileCount} (cap ${_limitLabel(_maxTiles)})'),
+            _ConfirmRow(
+              'Tiles',
+              '${plan.tileCount} (cap ${_limitLabel(_maxTiles)})',
+            ),
             _ConfirmRow('Storage', '~${formatBytes(plan.estimateBytes())}'),
             _ConfirmRow(
               'Time',
               '~${_formatShort(low)}\u2013${_formatShort(high)}',
             ),
-            _ConfirmRow(
-              'Source',
-              '${_sourceLayer.label}: '
-                  '${widget.store.usesVectorSource ? 'converted on device' : 'raster download'}',
-            ),
+            _ConfirmRow('Source', _downloadTitle),
             if (large)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -637,6 +865,11 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
 
   Future<void> _startDownload() async {
     setState(() => _saving = true);
+    final rasterProvider = _currentRasterProvider;
+    if (!_usesVector && rasterProvider == null) {
+      if (mounted) setState(() => _saving = false);
+      return;
+    }
     final area = widget.area;
     if (area == null) {
       await widget.store.createOfflineArea(
@@ -645,6 +878,10 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
         minZoom: _effectiveZooms.start.round(),
         maxZoom: _effectiveZooms.end.round(),
         maxTiles: _maxTiles,
+        format: _selectedFormat,
+        providerId: _usesVector
+            ? widget.store.mapProvider.id
+            : rasterProvider!.id,
       );
     } else {
       await widget.store.updateOfflineArea(
@@ -654,6 +891,10 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
         minZoom: _effectiveZooms.start.round(),
         maxZoom: _effectiveZooms.end.round(),
         maxTiles: _maxTiles,
+        format: _selectedFormat,
+        providerId: _usesVector
+            ? widget.store.mapProvider.id
+            : rasterProvider!.id,
       );
     }
     if (mounted) Navigator.of(context).pop();
@@ -662,7 +903,9 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
   @override
   Widget build(BuildContext context) {
     final plan = _plan;
-    final downloadsAllowed = widget.store.offlineDownloadsAllowed;
+    final downloadsAllowed = _usesVector
+        ? widget.store.usesVectorSource
+        : _currentRasterProvider != null;
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -679,95 +922,11 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
                 'enable the tiny development-only OSM override.',
               ),
               actions: const [SizedBox.shrink()],
-            )
-          else if (widget.store.mapProvider.isDevelopmentOsmOverride)
-            MaterialBanner(
-              content: const Text(
-                'Development override active. Keep selections tiny. This is not '
-                'a production-approved offline map configuration.',
-              ),
-              actions: const [SizedBox.shrink()],
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Area name',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Download source',
-                  style: Theme.of(context).textTheme.labelLarge,
-                ),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    for (final layer in widget.store.baseLayers)
-                      ChoiceChip(
-                        label: Text(layer.label),
-                        avatar: Icon(
-                          layer.offlineDownloadsAllowed
-                              ? Icons.download_for_offline_outlined
-                              : Icons.visibility_outlined,
-                          size: 18,
-                        ),
-                        selected: _sourceLayerId == layer.id,
-                        onSelected: layer.offlineDownloadsAllowed
-                            ? (_) =>
-                                  setState(() => _sourceLayerId = layer.id)
-                            : null,
-                      ),
-                  ],
-                ),
-                if (_viewOnlyLayers.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '${_viewOnlyLayers.map((layer) => layer.label).join(', ')}'
-                      ' can be viewed but not downloaded (the provider does not '
-                      'permit offline caching).',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          widget.store.usesVectorSource
-                              ? 'Converted on device from the free vector '
-                                    'source.'
-                              : 'Downloads use the raster provider.',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      TextButton.icon(
-                        onPressed: _editVectorSource,
-                        icon: const Icon(Icons.tune, size: 18),
-                        label: Text(
-                          widget.store.usesVectorSource
-                              ? 'Change'
-                              : 'Set source',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // The map is the primary surface for picking the two corners, so it
+          // takes the majority of the screen.
           Expanded(
+            flex: 3,
             child: TrailMap(
               store: widget.store,
               selection: _bounds,
@@ -789,90 +948,183 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
               },
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (_bounds == null)
-                  const Text('Tap two opposite corners on the map.')
-                else if (plan == null)
-                  Text(
-                    'Selection exceeds the ${_limitLabel(_maxTiles)} tile cap '
-                    '\u2014 raise the cap below or shrink the area/zoom.',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                    ),
-                  )
-                else
-                  Text(
-                    _estimateLabel(plan),
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                RangeSlider(
-                  min: _minSelectableZoom,
-                  max: _maxSelectableZoom,
-                  divisions: (_maxSelectableZoom - _minSelectableZoom).round(),
-                  labels: RangeLabels(
-                    '${_effectiveZooms.start.round()}',
-                    '${_effectiveZooms.end.round()}',
-                  ),
-                  values: _effectiveZooms,
-                  onChanged: (value) => setState(() => _zooms = value),
-                ),
-                Text(
-                  widget.store.usesVectorSource
-                      ? 'Zoom ${_effectiveZooms.start.round()}-'
-                            '${_effectiveZooms.end.round()} (vector max 14)'
-                      : 'Zoom ${_effectiveZooms.start.round()}-'
-                            '${_effectiveZooms.end.round()}',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Text(
-                      'Max tiles',
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SegmentedButton<int>(
-                          showSelectedIcon: false,
-                          segments: [
-                            for (final limit in _tileLimits)
-                              ButtonSegment(
-                                value: limit,
-                                label: Text(_limitLabel(limit)),
+          // All settings live in one compact, scrollable panel beneath the map
+          // so they never crowd it out on small screens. The primary action is
+          // pinned to the bottom of the panel so it is always reachable.
+          Expanded(
+            flex: 2,
+            child: Material(
+              elevation: 8,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            'Download source',
+                            style: Theme.of(context).textTheme.labelLarge,
+                          ),
+                          const SizedBox(height: 6),
+                          OfflineDownloadSourcePicker(
+                            vectorAvailable: widget.store.usesVectorSource,
+                            activeMapLayer: widget.store.activeMapLayer,
+                            currentMapDownloadAllowed:
+                                _currentRasterProvider != null,
+                            selectedFormat: _selectedFormat,
+                            onSelected: (format) =>
+                                setState(() => _selectedFormat = format),
+                            onLockedCurrentMapTap: _handleLockedCurrentMapTap,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _downloadSubtitle,
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          if (_isDevRaster)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'DEV only: keep public-raster downloads small; '
+                                'not licensed for production offline use.',
+                                style: Theme.of(context).textTheme.bodySmall,
                               ),
-                          ],
-                          selected: {_maxTiles},
-                          onSelectionChanged: (selection) =>
-                              setState(() => _maxTiles = selection.first),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    widget.store.usesVectorSource
+                                        ? 'Vector source: '
+                                              '${widget.store.vectorSourceUrl}'
+                                        : 'No vector/MBTiles source set.',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                                TextButton.icon(
+                                  onPressed: _editVectorSource,
+                                  icon: const Icon(Icons.tune, size: 18),
+                                  label: Text(
+                                    widget.store.usesVectorSource
+                                        ? 'Change'
+                                        : 'Set source',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(height: 24),
+                          if (_bounds == null)
+                            const Text('Tap two opposite corners on the map.')
+                          else if (plan == null)
+                            Text(
+                              'Selection exceeds the '
+                              '${_limitLabel(_maxTiles)} tile cap \u2014 raise '
+                              'the cap below or shrink the area/zoom.',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                            )
+                          else
+                            Text(
+                              _estimateLabel(plan),
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          RangeSlider(
+                            min: _minSelectableZoom,
+                            max: _maxSelectableZoom,
+                            divisions: (_maxSelectableZoom - _minSelectableZoom)
+                                .round(),
+                            labels: RangeLabels(
+                              '${_effectiveZooms.start.round()}',
+                              '${_effectiveZooms.end.round()}',
+                            ),
+                            values: _effectiveZooms,
+                            onChanged: (value) =>
+                                setState(() => _zooms = value),
+                          ),
+                          Text(
+                            _usesVector
+                                ? 'Zoom ${_effectiveZooms.start.round()}-'
+                                      '${_effectiveZooms.end.round()} '
+                                      '(vector z14 source, sharpened)'
+                                : 'Zoom ${_effectiveZooms.start.round()}-'
+                                      '${_effectiveZooms.end.round()}',
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Text(
+                                'Max tiles',
+                                style: Theme.of(context).textTheme.labelLarge,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: SegmentedButton<int>(
+                                    showSelectedIcon: false,
+                                    segments: [
+                                      for (final limit in _tileLimits)
+                                        ButtonSegment(
+                                          value: limit,
+                                          label: Text(_limitLabel(limit)),
+                                        ),
+                                    ],
+                                    selected: {_maxTiles},
+                                    onSelectionChanged: (selection) => setState(
+                                      () => _maxTiles = selection.first,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Area name',
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: SafeArea(
+                      top: false,
+                      child: FilledButton.icon(
+                        onPressed:
+                            _saving ||
+                                !downloadsAllowed ||
+                                _bounds == null ||
+                                plan == null
+                            ? null
+                            : _confirmDownload,
+                        icon: const Icon(Icons.download),
+                        label: Text(
+                          widget.area == null
+                              ? 'Review & download'
+                              : 'Review & update',
                         ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  onPressed:
-                      _saving ||
-                          !downloadsAllowed ||
-                          _bounds == null ||
-                          plan == null
-                      ? null
-                      : _confirmDownload,
-                  icon: const Icon(Icons.download),
-                  label: Text(
-                    widget.area == null
-                        ? 'Review & download'
-                        : 'Review & update',
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

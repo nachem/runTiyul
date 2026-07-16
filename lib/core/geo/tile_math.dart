@@ -86,3 +86,25 @@ class TilePlanner {
     return (y * n).floor().clamp(0, n - 1);
   }
 }
+
+/// Longitude of the western edge of tile column [x] at zoom [z].
+double tileWestLongitude(int x, int z) => x / (1 << z) * 360.0 - 180.0;
+
+/// Latitude of the northern edge of tile row [y] at zoom [z].
+double tileNorthLatitude(int y, int z) {
+  final n = math.pi * (1 - 2 * y / (1 << z));
+  return math.atan((math.exp(n) - math.exp(-n)) / 2) * 180.0 / math.pi;
+}
+
+/// Whether the geographic footprint of tile [z]/[x]/[y] overlaps [bounds].
+/// Antimeridian-crossing bounds are not handled here; callers exclude them.
+bool tileIntersectsBounds(GeoBounds bounds, int z, int x, int y) {
+  final west = tileWestLongitude(x, z);
+  final east = tileWestLongitude(x + 1, z);
+  final north = tileNorthLatitude(y, z);
+  final south = tileNorthLatitude(y + 1, z);
+  return west <= bounds.east &&
+      east >= bounds.west &&
+      south <= bounds.north &&
+      north >= bounds.south;
+}

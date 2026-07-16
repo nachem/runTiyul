@@ -202,7 +202,8 @@ class AppRepository {
   }) async {
     final db = await _appDatabase.database;
     await db.transaction((txn) async {
-      await txn.insert('tiles', {
+      final downloadedAt = DateTime.now().toUtc().toIso8601String();
+      final values = <String, Object?>{
         'tile_key': tileKey,
         'provider_id': providerId,
         'zoom': zoom,
@@ -210,8 +211,21 @@ class AppRepository {
         'y': y,
         'relative_path': relativePath,
         'byte_count': byteCount,
-        'downloaded_at': DateTime.now().toUtc().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        'downloaded_at': downloadedAt,
+      };
+      await txn.insert(
+        'tiles',
+        values,
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+      // A converted tile may be regenerated after a render-style change. Keep
+      // its row and shared references, but refresh the path, size, and timestamp.
+      await txn.update(
+        'tiles',
+        values,
+        where: 'tile_key = ?',
+        whereArgs: [tileKey],
+      );
       await txn.insert('offline_area_tiles', {
         'area_id': areaId,
         'tile_key': tileKey,
@@ -281,6 +295,35 @@ class AppRepository {
       'key': key,
       'value': value,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteSetting(String key) async {
+    final db = await _appDatabase.database;
+    await db.delete('app_settings', where: 'key = ?', whereArgs: [key]);
+  }
+
+  /// Removes all tile metadata and area references for [providerId], returning
+  /// the file paths that the caller should delete from the tile store.
+  Future<List<String>> removeTilesForProvider(String providerId) async {
+    final db = await _appDatabase.database;
+    return db.transaction((txn) async {
+      final rows = await txn.query(
+        'tiles',
+        columns: ['tile_key', 'relative_path'],
+        where: 'provider_id = ?',
+        whereArgs: [providerId],
+      );
+      for (final row in rows) {
+        final tileKey = row['tile_key']! as String;
+        await txn.delete(
+          'offline_area_tiles',
+          where: 'tile_key = ?',
+          whereArgs: [tileKey],
+        );
+        await txn.delete('tiles', where: 'tile_key = ?', whereArgs: [tileKey]);
+      }
+      return [for (final row in rows) row['relative_path']! as String];
+    });
   }
 
   Map<String, Object?> _routeMap(TrailRoute route) => {

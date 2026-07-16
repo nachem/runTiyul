@@ -1,6 +1,9 @@
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:vector_tile_renderer/vector_tile_renderer.dart';
+
+import 'map_render_theme.dart';
 
 /// Converts a single Mapbox Vector Tile (MVT) into a raster PNG on the device.
 ///
@@ -10,13 +13,13 @@ import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 /// network access afterwards.
 ///
 /// The vector tiles must use the OpenMapTiles source schema, which is what the
-/// bundled [ProvidedThemes.lightTheme] targets (its layers read from the
+/// bundled [buildTrailRenderTheme] targets (its layers read from the
 /// `openmaptiles` source). Data produced by planetiler's default profile,
 /// OpenMapTiles, or MapTiler downloads satisfies this.
 class VectorTileRasterizer {
   VectorTileRasterizer({Theme? theme, this.scale = 1})
     : assert(scale >= 1 && scale <= 4, 'scale must be between 1 and 4'),
-      theme = theme ?? ProvidedThemes.lightTheme() {
+      theme = theme ?? buildTrailRenderTheme() {
     _factory = TileFactory(this.theme, const Logger.noop());
   }
 
@@ -29,6 +32,9 @@ class VectorTileRasterizer {
 
   /// The source id that the bundled theme expects tiles to be keyed under.
   static const _sourceId = 'openmaptiles';
+
+  /// Web Mercator tile edge length in logical pixels.
+  static const _tileSize = 256;
 
   late final TileFactory _factory;
   final VectorTileReader _reader = VectorTileReader();
@@ -46,6 +52,59 @@ class VectorTileRasterizer {
       TileSource(tileset: Tileset({_sourceId: tile})),
       zoom: z.toDouble(),
       zoomScaleFactor: 1,
+    );
+    try {
+      return await image.toPng();
+    } finally {
+      image.dispose();
+    }
+  }
+
+  /// Rasterizes [mvtBytes] — a tile at [sourceZ]/[sourceX]/[sourceY] — into the
+  /// PNG for a deeper child tile [targetZ]/[targetX]/[targetY] (with
+  /// [targetZ] > [sourceZ]). The parent's vector geometry is scaled up and only
+  /// the child's sub-square is drawn, so lines and labels stay crisp beyond the
+  /// source's maximum zoom instead of being pixel-stretched by the map view.
+  Future<Uint8List> rasterizeOverzoom(
+    List<int> mvtBytes, {
+    required int sourceZ,
+    required int sourceX,
+    required int sourceY,
+    required int targetZ,
+    required int targetX,
+    required int targetY,
+  }) async {
+    assert(targetZ > sourceZ, 'overzoom requires a deeper target zoom');
+    final dz = targetZ - sourceZ;
+    final factor = (1 << dz).toDouble();
+    final subX = targetX - (sourceX << dz);
+    final subY = targetY - (sourceY << dz);
+    final sub = _tileSize / factor;
+
+    final bytes = mvtBytes is Uint8List
+        ? mvtBytes
+        : Uint8List.fromList(mvtBytes);
+    final tile = _factory.create(_reader.read(bytes));
+    final tileSource = TileSource(tileset: Tileset({_sourceId: tile}));
+
+    final recorder = ui.PictureRecorder();
+    final size = (scale * _tileSize).toDouble();
+    final rect = ui.Rect.fromLTWH(0, 0, size, size);
+    final canvas = ui.Canvas(recorder, rect);
+    canvas.clipRect(rect);
+    // Retina/output scale, then the overzoom scale into the child's sub-square.
+    canvas.scale(scale.toDouble() * factor);
+    canvas.translate(-subX * sub, -subY * sub);
+    Renderer(theme: theme).render(
+      canvas,
+      tileSource,
+      zoomScaleFactor: factor,
+      zoom: targetZ.toDouble(),
+      rotation: 0,
+    );
+    final image = await recorder.endRecording().toImage(
+      size.floor(),
+      size.floor(),
     );
     try {
       return await image.toPng();

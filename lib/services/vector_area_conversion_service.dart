@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import '../core/geo/tile_math.dart';
 import '../data/app_repository.dart';
 import '../models/offline_area.dart';
 import 'map_provider.dart';
 import 'tile_store.dart';
+import 'vector_terrain_baker.dart';
 import 'vector_tile_rasterizer.dart';
 import 'vector_tile_source.dart';
 
@@ -23,14 +25,17 @@ class VectorAreaConversionService {
     required this.store,
     required this.config,
     VectorTileRasterizer? rasterizer,
+    VectorTerrainBaker? terrainBaker,
     Future<VectorTileSource> Function(String source)? openSource,
   }) : rasterizer = rasterizer ?? VectorTileRasterizer(),
+       terrainBaker = terrainBaker ?? const PassthroughVectorTerrainBaker(),
        _openSource = openSource ?? _defaultOpenSource;
 
   final AppRepository repository;
   final TileStore store;
   final MapProviderConfig config;
   final VectorTileRasterizer rasterizer;
+  final VectorTerrainBaker terrainBaker;
   final Future<VectorTileSource> Function(String source) _openSource;
   final Set<String> _cancelled = {};
 
@@ -56,6 +61,7 @@ class VectorAreaConversionService {
     if (source.isEmpty) {
       throw StateError('No vector source is configured for conversion.');
     }
+    terrainBaker.reset();
     _cancelled.remove(initial.id);
     var area = _copyArea(
       initial,
@@ -111,13 +117,22 @@ class VectorAreaConversionService {
     VectorTileSource source,
     TileCoordinate coordinate,
   ) async {
-    final file = store.fileFor(
+    final namespace = offlineTileNamespace(
       config.id,
+      OfflineSourceFormat.convertedVector,
+    );
+    final file = store.fileFor(
+      namespace,
       coordinate.z,
       coordinate.x,
       coordinate.y,
     );
-    if (!await file.exists()) {
+    // Re-render even when an older converted tile exists: the render style now
+    // includes baked topography, and retaining a pre-topography PNG would leave
+    // overlapping or resumed areas visually inconsistent.
+    Uint8List png;
+    final sourceMax = source.maxZoom;
+    if (coordinate.z <= sourceMax) {
       final mvt = await source.readTile(
         coordinate.z,
         coordinate.x,
@@ -127,19 +142,37 @@ class VectorAreaConversionService {
       // there is nothing to rasterize, so skip it without failing. A present
       // but empty tile still rasterizes to the theme background.
       if (mvt == null) return 0;
-
-      final png = await rasterizer.rasterize(mvt, coordinate.z);
-      await file.parent.create(recursive: true);
-      final temporary = File('${file.path}.part');
-      await temporary.writeAsBytes(png, flush: true);
-      await temporary.rename(file.path);
+      png = await rasterizer.rasterize(mvt, coordinate.z);
+    } else {
+      // No tiles exist above the source maximum. Read the covering parent tile
+      // and over-render it so the saved child remains sharp.
+      final dz = coordinate.z - sourceMax;
+      final parentX = coordinate.x >> dz;
+      final parentY = coordinate.y >> dz;
+      final mvt = await source.readTile(sourceMax, parentX, parentY);
+      if (mvt == null) return 0;
+      png = await rasterizer.rasterizeOverzoom(
+        mvt,
+        sourceZ: sourceMax,
+        sourceX: parentX,
+        sourceY: parentY,
+        targetZ: coordinate.z,
+        targetX: coordinate.x,
+        targetY: coordinate.y,
+      );
     }
+    png = await terrainBaker.bake(png, coordinate);
+    await file.parent.create(recursive: true);
+    final temporary = File('${file.path}.part');
+    await temporary.writeAsBytes(png, flush: true);
+    if (await file.exists()) await file.delete();
+    await temporary.rename(file.path);
 
     final length = await file.length();
     await repository.attachTile(
       areaId: area.id,
-      tileKey: '${config.id}/${coordinate.key}',
-      providerId: config.id,
+      tileKey: '$namespace/${coordinate.key}',
+      providerId: namespace,
       zoom: coordinate.z,
       x: coordinate.x,
       y: coordinate.y,
@@ -148,6 +181,8 @@ class VectorAreaConversionService {
     );
     return length;
   }
+
+  void dispose() => terrainBaker.dispose();
 
   OfflineArea _copyArea(
     OfflineArea area, {

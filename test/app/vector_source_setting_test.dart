@@ -49,9 +49,14 @@ void main() {
         mapProvider: _config,
       );
 
-      // No source and a provider that disallows downloads: gated off.
+      // No vector source yet. Debug builds still expose the small,
+      // development-only CyclOSM raster path by default.
       expect(store.usesVectorSource, isFalse);
-      expect(store.offlineDownloadsAllowed, isFalse);
+      expect(store.offlineDownloadsAllowed, isTrue);
+      expect(
+        store.rasterDownloadProviders.map((provider) => provider.id),
+        contains('cyclosm'),
+      );
 
       await store.setVectorSourceUrl('https://example.invalid/region.mbtiles');
 

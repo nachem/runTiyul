@@ -5,6 +5,11 @@ import 'package:vector_tile/vector_tile.dart';
 
 import 'trail_network.dart';
 
+/// The broad category of an OpenMapTiles `transportation` way: a foot/off-road
+/// trail versus a road. Used to keep a built route on the same kind of way as
+/// its previous waypoint when a tap is near both.
+enum WayCategory { trail, road }
+
 /// Extracts trail geometry from an OpenMapTiles vector tile.
 ///
 /// The `transportation` layer contains line features with a `class` attribute;
@@ -12,7 +17,36 @@ import 'trail_network.dart';
 /// projected to latitude/longitude by the `vector_tile` package using the
 /// tile's z/x/y, so the caller receives real-world trail lines.
 class TrailExtractor {
-  const TrailExtractor({this.trailClasses = const {'path', 'track'}});
+  const TrailExtractor({this.trailClasses = trailOnlyClasses});
+
+  /// The OpenMapTiles `transportation` classes for foot/off-road trails
+  /// (footways, pedestrian ways, cycleways, and steps are grouped under
+  /// `path`; `track` covers unpaved forest/farm roads).
+  static const Set<String> trailOnlyClasses = {'path', 'track'};
+
+  /// The OpenMapTiles `transportation` classes for roads. Includes residential,
+  /// unclassified, and living-street ways (grouped under `minor`) and service
+  /// roads.
+  static const Set<String> roadClasses = {
+    'motorway',
+    'trunk',
+    'primary',
+    'secondary',
+    'tertiary',
+    'minor',
+    'service',
+  };
+
+  /// Trails plus roads of any kind: used when the runner opts to route and snap
+  /// along roads, not just trails.
+  static const Set<String> trailAndRoadClasses = {
+    ...trailOnlyClasses,
+    ...roadClasses,
+  };
+
+  /// Classifies an OpenMapTiles `transportation` [kind] as a trail or a road.
+  static WayCategory categoryOf(String kind) =>
+      roadClasses.contains(kind) ? WayCategory.road : WayCategory.trail;
 
   /// The OpenMapTiles `transportation` classes treated as trails.
   final Set<String> trailClasses;

@@ -56,4 +56,29 @@ void main() {
     );
     expect(trails, isEmpty);
   });
+
+  test('extracts road classes when configured to include roads', () {
+    const extractor = TrailExtractor(
+      trailClasses: TrailExtractor.trailAndRoadClasses,
+    );
+
+    final roads = extractor.extractFromTile(
+      _syntheticTile(klass: 'primary'),
+      2,
+      3,
+      0,
+    );
+    expect(roads, hasLength(1));
+    expect(roads.first.kind, 'primary');
+
+    // A non-road, non-trail class (for example railways) stays excluded even
+    // with roads included.
+    final rail = extractor.extractFromTile(
+      _syntheticTile(klass: 'rail'),
+      2,
+      3,
+      0,
+    );
+    expect(rail, isEmpty);
+  });
 }

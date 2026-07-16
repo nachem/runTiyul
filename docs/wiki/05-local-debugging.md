@@ -51,18 +51,31 @@ An Android 14 emulator was detected as `emulator-5554` on 2026-07-14.
 flutter run -d emulator-5554
 ```
 
-Offline downloads are disabled for the default public map provider. For a tiny
-development-only test selection:
+Debug builds expose tiny development-only OSM standard and CyclOSM raster
+downloads by default. Both choices are labeled `DEV`; keep selections small and
+never treat either public service as a production offline backend. To test the
+production gate from a debug build, disable it explicitly:
 
 ```powershell
 flutter run -d emulator-5554 `
-  --dart-define=ENABLE_DEV_OSM_DOWNLOADS=true
+  --dart-define=ENABLE_DEV_OSM_DOWNLOADS=false
 ```
 
-When launching from VS Code, select **Running App**. Its checked-in
-`.vscode/launch.json` configuration already passes the development override.
-The profile and release configurations deliberately keep downloads disabled
-unless an approved provider is configured.
+When launching from VS Code, select **Running App**. Profile and release always
+start with public-raster downloads locked. This repository defaults
+`ALLOW_PUBLIC_RASTER_DEV_UNLOCK=true`: on an internal release, tap the disabled
+**Current map** choice seven times within four seconds, read the warning, and
+confirm. The unlock persists on that device and enables only public Streets and
+CyclOSM; Satellite remains view-only. To compile out this capability for a
+future production build, pass:
+
+```powershell
+flutter build apk --release `
+  --dart-define=ALLOW_PUBLIC_RASTER_DEV_UNLOCK=false
+```
+
+Converted-vector downloads remain a separate path and never authorize a raster
+endpoint.
 
 For production development, configure a provider whose terms explicitly permit
 offline download:
@@ -190,14 +203,18 @@ Record:
 
 ## 11. Latest local verification
 
-On 2026-07-14, Flutter 3.44.6:
+Command validation on 2026-07-16 with Flutter 3.44.6:
 
-- `dart format lib test`: passed.
-- `flutter analyze`: passed with no issues.
-- `flutter test`: all 14 tests passed.
+- Dart formatter on changed Dart files: passed.
+- `flutter analyze --no-pub`: passed with no issues.
+- `flutter test`: all 117 tests passed.
 - `flutter build apk --debug`: passed.
-- Tests and the debug APK also pass with
-  `--dart-define=ENABLE_DEV_OSM_DOWNLOADS=true`.
+- Tests cover the debug-default OSM/CyclOSM gate, release unlock persistence and
+  compile-out behavior, locked-chip routing, per-area provider routing,
+  topographic vector baking, and legacy raw-terrain cleanup.
+
+Last Android emulator interaction evidence remains from 2026-07-14:
+
 - Android 14/API 34 emulator launch: passed.
 - Primary map controls and Auto/Online/Offline selector: exercised; Online
   persisted across process restart and Auto was restored afterward.

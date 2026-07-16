@@ -90,9 +90,10 @@ notes.
 | MAP-007 | Map rendering shall keep required provider attribution. | Attribution is correct for both online and downloaded content. |
 | MAP-008 | The primary map shall provide one-tap zoom, current-location centering, and fit/reset controls. | The user can zoom in/out, center on a fresh location fix, and fit current location plus route/checkpoint content without gestures. When opened without a selected route or area, the map centers on the current location at a neighborhood zoom once a fix is available. |
 | MAP-009 | The user shall be able to choose Auto, Online, or Offline map rendering. | Auto prefers downloaded tiles and falls back online; Online bypasses local tiles; Offline never requests the network and is always selectable so the user can find downloaded areas. The choice survives restart. |
-| MAP-010 | Offline mode shall expose saved-area bounds and constrain zoom to downloaded levels. | Selecting Offline fits available areas when possible; a focused area cannot zoom below its minimum or above its maximum downloaded zoom, preventing an avoidable empty view. |
+| MAP-010 | Offline mode shall expose saved-area bounds and use the same zoom range as the online map. | Selecting Offline fits available areas when possible; the map can zoom out below the downloaded minimum and zoom in above the downloaded maximum (zoom-in overzooms saved tiles to z19), matching the online zoom range. Areas without coverage render transparent rather than blocking the zoom control. |
 | MAP-011 | The user shall be able to switch the displayed base map between the configured provider and additional online-only layers (for example satellite/orthophoto imagery). | The active layer is credited correctly and the choice survives restart; online-only imagery layers are not bulk-downloaded, and offline coverage and downloads remain bound to the downloadable provider. |
 | MAP-011 | Trail and offline-area previews shall use the primary Map destination. | Selecting a trail or saved offline area switches to the main map with all controls; an offline area shows its bounds and an action to edit and redownload changed bounds. |
+| MAP-012 | The app shall offer a topographic online base map without downloading separate elevation data while browsing. | CyclOSM is selectable as a credited raster base layer; its provider-rendered contours/hillshade are part of the raster tiles, and selecting or viewing it does not request Terrarium/elevation tiles. |
 
 ### 4.3 Route import, creation, and management
 
@@ -148,8 +149,11 @@ turn-by-turn instructions.
 ### 4.7 Offline map download
 
 Offline map download is a core requirement, not an optional enhancement. Version
-1 keeps exact rectangular area selection; contour and hillshade terrain is an
-optional per-download layer with its own source and license, detailed in the
+1 keeps exact rectangular area selection. The converted-vector offline type is
+topographic: Terrarium elevation is fetched only while converting the selected
+area, then contours and hillshade are baked into the final PNG tiles; raw
+elevation tiles are not retained. Raster offline types use only their provider's
+already-rendered tiles and never request separate elevation data. See the
 [offline map implementation guide](06-offline-map-packages.md).
 
 | ID | Requirement | Acceptance criteria |
@@ -165,7 +169,9 @@ optional per-download layer with its own source and license, detailed in the
 | OFF-009 | Download requests shall use bounded concurrency, retry with backoff for transient failures, and honor cancellation. | The app does not launch unbounded requests or retry permanent errors forever. |
 | OFF-010 | Downloads shall check available device storage and handle out-of-space errors. | Partial data remains manageable; the area is not incorrectly marked complete. |
 | OFF-011 | Completed downloaded areas shall work in airplane mode. | A device test confirms map rendering at all selected zoom levels inside the bounds. |
-| OFF-012 | The production tile provider shall explicitly permit bulk/offline use. | The default production configuration does not bulk-download from the public OSM standard tile service. |
+| OFF-012 | The production tile provider shall explicitly permit bulk/offline use. | Release starts with public OSM/CyclOSM downloads locked. This repository's internal developer capability may be unlocked only by seven taps plus an explicit warning/confirmation, persists on that device, and is labeled development-only; it does not make those public services production-approved. |
+| OFF-013 | Downloads should continue while the app is backgrounded where the platform permits, and interrupted downloads should resume when the app returns to the foreground. | On Android a foreground service keeps the process alive while a download runs; on any platform a download interrupted in the background resumes automatically on the next foreground and never loses completed tiles. |
+| OFF-014 | Converted-vector offline maps shall include topographic contours and hillshade without retaining a parallel elevation dataset. | Terrarium tiles are requested only during vector conversion at z10-z13 (z13 is reused for deeper output), rendered in memory, composited into the final PNG, and discarded; online maps and raster offline downloads make no separate elevation requests. |
 
 ### 4.8 Offline storage management
 
@@ -245,6 +251,10 @@ optional per-download layer with its own source and license, detailed in the
 - `https://tile.openstreetmap.org` may be suitable for light interactive
   development use under its policy, but it must not be used for production
   bulk/offline downloads.
+- The public CyclOSM raster service may be used for credited interactive display,
+  but public-service bulk/offline downloads are development-only, must stay
+  small, and must not ship as a production download source without explicit
+  permission or an approved provider arrangement.
 - Production must use a provider plan that explicitly allows offline tile
   download, or infrastructure operated by the application owner.
 - Additional online-only display layers (for example Esri World Imagery
@@ -334,7 +344,9 @@ considered final:
 1. Production offline package source, style, distribution host, and licensing
   terms.
 2. Maximum default tile count, download size, and zoom range.
-3. Background download behavior on Android and iOS.
+3. Background download behavior on iOS. Android keeps the process alive with a
+  foreground service during downloads; iOS currently relies on foreground
+  auto-resume.
 4. Exact off-route threshold, persistence duration, and alert modes.
 5. Elevation source and smoothing algorithm.
 6. Whether manual waypoint routes remain straight-line only in version 1.

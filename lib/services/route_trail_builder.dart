@@ -8,6 +8,7 @@ import '../core/geo/tile_math.dart';
 import 'route_snapper.dart';
 import 'trail_extractor.dart';
 import 'trail_network.dart';
+import 'trail_router.dart';
 import 'vector_tile_source.dart';
 
 /// The result of snapping a route onto nearby trails.
@@ -182,12 +183,40 @@ class RouteTrailBuilder {
     if (network.isEmpty) {
       return RouteTrailResult(snapped: route, network: network, changed: false);
     }
+    // First pass: pull each point onto the nearest way with hysteresis.
     final snapped = snapper.snap(route, network);
+    // Second pass: rebuild the stitched line as a path that follows the
+    // connected trail/road graph end-to-end, so the saved route stays entirely
+    // on real ways and any gap where it left the network is bridged.
+    final refined = refineOntoNetwork(snapped, network);
     return RouteTrailResult(
-      snapped: snapped,
+      snapped: refined,
       network: network,
-      changed: _differs(route, snapped),
+      changed: _differs(route, refined),
     );
+  }
+
+  /// Rebuilds [route] as a path that follows the connected trail/road graph in
+  /// [network] end-to-end. Each point is snapped onto a way — preferring the
+  /// previous point's category (trail vs road) so the path stays on one kind of
+  /// way — and consecutive anchors are joined along the network, which bridges
+  /// any stretch that left it by routing between the nearest on-network points.
+  /// Returns [route] unchanged when the network cannot support a path.
+  List<LatLng> refineOntoNetwork(List<LatLng> route, TrailNetwork network) {
+    if (route.length < 2 || network.isEmpty) return route;
+    final router = TrailRouter(network);
+    if (router.isEmpty) return route;
+    final anchors = <TrailAnchor>[];
+    WayCategory? previous;
+    for (final point in route) {
+      final anchor = router.snap(point, preferCategory: previous);
+      if (anchor == null) continue; // Off-network: bridged by the graph route.
+      anchors.add(anchor);
+      previous = anchor.category;
+    }
+    if (anchors.length < 2) return route;
+    final routed = router.buildRoute(anchors);
+    return routed.length < 2 ? route : routed;
   }
 
   bool _differs(List<LatLng> a, List<LatLng> b) {

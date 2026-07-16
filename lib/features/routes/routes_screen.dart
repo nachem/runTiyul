@@ -209,18 +209,30 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
       : _points;
 
   void _setFollowTrails(bool value) {
+    if (value == _followTrails) return;
+    // The points the user has placed, independent of the current mode: the
+    // trail anchors in follow mode, the free waypoints otherwise.
+    final placed = _followTrails
+        ? [for (final anchor in _followAnchors) anchor.point]
+        : List<LatLng>.from(_points);
     setState(() {
       _followTrails = value;
       _selected = null;
       _moving = false;
-      _points.clear();
-      _followAnchors.clear();
       _trailError = null;
+      // Keep the placed points across the switch so the route is not reset;
+      // only how new points are added (free vs snapped) changes.
+      _followAnchors.clear();
+      _points
+        ..clear()
+        ..addAll(placed);
     });
-    if (value) unawaited(_loadTrails());
+    // Entering follow mode: load the trail network and snap the carried-over
+    // points onto it as anchors so the existing route is kept, not cleared.
+    if (value) unawaited(_loadTrails(adoptPoints: placed));
   }
 
-  Future<void> _loadTrails() async {
+  Future<void> _loadTrails({List<LatLng> adoptPoints = const []}) async {
     final source = widget.store.vectorSourceUrl;
     final bounds = _lastBounds;
     if (source.isEmpty) {
@@ -241,11 +253,32 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
         source,
       );
       if (!mounted) return;
+      final router = TrailRouter(network);
+      // Snap any carried-over waypoints onto the freshly loaded network,
+      // keeping each on the same kind of way as the previous one.
+      final adopted = <TrailAnchor>[];
+      if (!network.isEmpty) {
+        for (final point in adoptPoints) {
+          final anchor = router.snap(
+            point,
+            preferCategory: adopted.isEmpty ? null : adopted.last.category,
+          );
+          if (anchor == null) continue;
+          adopted.add(anchor);
+        }
+      }
       setState(() {
-        _trailRouter = TrailRouter(network);
+        _trailRouter = router;
         _trailLines = [for (final trail in network.trails) trail.points];
         _loadingTrails = false;
-        if (network.isEmpty) _trailError = 'No trails found in this area';
+        if (network.isEmpty) {
+          _trailError = 'No trails found in this area';
+        } else if (adopted.isNotEmpty) {
+          _followAnchors
+            ..clear()
+            ..addAll(adopted);
+          _rebuildFollowRoute();
+        }
       });
     } on Object {
       if (!mounted) return;
@@ -262,7 +295,16 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
       setState(() => _trailError = 'Reload trails for this area first');
       return;
     }
-    final anchor = router.snap(point, maxMeters: 40);
+    // Keep a new waypoint on the same kind of way (trail vs road) as the one it
+    // connects to when it sits near both.
+    final previousCategory = _followAnchors.isEmpty
+        ? null
+        : _followAnchors.last.category;
+    final anchor = router.snap(
+      point,
+      maxMeters: 40,
+      preferCategory: previousCategory,
+    );
     if (anchor == null) {
       setState(() => _trailError = 'Tap on or near a trail');
       return;
@@ -338,9 +380,13 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
             child: TextField(
               controller: _nameController,
-              decoration: const InputDecoration(
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
                 labelText: 'Route name',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                errorText: _nameController.text.trim().isEmpty
+                    ? 'Enter a route name'
+                    : null,
               ),
             ),
           ),
@@ -404,6 +450,7 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
               initialCenter: widget.store.currentLocation,
               initialZoom: widget.initialRoute == null ? 16 : null,
               autoFit: widget.initialRoute != null,
+              refitOnContentChange: false,
               onVisibleBoundsChanged: (bounds) => _lastBounds = bounds,
               onTap: (point) {
                 if (_followTrails) {
@@ -501,7 +548,10 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: _saving || _points.length < 2
+                  onPressed:
+                      _saving ||
+                          _points.length < 2 ||
+                          _nameController.text.trim().isEmpty
                       ? null
                       : () async {
                           setState(() => _saving = true);
