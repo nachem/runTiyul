@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-15  
+Last reviewed: 2026-07-16  
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -18,7 +18,8 @@ completing any change that affects the wiki or project status.
 | 4 | [AI assistant guide](04-ai-assistant-guide.md) | Implementation sequence, engineering rules, validation, and handoff protocol. | Agent workflow, implementation order, tooling, or known traps change. |
 | 5 | [Local run and debug guide](05-local-debugging.md) | Toolchain setup, Android/iOS launch, VS Code debugging, GPS simulation, and offline verification. | Tooling, device IDs, launch commands, package IDs, or debug workflows change. |
 | 6 | [Offline map implementation](06-offline-map-packages.md) | Legal offline-map design and status: implemented on-device vector→raster conversion, plus proposed native MapLibre rendering, optional terrain, migration, validation, and rollout. | Offline source, format, renderer, terrain, licensing, hosting, or implementation plan changes. |
-| 7 | [Wiki conventions](README.md) | Source-of-truth hierarchy and general documentation maintenance rules. | Wiki governance or document organization changes. |
+| 7 | [Release & distribution](07-release-and-distribution.md) | Website, GitHub Pages deploy, release artifacts (APK/unsigned IPA), CI workflows, licensing, and the release runbook. | Website, release workflows, artifact names, distribution, or licensing change. |
+| 8 | [Wiki conventions](README.md) | Source-of-truth hierarchy and general documentation maintenance rules. | Wiki governance or document organization changes. |
 
 Repository-wide agent requirements are in
 [`AGENTS.md`](../../AGENTS.md). GitHub Copilot also receives the same workflow
@@ -46,6 +47,7 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup |
 | Long-term offline maps | On-device vector→raster conversion implemented behind `TRAIL_VECTOR_MBTILES` (pure-Dart `vector_tile_renderer`, reuses the raster renderer); native MapLibre rendering, terrain, and a hosted source remain unimplemented |
 | Automated validation | Format/analyze pass; 60 tests pass; debug APK builds |
+| Website & distribution | Landing site (`site/`), release + Pages CI, MIT license, and public repo implemented; not yet deployed and no `v*` release built (see [Release & distribution](07-release-and-distribution.md)) |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
