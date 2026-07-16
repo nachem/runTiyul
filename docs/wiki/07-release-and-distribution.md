@@ -25,6 +25,11 @@ The download links used by the site and README point at stable asset names via
 - Static, dependency-free landing page: `index.html`, `styles.css`, `main.js`,
   plus `.nojekyll`, `robots.txt`, `sitemap.xml`, and optimized assets under
   `site/assets/`.
+- The new RunTiyul artwork is used consistently across the website: GIF with
+  WebP/PNG fallbacks for the hero, a compact square PNG for header/footer marks,
+  dedicated 32 px/192 px favicons and Apple touch icon, and a 1200x630 social
+  preview image. Native Android/iOS launcher icons use an aspect-preserving
+  square derivative from `assets/branding/app_icon.png`.
 - Dark/light theme (persisted in `localStorage`), responsive layout, scroll
   reveal, and a live "latest release" lookup via the GitHub REST API that
   rewrites the download links and shows the current version when a release

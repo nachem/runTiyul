@@ -6,19 +6,22 @@
   <title>RunTiyul — Offline-first trail running for Android &amp; iOS</title>
   <meta name="description" content="RunTiyul is a free, open-source, offline-first trail running app. Download map areas for the backcountry, import GPX routes, record GPS activities, and navigate off-grid. No account, no tracking." />
   <meta name="theme-color" content="#0b1020" />
-  <link rel="icon" href="assets/RunTiyul-icon.png" type="image/png" />
-  <link rel="apple-touch-icon" href="assets/RunTiyul-icon.png" />
+  <link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="assets/favicon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 
   <!-- Open Graph / social -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="RunTiyul — Offline-first trail running" />
   <meta property="og:description" content="Free & open-source trail running: offline maps, GPX routes, GPS recording, and off-grid navigation. Android &amp; iOS." />
-  <meta property="og:image" content="https://nachem.github.io/runTiyul/assets/RunTiyul.png" />
+  <meta property="og:image" content="https://nachem.github.io/runTiyul/assets/RunTiyul-social.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
   <meta property="og:url" content="https://nachem.github.io/runTiyul/" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="RunTiyul — Offline-first trail running" />
   <meta name="twitter:description" content="Free & open-source trail running: offline maps, GPX routes, GPS recording, and off-grid navigation." />
-  <meta name="twitter:image" content="https://nachem.github.io/runTiyul/assets/RunTiyul.png" />
+  <meta name="twitter:image" content="https://nachem.github.io/runTiyul/assets/RunTiyul-social.png" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -32,7 +35,7 @@
   <header class="site-header" id="top">
     <div class="container header-inner">
       <a class="brand" href="#top" aria-label="RunTiyul home">
-        <img class="brand-mark" src="assets/RunTiyul.png" alt="" width="34" height="40" />
+        <img class="brand-mark" src="assets/RunTiyul-icon.png" alt="" width="40" height="40" />
         <span class="brand-name">Run<span class="brand-accent">Tiyul</span></span>
       </a>
 
@@ -118,7 +121,11 @@
         <div class="hero-visual">
           <div class="glow"></div>
           <div class="hero-card">
-            <img src="assets/RunTiyul.png" alt="RunTiyul mascot: a fox in trail-running gear" width="380" height="451" />
+            <picture>
+              <source srcset="assets/RunTiyul.gif" type="image/gif" />
+              <source srcset="assets/RunTiyul.webp" type="image/webp" />
+              <img src="assets/RunTiyul.png" alt="RunTiyul mascot: a fox in trail-running gear" width="380" height="470" />
+            </picture>
           </div>
           <div class="chip chip-1">
             <svg viewBox="0 0 24 24" aria-hidden="true" width="16" height="16"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7Zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.5Z"/></svg>
@@ -397,7 +404,7 @@
     <div class="container footer-inner">
       <div class="footer-brand">
         <a class="brand" href="#top">
-          <img class="brand-mark" src="assets/RunTiyul.png" alt="" width="27" height="32" />
+          <img class="brand-mark" src="assets/RunTiyul-icon.png" alt="" width="32" height="32" />
           <span class="brand-name">Run<span class="brand-accent">Tiyul</span></span>
         </a>
         <p>Offline-first trail running.<br />Free &amp; open source.</p>

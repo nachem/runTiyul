@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="RunTiyul.png" alt="RunTiyul" width="132" />
+<img src="RunTiyul.gif" alt="RunTiyul" width="132" />
 
 # RunTiyul
 

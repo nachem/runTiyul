@@ -328,7 +328,9 @@ Limitations:
 
 - Application ID: `com.bernoulli.trailrunner.trail_runner`.
 - Label: `RunTiyul`.
-- Launcher icon: generated from the repository's `RunTiyul.png` source image.
+- Launcher icon: generated from the square, aspect-preserving
+  `assets/branding/app_icon.png` derivative of the repository's `RunTiyul.png`
+  source image.
 - Java/Kotlin target: 17.
 - Fine, coarse, background location, foreground service, foreground location
   service, notification, wake-lock, and internet permissions are declared.
