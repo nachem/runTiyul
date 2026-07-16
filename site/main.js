@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var REPO = "nachem/RunTiyul";
+  var REPO = "nachem/runTiyul";
   var doc = document.documentElement;
 
   /* ---------------- Theme toggle (persisted) ---------------- */
