@@ -47,7 +47,7 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup |
 | Long-term offline maps | On-device vector→raster conversion implemented behind `TRAIL_VECTOR_MBTILES` (pure-Dart `vector_tile_renderer`, reuses the raster renderer); native MapLibre rendering, terrain, and a hosted source remain unimplemented |
 | Automated validation | Format/analyze pass; 60 tests pass; debug APK builds |
-| Website & distribution | Landing site (`site/`), release + Pages CI, MIT license, and public repo implemented; not yet deployed and no `v*` release built (see [Release & distribution](07-release-and-distribution.md)) |
+| Website & distribution | Landing site (`site/`) **deployed live** at https://nachem.github.io/runTiyul/, `v1.0.0` release published with APK + unsigned IPA (both download links verified 200), MIT license, public repo (see [Release & distribution](07-release-and-distribution.md)) |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).

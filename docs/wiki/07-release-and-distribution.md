@@ -10,15 +10,15 @@ describes what is **implemented in the repository**, not planned work.
 
 | Concern | Mechanism | Status |
 | --- | --- | --- |
-| Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Implemented; not yet deployed (needs Pages source + branch merge) |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Workflow implemented; no release tagged yet |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | Workflow implemented; macOS build not yet run/verified |
+| Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Built and published in `v1.0.0` (57.6 MB); latest-download link verified 200 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | Built on the macOS runner and published in `v1.0.0` (10.1 MB); latest-download link verified 200. Build succeeded in CI; on-device sideload not verified |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
-`...RunTiyul.ipa`. These 404 until the first `v*` release has been built.
+`...RunTiyul.ipa`. As of the `v1.0.0` release (2026-07-16) both resolve `200`.
 
 ## 2. Website (`site/`)
 
@@ -65,31 +65,37 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 
 ## 4. Operational runbook
 
-One-time setup:
+One-time setup (both completed 2026-07-16):
 
 1. Repository must be **public** (done).
-2. Enable Pages: _Settings → Pages → Build and deployment → Source: **GitHub
-   Actions**_.
+2. Enable Pages via _Settings → Pages → Build and deployment → Source: **GitHub
+   Actions**_ (done; also settable with
+   `gh api -X POST repos/nachem/runTiyul/pages -f build_type=workflow`).
 
-To publish a release:
+To publish a release (e.g. a future `v1.1.0`):
 
 ```powershell
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.1.0
+git push origin v1.1.0
 ```
 
 This runs `release.yml`, builds both artifacts, and creates the Release. After
-the run completes, the website's download buttons resolve automatically.
+the run completes, the website's download buttons resolve automatically. Note
+that pushing/merging to `main` does **not** trigger a release build — only a
+`v*` tag or a manual `workflow_dispatch` does. `pages.yml` redeploys the site
+only when a push to `main` changes files under `site/**`.
 
 ## 5. Known limitations
 
-- The unsigned iOS `.ipa` build on the macOS runner has **not been executed or
-  verified**; it may require adjustment (the wider iOS runtime is also
-  unverified — see [implementation status](02-implementation-status.md)). The
-  release job is designed to still publish the Android APK if this step fails.
-- Pages does not deploy until `pages.yml` is present on `main`.
-- The site's live-release enhancement and the `releases/latest/download/...`
-  links depend on at least one published `v*` release.
+- The unsigned iOS `.ipa` **builds successfully in CI** (verified in `v1.0.0` on
+  the macOS runner) but its on-device sideload/runtime has **not been verified**
+  (the wider iOS runtime is also unverified — see
+  [implementation status](02-implementation-status.md)). The release job is
+  designed to still publish the Android APK if the iOS step fails.
+- The `releases/latest/download/...` links and the site's live-release
+  enhancement depend on at least one published `v*` release; `v1.0.0` satisfies
+  this.
+- CI actions emit a Node.js 20 deprecation warning (non-blocking).
 
 ## 6. Licensing & attribution
 
