@@ -279,7 +279,26 @@ Do not bury download policy in a widget. Define:
 - `OfflineAreaRepository`
 - `StorageReconciler`
 
-### 9.1 Download planning
+### 9.1 Route editing and rendering performance
+
+Follow-trails editing uses z14 vector data independent of camera zoom. A tap
+that is outside the loaded graph fetches only the surrounding 3x3 tile
+neighborhood. If that neighborhood cannot overlap the previous anchor's local
+coverage, the editor rejects the tap and asks for a closer point rather than
+building disconnected endpoint graphs. Panning and later nearby taps merge
+de-duplicated networks without changing existing anchor indices. Explicit
+viewport loads are capped and centered on the viewport.
+
+Follow mode uses strict connected routing: disconnected or unreasonably long
+graph detours are rejected and never represented as straight trail-following
+legs. Only the newest leg is calculated after a tap. Graph construction is
+lazy, and cross-trail routing uses a priority-queue shortest-path search.
+Persisted route geometry remains lossless for navigation and export; map layers
+simplify a separate rendering list at approximately one screen pixel for the
+current zoom. This keeps `RTE-009` storage fidelity separate from map frame
+cost.
+
+### 9.2 Download planning
 
 The planner converts geographic bounds and inclusive zoom levels to unique XYZ
 tile coordinates. It must handle:
@@ -293,7 +312,7 @@ tile coordinates. It must handle:
 Estimate bytes from provider-specific historical averages when available and
 label the result as an estimate.
 
-### 9.2 Download execution
+### 9.3 Download execution
 
 - Persist the area and planned tile references before network work.
 - Use bounded worker concurrency.
@@ -321,7 +340,7 @@ Topographic data rules for the implemented raster renderer:
 - Terrain attribution is retained alongside basemap attribution even though raw
   terrain files are discarded.
 
-### 9.3 Long-term extraction architecture
+### 9.4 Long-term extraction architecture
 
 The per-XYZ-file raster design above describes the implemented MVP. The
 preferred long-term direction downloads exactly the user's selected rectangle by
@@ -423,7 +442,6 @@ Create durable decision records in this wiki when resolved:
 - SQLite access style and migration ownership.
 - Background recording plugin/service design.
 - Background tile download expectations.
-- Route line simplification algorithm.
 - Elevation smoothing.
 - Error/result representation.
 - App navigation package or Navigator API.

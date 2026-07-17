@@ -101,14 +101,61 @@ class RouteTrailBuilder {
   List<TileCoordinate> tilesForBounds(GeoBounds bounds, {int maxTiles = 24}) {
     final (minX, minY) = _tileOf(LatLng(bounds.north, bounds.west));
     final (maxX, maxY) = _tileOf(LatLng(bounds.south, bounds.east));
+    final left = math.min(minX, maxX);
+    final right = math.max(minX, maxX);
+    final top = math.min(minY, maxY);
+    final bottom = math.max(minY, maxY);
+    final tileCount = (right - left + 1) * (bottom - top + 1);
     final tiles = <TileCoordinate>[];
-    for (var x = math.min(minX, maxX); x <= math.max(minX, maxX); x++) {
-      for (var y = math.min(minY, maxY); y <= math.max(minY, maxY); y++) {
-        tiles.add(TileCoordinate(zoom, x, y));
-        if (tiles.length >= maxTiles) return tiles;
+    if (tileCount <= maxTiles) {
+      for (var x = left; x <= right; x++) {
+        for (var y = top; y <= bottom; y++) {
+          tiles.add(TileCoordinate(zoom, x, y));
+        }
+      }
+      return tiles;
+    }
+
+    final (centerX, centerY) = _tileOf(bounds.center);
+    for (var radius = 0; tiles.length < maxTiles; radius++) {
+      for (var x = centerX - radius; x <= centerX + radius; x++) {
+        for (var y = centerY - radius; y <= centerY + radius; y++) {
+          if (math.max((x - centerX).abs(), (y - centerY).abs()) != radius ||
+              x < left ||
+              x > right ||
+              y < top ||
+              y > bottom) {
+            continue;
+          }
+          tiles.add(TileCoordinate(zoom, x, y));
+          if (tiles.length >= maxTiles) return tiles;
+        }
       }
     }
     return tiles;
+  }
+
+  /// The z[zoom] tiles immediately surrounding [point]. Unlike viewport
+  /// loading, this stays bounded even when the map is zoomed far out.
+  List<TileCoordinate> tilesNearPoint(LatLng point, {int radius = 1}) {
+    final (centerX, centerY) = _tileOf(point);
+    final n = 1 << zoom;
+    final tiles = <TileCoordinate>[];
+    for (var x = centerX - radius; x <= centerX + radius; x++) {
+      for (var y = centerY - radius; y <= centerY + radius; y++) {
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;
+        tiles.add(TileCoordinate(zoom, x, y));
+      }
+    }
+    return tiles;
+  }
+
+  /// Whether the bounded neighborhoods used by interactive route editing can
+  /// overlap. When they cannot, loading only the distant endpoint would create
+  /// disconnected graphs and could never produce a trail-following leg.
+  bool canLoadInteractiveLeg(LatLng from, LatLng to) {
+    final fromTiles = tilesNearPoint(from).toSet();
+    return tilesNearPoint(to).any(fromTiles.contains);
   }
 
   (int, int) _tileOf(LatLng point) {
@@ -160,6 +207,27 @@ class RouteTrailBuilder {
     try {
       final trails = <TrailPolyline>[];
       for (final tile in tilesForBounds(bounds)) {
+        if (tile.z < source.minZoom || tile.z > source.maxZoom) continue;
+        final bytes = await source.readTile(tile.z, tile.x, tile.y);
+        if (bytes == null || bytes.isEmpty) continue;
+        trails.addAll(
+          extractor.extractFromBytes(bytes, tile.z, tile.x, tile.y),
+        );
+      }
+      return TrailNetwork(trails);
+    } finally {
+      await source.close();
+    }
+  }
+
+  /// Builds a small trail network around [point]. Route editing uses this as
+  /// an on-demand fallback when a tap falls outside the viewport network.
+  Future<TrailNetwork> networkNearPoint(LatLng point, String sourceUrl) async {
+    if (sourceUrl.isEmpty) return const TrailNetwork([]);
+    final source = await _openSource(sourceUrl);
+    try {
+      final trails = <TrailPolyline>[];
+      for (final tile in tilesNearPoint(point)) {
         if (tile.z < source.minZoom || tile.z > source.maxZoom) continue;
         final bytes = await source.readTile(tile.z, tile.x, tile.y);
         if (bytes == null || bytes.isEmpty) continue;

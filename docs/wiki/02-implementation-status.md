@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-16<br>
+Snapshot date: 2026-07-17<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -57,6 +57,7 @@ hosting remain proposals only.
 | Manual route creation | Implemented; move/delete + save-fix + edit + follow-trails analyzer/test only | Map taps add ordered waypoints; undo, name, save, and dashed straight-line display work. A new route opens centered on the runner's current location at a closer zoom. While editing, the map no longer auto-refits when points are added or moved, so the zoom the runner set is kept. The name field is pre-filled with "Route N" and required in the editor: Save is disabled and an inline "Enter a route name" prompt shows while the field is empty (the store-level save still auto-names an empty name as a safety net). The editor closes only after a successful save, so a drawn route always lands in the list. Long-pressing selects the nearest waypoint (highlighted) to move (tap to reposition) or delete. An existing route can be reopened for editing from its detail screen (Edit waypoints), loading its points to add/move/delete and saving in place. A **Follow trails** mode (toggled beside Checkpoints) loads the real trail network for the visible area and snaps each tap onto a trail *line*, then builds the route *along* real trails between anchors — the same trail's own geometry when two anchors share a trail, or a shortest path through junctions across connected trails; trail data auto-downloads for the viewed area (with a Reload action) and anchors can be undone or deleted. Switching between Checkpoints and Follow trails keeps the points already placed — anchors become free waypoints and free waypoints are snapped back onto the network — so toggling the mode changes only how the next point is added rather than resetting the route. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. |
+| Route-editor and long-route performance | Implemented; analyzer/unit-tested, physical-device stress test pending | `RTE-003` Follow trails no longer derives its workload from a zoomed-out viewport: the first tap loads a bounded 3x3 z14 neighborhood around the tapped point, subsequent nearby areas merge into the graph, and explicit viewport reloads cap at 24 tiles centered on the screen instead of truncating from the northwest corner. A distant tap whose bounded neighborhood cannot overlap the preceding point is rejected immediately with an add-a-closer-point message. A closer tap is committed only when a connected, reasonable graph path exists, so Follow trails never silently inserts a straight waypoint leg. Existing anchors keep their stable graph indices; only the newest leg is routed, graph construction is lazy, and cross-trail shortest paths use a binary-heap frontier. Under `RTE-009`, saved/navigation geometry remains lossless while `TrailMap` reduces only its rendered point list at approximately one screen pixel for the current zoom. Very long routes still require profiling on a mid-range physical device. |
 | Route progress/off-route alerts | Not implemented | Version 1 currently provides visual line-following only. |
 | GPS activity tracking | Implemented and emulator verified | Start, permission request, pause, resume, finish, discard, timer, and persisted samples. |
 | Live metrics | Implemented | Elapsed time, distance, average pace, and smoothed-threshold elevation gain are shown. Moving time is not calculated separately. |
@@ -349,17 +350,20 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-16 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-17 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
 | Dart formatter on changed Dart files | Passed. |
-| `flutter analyze --no-pub` | Passed; no issues found. |
-| `flutter test` | Passed; 117 tests. |
+| `flutter analyze` | Passed; no issues found. |
+| `flutter test` | Passed; 126 tests. |
 | `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
 
 Automated coverage includes:
 
+- Bounded point-local and centered capped viewport trail tile selection.
+- Strict connected trail routing, distant-leg rejection, lazy graph creation,
+  and zoom-aware rendering-only polyline simplification.
 - Tile enumeration, uniqueness, estimate, and safety limit.
 - Distance, pace, duration, and byte formatting.
 - Valid and empty GPX parsing.

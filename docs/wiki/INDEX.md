@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-16<br>
+Last reviewed: 2026-07-17<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -40,6 +40,7 @@ instructions are mandatory for all future agents.
 | GPX route import | Implemented and parser tested; native picker not emulator verified |
 | GPS activity recording | Implemented; emulator permission/timer/lifecycle verified |
 | Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping to nearby trails and roads on save followed by a graph pass that keeps the route on connected ways and bridges gaps (toggle), and live off-route/junction alerts (configurable) implemented; not device-verified; route progress % remains |
+| Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation permanently unlocks those two providers on that device. Satellite/arbitrary view-only layers cannot be unlocked. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
@@ -47,7 +48,7 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
-| Automated validation | Format/analyze pass; 117 tests pass; debug APK builds |
+| Automated validation | Format/analyze pass; 126 tests pass; debug APK builds |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -61,7 +62,7 @@ Detailed evidence belongs in
   device while confirming no separate Terrarium request occurs.
 3. Verify background recording and background map downloads on physical Android
    and iOS devices.
-4. Add route progress, off-route detection, and alerts.
+4. Stress-test zoomed-out and long Follow trails routes on a mid-range physical device, including memory, tap latency, and save/reload fidelity.
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
 6. Configure production IDs, signing, and release builds.
 

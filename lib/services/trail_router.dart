@@ -36,6 +36,53 @@ class _Edge {
   final double weight;
 }
 
+class _QueueEntry {
+  const _QueueEntry(this.node, this.distance);
+
+  final int node;
+  final double distance;
+}
+
+class _MinQueue {
+  final List<_QueueEntry> _entries = [];
+
+  bool get isNotEmpty => _entries.isNotEmpty;
+
+  void add(_QueueEntry entry) {
+    _entries.add(entry);
+    var index = _entries.length - 1;
+    while (index > 0) {
+      final parent = (index - 1) ~/ 2;
+      if (_entries[parent].distance <= entry.distance) break;
+      _entries[index] = _entries[parent];
+      index = parent;
+    }
+    _entries[index] = entry;
+  }
+
+  _QueueEntry removeFirst() {
+    final first = _entries.first;
+    final last = _entries.removeLast();
+    if (_entries.isEmpty) return first;
+    var index = 0;
+    while (true) {
+      final left = index * 2 + 1;
+      if (left >= _entries.length) break;
+      final right = left + 1;
+      final child =
+          right < _entries.length &&
+              _entries[right].distance < _entries[left].distance
+          ? right
+          : left;
+      if (_entries[child].distance >= last.distance) break;
+      _entries[index] = _entries[child];
+      index = child;
+    }
+    _entries[index] = last;
+    return first;
+  }
+}
+
 /// Builds a routable graph from a [TrailNetwork] so a route can *follow* real
 /// trails between tapped anchor points instead of cutting straight lines.
 ///
@@ -48,9 +95,7 @@ class TrailRouter {
     this._network, {
     this.nodeGridMeters = 6,
     this.distance = const GeoDistance(),
-  }) {
-    _build();
-  }
+  });
 
   final TrailNetwork _network;
 
@@ -63,6 +108,7 @@ class TrailRouter {
   final List<LatLng> _nodePoints = [];
   final Map<(int, int), int> _cellToNode = {};
   final List<List<_Edge>> _adjacency = [];
+  var _graphBuilt = false;
 
   double _dLat = 1;
   double _dLon = 1;
@@ -70,7 +116,16 @@ class TrailRouter {
   bool get isEmpty => _network.isEmpty;
 
   /// The number of graph nodes (exposed for diagnostics/tests).
-  int get nodeCount => _nodePoints.length;
+  int get nodeCount {
+    _ensureGraphBuilt();
+    return _nodePoints.length;
+  }
+
+  void _ensureGraphBuilt() {
+    if (_graphBuilt) return;
+    _graphBuilt = true;
+    _build();
+  }
 
   void _build() {
     if (_network.isEmpty) return;
@@ -158,7 +213,9 @@ class TrailRouter {
     if (anchors.length < 2) return [for (final a in anchors) a.point];
     final route = <LatLng>[];
     for (var i = 0; i + 1 < anchors.length; i++) {
-      final leg = _leg(anchors[i], anchors[i + 1]);
+      final leg =
+          _connectedLeg(anchors[i], anchors[i + 1]) ??
+          [anchors[i].point, anchors[i + 1].point];
       if (route.isEmpty) {
         route.addAll(leg);
       } else {
@@ -168,6 +225,29 @@ class TrailRouter {
     return route;
   }
 
+  /// Builds a route only when every anchor pair is connected through a
+  /// reasonable trail-network path. Follow-trails editing uses this strict
+  /// variant so the mode never silently inserts a straight waypoint leg.
+  List<LatLng>? buildConnectedRoute(List<TrailAnchor> anchors) {
+    if (anchors.length < 2) return [for (final anchor in anchors) anchor.point];
+    final route = <LatLng>[];
+    for (var index = 0; index + 1 < anchors.length; index++) {
+      final leg = _connectedLeg(anchors[index], anchors[index + 1]);
+      if (leg == null) return null;
+      if (route.isEmpty) {
+        route.addAll(leg);
+      } else {
+        route.addAll(leg.skip(1));
+      }
+    }
+    return route;
+  }
+
+  /// Returns the trail-network path for one anchor pair, or null when the pair
+  /// is disconnected or would require an unreasonable detour.
+  List<LatLng>? buildConnectedLeg(TrailAnchor from, TrailAnchor to) =>
+      _connectedLeg(from, to);
+
   /// A cross-trail bridge longer than this multiple of the direct hop (plus a
   /// small slack) is treated as an unreasonable detour and replaced by a
   /// straight segment, so a short real-world crossing is never swapped for a
@@ -176,16 +256,16 @@ class TrailRouter {
   static const double _maxBridgeDetourFactor = 6;
   static const double _maxBridgeDetourSlackMeters = 40;
 
-  List<LatLng> _leg(TrailAnchor a, TrailAnchor b) {
+  List<LatLng>? _connectedLeg(TrailAnchor a, TrailAnchor b) {
     if (a.trailIndex == b.trailIndex) {
       return _alongTrail(a.trailIndex, a, b);
     }
     final path = _graphPath(a, b);
-    if (path == null) return [a.point, b.point];
+    if (path == null) return null;
     final direct = distance.metersBetween(a.point, b.point);
     if (_pathLength(path) >
         direct * _maxBridgeDetourFactor + _maxBridgeDetourSlackMeters) {
-      return [a.point, b.point];
+      return null;
     }
     return path;
   }
@@ -220,6 +300,7 @@ class TrailRouter {
   /// Shortest path across the trail graph between anchors on different trails,
   /// entering/leaving via the endpoints of each anchor's segment.
   List<LatLng>? _graphPath(TrailAnchor a, TrailAnchor b) {
+    _ensureGraphBuilt();
     final n = _nodePoints.length;
     if (n == 0) return null;
     final startId = n;
@@ -259,26 +340,20 @@ class TrailRouter {
 
     final dist = List<double>.filled(total, double.infinity);
     final prev = List<int>.filled(total, -1);
-    final visited = List<bool>.filled(total, false);
     dist[startId] = 0;
 
-    for (var iteration = 0; iteration < total; iteration++) {
-      var u = -1;
-      var best = double.infinity;
-      for (var i = 0; i < total; i++) {
-        if (!visited[i] && dist[i] < best) {
-          best = dist[i];
-          u = i;
-        }
-      }
-      if (u == -1) break;
+    final queue = _MinQueue()..add(_QueueEntry(startId, 0));
+    while (queue.isNotEmpty) {
+      final current = queue.removeFirst();
+      final u = current.node;
+      if (current.distance != dist[u]) continue;
       if (u == goalId) break;
-      visited[u] = true;
       for (final edge in edgesOf(u)) {
-        final candidate = dist[u] + edge.weight;
+        final candidate = current.distance + edge.weight;
         if (candidate < dist[edge.to]) {
           dist[edge.to] = candidate;
           prev[edge.to] = u;
+          queue.add(_QueueEntry(edge.to, candidate));
         }
       }
     }

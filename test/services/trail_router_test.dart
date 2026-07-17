@@ -1,10 +1,35 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:trail_runner/core/geo/distance.dart';
 import 'package:trail_runner/services/trail_extractor.dart';
 import 'package:trail_runner/services/trail_network.dart';
 import 'package:trail_runner/services/trail_router.dart';
 
+class _CountingDistance extends GeoDistance {
+  var calls = 0;
+
+  @override
+  double metersBetween(LatLng a, LatLng b) {
+    calls++;
+    return super.metersBetween(a, b);
+  }
+}
+
 void main() {
+  test('defers graph construction until graph routing is needed', () {
+    final distance = _CountingDistance();
+    final router = TrailRouter(
+      TrailNetwork(const [
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+      ]),
+      distance: distance,
+    );
+
+    expect(distance.calls, 0);
+    expect(router.nodeCount, 2);
+    expect(distance.calls, 1);
+  });
+
   test(
     'snaps onto the trail line between sparse vertices, not to a vertex',
     () {
@@ -93,6 +118,26 @@ void main() {
     // The ~2 km loop is rejected as an unreasonable detour: the leg bridges the
     // ~111 m gap with a straight segment instead.
     expect(route, [a.point, b.point]);
+    expect(router.buildConnectedRoute([a, b]), isNull);
+  });
+
+  test('strict route rejects anchors on disconnected trail networks', () {
+    final router = TrailRouter(
+      TrailNetwork(const [
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0.02, 0), LatLng(0.02, 0.002)],
+          kind: 'path',
+        ),
+      ]),
+    );
+
+    final first = router.snap(const LatLng(0, 0.001))!;
+    final far = router.snap(const LatLng(0.02, 0.001))!;
+
+    expect(router.buildConnectedRoute([first, far]), isNull);
+    expect(router.buildConnectedLeg(first, far), isNull);
+    expect(router.buildRoute([first, far]), [first.point, far.point]);
   });
 
   test('route between two anchors on the same trail follows the trail', () {
@@ -139,11 +184,14 @@ void main() {
     expect(a.trailIndex, isNot(b.trailIndex));
 
     final route = router.buildRoute([a, b]);
+    final strictRoute = router.buildConnectedRoute([a, b]);
 
     final passesJunction = route.any(
       (p) => (p.latitude).abs() < 1e-6 && (p.longitude - 0.002).abs() < 1e-6,
     );
     expect(passesJunction, isTrue);
     expect(route.last.latitude, closeTo(0.0015, 1e-4));
+    expect(strictRoute, route);
+    expect(router.buildConnectedLeg(a, b), route);
   });
 }

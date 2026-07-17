@@ -70,6 +70,40 @@ void main() {
     expect(tiles.every((tile) => tile.z == 14), isTrue);
   });
 
+  test('tilesForBounds caps a zoomed-out viewport around its center', () {
+    final tiles = RouteTrailBuilder().tilesForBounds(
+      const GeoBounds(north: 10, south: -10, east: 10, west: -10),
+    );
+
+    expect(tiles, hasLength(24));
+    expect(tiles, contains(const TileCoordinate(14, 8192, 8192)));
+    expect(tiles.every((tile) => (tile.x - 8192).abs() <= 3), isTrue);
+    expect(tiles.every((tile) => (tile.y - 8192).abs() <= 3), isTrue);
+  });
+
+  test('tilesNearPoint stays local when the viewport is zoomed out', () {
+    final builder = RouteTrailBuilder();
+    final tiles = builder.tilesNearPoint(const LatLng(0, 0));
+
+    expect(tiles, hasLength(9));
+    expect(tiles, contains(const TileCoordinate(14, 8192, 8192)));
+    expect(tiles.every((tile) => (tile.x - 8192).abs() <= 1), isTrue);
+    expect(tiles.every((tile) => (tile.y - 8192).abs() <= 1), isTrue);
+  });
+
+  test('interactive leg loading rejects non-overlapping far neighborhoods', () {
+    final builder = RouteTrailBuilder();
+
+    expect(
+      builder.canLoadInteractiveLeg(const LatLng(0, 0), const LatLng(0, 0.01)),
+      isTrue,
+    );
+    expect(
+      builder.canLoadInteractiveLeg(const LatLng(0, 0), const LatLng(10, 10)),
+      isFalse,
+    );
+  });
+
   test('networkForBounds reads covering tiles and closes the source', () async {
     final source = _EmptySource();
     final builder = RouteTrailBuilder(openSource: (_) async => source);
@@ -84,6 +118,20 @@ void main() {
     expect(source.closed, isTrue);
   });
 
+  test('networkNearPoint reads only a bounded local neighborhood', () async {
+    final source = _EmptySource();
+    final builder = RouteTrailBuilder(openSource: (_) async => source);
+
+    final network = await builder.networkNearPoint(
+      const LatLng(0, 0),
+      'https://example/planet',
+    );
+
+    expect(network.isEmpty, isTrue);
+    expect(source.reads, 9);
+    expect(source.closed, isTrue);
+  });
+
   test('refineOntoNetwork bridges an off-network gap along connected ways', () {
     // Two collinear trails that meet at a shared junction at lon 0.002.
     final network = TrailNetwork(const [
@@ -94,10 +142,11 @@ void main() {
 
     // The middle point is ~55 m north of the line (off any way); the ends are
     // on it. The refined route should bridge across, staying on the network.
-    final refined = builder.refineOntoNetwork(
-      const [LatLng(0, 0), LatLng(0.0005, 0.002), LatLng(0, 0.004)],
-      network,
-    );
+    final refined = builder.refineOntoNetwork(const [
+      LatLng(0, 0),
+      LatLng(0.0005, 0.002),
+      LatLng(0, 0.004),
+    ], network);
 
     expect(refined.length, greaterThanOrEqualTo(2));
     // Every point stays on the connected way (latitude ~0): the detour is gone.

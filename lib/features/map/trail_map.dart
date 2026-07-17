@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../app/app_store.dart';
 import '../../core/geo/geo_bounds.dart';
+import '../../core/geo/polyline_simplifier.dart';
 import '../../models/offline_area.dart';
 import '../../models/trail_route.dart';
 import '../../services/map_provider.dart';
@@ -93,6 +94,7 @@ class _TrailMapState extends State<TrailMap> {
   late final MapController _controller;
   late LatLng _cameraCenter;
   late double _cameraZoom;
+  late double _renderZoom;
   late bool _offlineCoverageAvailable;
   late String _lastAutoFitSignature;
 
@@ -143,6 +145,7 @@ class _TrailMapState extends State<TrailMap> {
     _controller = MapController();
     _cameraCenter = _defaultCenter;
     _cameraZoom = _defaultZoom;
+    _renderZoom = _cameraZoom;
     _offlineCoverageAvailable = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
     _lastAutoFitSignature = _contentSignature;
     if (widget.autoFit && _hasPrimaryContent) {
@@ -290,9 +293,12 @@ class _TrailMapState extends State<TrailMap> {
     final zoomChanged = (_cameraZoom - camera.zoom).abs() > 0.001;
     _cameraCenter = camera.center;
     _cameraZoom = camera.zoom;
+    final renderZoomChanged = (_renderZoom - camera.zoom).abs() >= 0.75;
+    if (renderZoomChanged) _renderZoom = camera.zoom;
     final available = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
     if ((available != _offlineCoverageAvailable ||
-            (_tileMode == MapTileMode.offline && zoomChanged)) &&
+            (_tileMode == MapTileMode.offline && zoomChanged) ||
+            renderZoomChanged) &&
         mounted) {
       setState(() => _offlineCoverageAvailable = available);
     }
@@ -490,12 +496,23 @@ class _TrailMapState extends State<TrailMap> {
 
   @override
   Widget build(BuildContext context) {
-    final routePoints = _routePoints;
+    List<LatLng> renderPoints(List<LatLng> points) =>
+        simplifyPolylineForRendering(
+          points,
+          toleranceMeters: renderingToleranceMeters(
+            _cameraCenter.latitude,
+            _renderZoom,
+          ),
+        );
+
+    final routePoints = renderPoints(_routePoints);
     final markerPoints = widget.waypointMarkers ?? widget.waypoints;
     final otherRoutePoints = widget.routes
         .where((candidate) => candidate.id != widget.route?.id)
         .map(
-          (candidate) => candidate.points.map((point) => point.latLng).toList(),
+          (candidate) => renderPoints(
+            candidate.points.map((point) => point.latLng).toList(),
+          ),
         )
         .where((points) => points.length > 1)
         .toList();
@@ -531,7 +548,7 @@ class _TrailMapState extends State<TrailMap> {
                 polylines: [
                   for (final line in widget.trailOverlay)
                     Polyline(
-                      points: line,
+                      points: renderPoints(line),
                       color: Colors.brown.withAlpha(120),
                       strokeWidth: 2,
                     ),
@@ -601,7 +618,7 @@ class _TrailMapState extends State<TrailMap> {
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: widget.track,
+                    points: renderPoints(widget.track),
                     color: Colors.blue,
                     strokeWidth: 5,
                   ),
@@ -611,7 +628,7 @@ class _TrailMapState extends State<TrailMap> {
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: widget.waypoints,
+                    points: renderPoints(widget.waypoints),
                     color: Theme.of(context).colorScheme.primary,
                     strokeWidth: 4,
                   ),
