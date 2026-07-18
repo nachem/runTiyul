@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-07-16
+Last reviewed: 2026-07-18
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -49,6 +49,9 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 ### `.github/workflows/release.yml`
 
 - **Triggers:** pushed tag matching `v*`, or manual `workflow_dispatch`.
+- **Metadata gate:** before any platform build, strict `vMAJOR.MINOR.PATCH` must
+  match the semantic version in `pubspec.yaml`, and a non-empty matching note at
+  `docs/wiki/releases/<tag>.md` must exist.
 - **Android job (Ubuntu):** `flutter build apk --release`, renamed to
   `RunTiyul.apk`.
 - **iOS job (macOS):** `flutter build ios --release --no-codesign`, then the
@@ -56,6 +59,7 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
   `RunTiyul.ipa`. No Apple signing secrets are used.
 - **Publish:** both assets are attached to a GitHub Release via
   `softprops/action-gh-release@v2` (needs `permissions: contents: write`). The
+  matching wiki release-note file is used verbatim as the Release body. The
   publish job is resilient: it runs whenever the Android APK build succeeds and
   attaches the iOS `.ipa` only when that best-effort macOS build produced one, so
   a failing iOS build never blocks the APK release.
@@ -77,11 +81,22 @@ One-time setup (both completed 2026-07-16):
    Actions**_ (done; also settable with
    `gh api -X POST repos/nachem/runTiyul/pages -f build_type=workflow`).
 
-To publish a release (e.g. a future `v1.1.0`):
+To publish a release (example `v1.2.0`):
+
+1. Choose the next semantic version and a monotonically increasing Flutter
+  build number.
+2. Update `pubspec.yaml` (for example `version: 1.2.0+5`).
+3. Add `docs/wiki/releases/v1.2.0.md`, update the
+  [release-notes index](08-release-notes.md), and synchronize this page and
+  `INDEX.md`.
+4. Run formatting, analyzer, tests, the relevant platform build, and local wiki
+  link validation.
+5. Commit the complete release state, then tag and push that exact commit:
 
 ```powershell
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin main
+git push origin v1.2.0
 ```
 
 This runs `release.yml`, builds both artifacts, and creates the Release. After
@@ -89,6 +104,10 @@ the run completes, the website's download buttons resolve automatically. Note
 that pushing/merging to `main` does **not** trigger a release build — only a
 `v*` tag or a manual `workflow_dispatch` does. `pages.yml` redeploys the site
 only when a push to `main` changes files under `site/**`.
+
+The workflow fails before platform builds if the tag, `pubspec.yaml`, and
+authored wiki note do not agree. Never move an existing release tag or add its
+notes retrospectively.
 
 ## 5. Known limitations
 
@@ -105,6 +124,10 @@ only when a push to `main` changes files under `site/**`.
 ## 6. Licensing & attribution
 
 - Code: MIT License, `Copyright (c) 2026 Bernoulli Software`.
+- Navigation earcons: Kenney **Interface Sounds 1.0**, CC0 1.0 Universal.
+  `assets/audio/navigation/LICENSE.txt` records the source URL, original names,
+  download date, and SHA-256 hashes for the two bundled OGG files. CC0 does not
+  require attribution, but the provenance is retained for release auditing.
 - Map data © OpenStreetMap contributors; in-app attribution requirements and the
   prohibition on bulk/offline use of `tile.openstreetmap.org` continue to apply
   (see [offline map implementation](06-offline-map-packages.md)).

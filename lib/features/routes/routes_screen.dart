@@ -466,218 +466,222 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _nameController,
-              onChanged: (_) => setState(() {}),
-              decoration: InputDecoration(
-                labelText: 'Route name',
-                border: const OutlineInputBorder(),
-                errorText: _nameController.text.trim().isEmpty
-                    ? 'Enter a route name'
-                    : null,
+      body: SafeArea(
+        key: const ValueKey('route-editor-safe-area'),
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: TextField(
+                controller: _nameController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: 'Route name',
+                  border: const OutlineInputBorder(),
+                  errorText: _nameController.text.trim().isEmpty
+                      ? 'Enter a route name'
+                      : null,
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.touch_app_outlined),
-                      label: Text('Checkpoints'),
-                    ),
-                    ButtonSegment(
-                      value: true,
-                      icon: Icon(Icons.alt_route),
-                      label: Text('Follow trails'),
-                    ),
-                  ],
-                  selected: {_followTrails},
-                  onSelectionChanged: (selection) =>
-                      _setFollowTrails(selection.first),
-                ),
-                if (_followTrails)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _loadingTrails
-                                ? 'Loading trails\u2026'
-                                : (_trailError ??
-                                      'Tap trails to build the route'),
-                            style: Theme.of(context).textTheme.bodySmall,
-                            overflow: TextOverflow.ellipsis,
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: false,
+                        icon: Icon(Icons.touch_app_outlined),
+                        label: Text('Checkpoints'),
+                      ),
+                      ButtonSegment(
+                        value: true,
+                        icon: Icon(Icons.alt_route),
+                        label: Text('Follow trails'),
+                      ),
+                    ],
+                    selected: {_followTrails},
+                    onSelectionChanged: (selection) =>
+                        _setFollowTrails(selection.first),
+                  ),
+                  if (_followTrails)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _loadingTrails
+                                  ? 'Loading trails\u2026'
+                                  : (_trailError ??
+                                        'Tap trails to build the route'),
+                              style: Theme.of(context).textTheme.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _loadingTrails
-                              ? null
-                              : () => unawaited(_loadTrails()),
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Reload'),
-                        ),
-                      ],
+                          TextButton.icon(
+                            onPressed: _loadingTrails
+                                ? null
+                                : () => unawaited(_loadTrails()),
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Reload'),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: TrailMap(
-              store: widget.store,
-              waypoints: _points,
-              waypointMarkers: _followTrails ? _activeMarkers : null,
-              trailOverlay: _followTrails ? _trailLines : const [],
-              highlightedWaypoint: _selected,
-              initialCenter: widget.store.currentLocation,
-              initialZoom: widget.initialRoute == null ? 16 : null,
-              autoFit: widget.initialRoute != null,
-              refitOnContentChange: false,
-              onVisibleBoundsChanged: (bounds) => _lastBounds = bounds,
-              onTap: (point) {
-                if (_followTrails) {
-                  unawaited(_addFollowAnchor(point));
-                  return;
-                }
-                setState(() {
-                  final selected = _selected;
-                  if (_moving && selected != null) {
-                    _points[selected] = point;
-                    _moving = false;
-                  } else {
-                    _points.add(point);
+            Expanded(
+              child: TrailMap(
+                store: widget.store,
+                waypoints: _points,
+                waypointMarkers: _followTrails ? _activeMarkers : null,
+                trailOverlay: _followTrails ? _trailLines : const [],
+                highlightedWaypoint: _selected,
+                initialCenter: widget.store.currentLocation,
+                initialZoom: widget.initialRoute == null ? 16 : null,
+                autoFit: widget.initialRoute != null,
+                refitOnContentChange: false,
+                onVisibleBoundsChanged: (bounds) => _lastBounds = bounds,
+                onTap: (point) {
+                  if (_followTrails) {
+                    unawaited(_addFollowAnchor(point));
+                    return;
                   }
-                });
-              },
-              onLongPress: (point) =>
-                  setState(() => _selected = _nearestWaypoint(point)),
-              showControls: true,
+                  setState(() {
+                    final selected = _selected;
+                    if (_moving && selected != null) {
+                      _points[selected] = point;
+                      _moving = false;
+                    } else {
+                      _points.add(point);
+                    }
+                  });
+                },
+                onLongPress: (point) =>
+                    setState(() => _selected = _nearestWaypoint(point)),
+                showControls: true,
+              ),
             ),
-          ),
-          if (_selected != null)
-            Material(
-              color: Theme.of(context).colorScheme.secondaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 4,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _moving
-                            ? 'Point ${_selected! + 1}: tap the map to move it'
-                            : (_followTrails
-                                  ? 'Anchor ${_selected! + 1} selected'
-                                  : 'Point ${_selected! + 1} selected'),
-                        overflow: TextOverflow.ellipsis,
+            if (_selected != null)
+              Material(
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _moving
+                              ? 'Point ${_selected! + 1}: tap the map to move it'
+                              : (_followTrails
+                                    ? 'Anchor ${_selected! + 1} selected'
+                                    : 'Point ${_selected! + 1} selected'),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    if (!_followTrails)
+                      if (!_followTrails)
+                        TextButton.icon(
+                          onPressed: () => setState(() => _moving = true),
+                          icon: const Icon(Icons.open_with),
+                          label: const Text('Move'),
+                        ),
                       TextButton.icon(
-                        onPressed: () => setState(() => _moving = true),
-                        icon: const Icon(Icons.open_with),
-                        label: const Text('Move'),
-                      ),
-                    TextButton.icon(
-                      onPressed: () => setState(() {
-                        final selected = _selected!;
-                        if (_followTrails) {
-                          if (selected < _followAnchors.length) {
-                            _followAnchors.removeAt(selected);
+                        onPressed: () => setState(() {
+                          final selected = _selected!;
+                          if (_followTrails) {
+                            if (selected < _followAnchors.length) {
+                              _followAnchors.removeAt(selected);
+                            }
+                            _rebuildFollowRoute();
+                          } else {
+                            _points.removeAt(selected);
                           }
-                          _rebuildFollowRoute();
-                        } else {
-                          _points.removeAt(selected);
-                        }
-                        _selected = null;
-                        _moving = false;
-                      }),
-                      icon: const Icon(Icons.delete_outline),
-                      label: const Text('Delete'),
-                    ),
-                    IconButton(
-                      tooltip: 'Deselect',
-                      onPressed: () => setState(() {
-                        _selected = null;
-                        _moving = false;
-                      }),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (!_followTrails)
-            SwitchListTile(
-              value: _snap,
-              onChanged: (value) => setState(() => _snap = value),
-              title: const Text('Snap to nearby trail'),
-              subtitle: const Text(
-                'Aligns the saved route to a close real trail when one is found.',
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _followTrails
-                        ? '${_followAnchors.length} trail points'
-                        : '${_points.length} waypoints',
+                          _selected = null;
+                          _moving = false;
+                        }),
+                        icon: const Icon(Icons.delete_outline),
+                        label: const Text('Delete'),
+                      ),
+                      IconButton(
+                        tooltip: 'Deselect',
+                        onPressed: () => setState(() {
+                          _selected = null;
+                          _moving = false;
+                        }),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
                   ),
                 ),
-                FilledButton.icon(
-                  onPressed:
-                      _saving ||
-                          _points.length < 2 ||
-                          _nameController.text.trim().isEmpty
-                      ? null
-                      : () async {
-                          setState(() => _saving = true);
-                          await widget.store.setSnapRoutesToTrails(_snap);
-                          final initial = widget.initialRoute;
-                          final saved = initial == null
-                              ? await widget.store.saveManualRoute(
-                                  _nameController.text,
-                                  _points,
-                                )
-                              : await widget.store.updateManualRoute(
-                                  initial,
-                                  _nameController.text,
-                                  _points,
-                                );
-                          if (!context.mounted) return;
-                          if (saved) {
-                            Navigator.of(context).pop(true);
-                          } else {
-                            setState(() => _saving = false);
-                          }
-                        },
-                  icon: _saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save),
-                  label: const Text('Save'),
+              ),
+            if (!_followTrails)
+              SwitchListTile(
+                value: _snap,
+                onChanged: (value) => setState(() => _snap = value),
+                title: const Text('Snap to nearby trail'),
+                subtitle: const Text(
+                  'Aligns the saved route to a close real trail when one is found.',
                 ),
-              ],
+              ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _followTrails
+                          ? '${_followAnchors.length} trail points'
+                          : '${_points.length} waypoints',
+                    ),
+                  ),
+                  FilledButton.icon(
+                    onPressed:
+                        _saving ||
+                            _points.length < 2 ||
+                            _nameController.text.trim().isEmpty
+                        ? null
+                        : () async {
+                            setState(() => _saving = true);
+                            await widget.store.setSnapRoutesToTrails(_snap);
+                            final initial = widget.initialRoute;
+                            final saved = initial == null
+                                ? await widget.store.saveManualRoute(
+                                    _nameController.text,
+                                    _points,
+                                  )
+                                : await widget.store.updateManualRoute(
+                                    initial,
+                                    _nameController.text,
+                                    _points,
+                                  );
+                            if (!context.mounted) return;
+                            if (saved) {
+                              Navigator.of(context).pop(true);
+                            } else {
+                              setState(() => _saving = false);
+                            }
+                          },
+                    icon: _saving
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save),
+                    label: const Text('Save'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -787,45 +791,50 @@ class RouteDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: TrailMap(
-              store: store,
-              route: route,
-              showControls: true,
-              autoFit: true,
+      body: SafeArea(
+        key: const ValueKey('route-detail-safe-area'),
+        top: false,
+        child: Column(
+          children: [
+            Expanded(
+              child: TrailMap(
+                store: store,
+                route: route,
+                routes: store.routes,
+                showControls: true,
+                autoFit: true,
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        formatDistance(route.distanceMeters),
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      Text('${route.points.length} route points'),
-                    ],
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          formatDistance(route.distanceMeters),
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        Text('${route.points.length} route points'),
+                      ],
+                    ),
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () {
-                    store.selectRoute(route);
-                    Navigator.of(context).pop();
-                    onStart();
-                  },
-                  icon: const Icon(Icons.directions_run),
-                  label: const Text('Use route'),
-                ),
-              ],
+                  FilledButton.icon(
+                    onPressed: () {
+                      store.selectRoute(route);
+                      Navigator.of(context).pop();
+                      onStart();
+                    },
+                    icon: const Icon(Icons.directions_run),
+                    label: const Text('Use route'),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

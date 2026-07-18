@@ -1,0 +1,18 @@
+Navigation alert audio
+
+Source: Kenney Interface Sounds 1.0
+Author: Kenney Vleugels (Kenney.nl)
+Source page: https://kenney.nl/assets/interface-sounds
+Downloaded: 2026-07-18
+License: Creative Commons Zero (CC0) 1.0 Universal
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+
+CC0 permits copying, modification, distribution, performance, and commercial
+use without requesting permission. Credit is not mandatory.
+
+Bundled files:
+
+- off_route_warning.ogg (original: error_003.ogg)
+  SHA-256: 885B28175C7B511118BCFFAB95675B48BBAC9005CF6514656EBDAD979276B3AB
+- junction_ahead.ogg (original: confirmation_004.ogg)
+  SHA-256: 568967A3D9F8A8F6AF54EA01729C4882284308F2A27D78C07FFD7EE0D6951661

@@ -6,6 +6,7 @@ import 'package:trail_runner/app/app_store.dart';
 import 'package:trail_runner/data/app_database.dart';
 import 'package:trail_runner/data/app_repository.dart';
 import 'package:trail_runner/services/map_provider.dart';
+import 'package:trail_runner/services/navigation_alert_feedback.dart';
 import 'package:trail_runner/services/navigation_monitor.dart';
 import 'package:trail_runner/services/tile_store.dart';
 
@@ -41,11 +42,13 @@ void main() {
     await tileDir.delete(recursive: true);
   });
 
-  Future<AppStore> openStore() => AppStore.forTesting(
-    repository: repository,
-    tileStore: tileStore,
-    mapProvider: _config,
-  );
+  Future<AppStore> openStore({NavigationAlertFeedback? feedback}) =>
+      AppStore.forTesting(
+        repository: repository,
+        tileStore: tileStore,
+        mapProvider: _config,
+        navigationAlertFeedback: feedback,
+      );
 
   test(
     'snap-to-trails setting defaults on and persists when toggled off',
@@ -71,6 +74,7 @@ void main() {
         offRoutePersistence: 5,
         junctionEnabled: false,
         junctionMeters: 40,
+        feedbackMode: NavFeedbackMode.voice,
       ),
     );
 
@@ -81,5 +85,37 @@ void main() {
     expect(config.offRoutePersistence, 5);
     expect(config.junctionEnabled, isFalse);
     expect(config.junctionMeters, 40);
+    expect(config.feedbackMode, NavFeedbackMode.voice);
   });
+
+  test(
+    'preview uses the unsaved output mode and representative guidance',
+    () async {
+      final tones = <NavAlert>[];
+      final messages = <String>[];
+      final feedback = NavigationAlertFeedback(
+        haptic: () async {},
+        playTone: (alert) async {
+          tones.add(alert);
+          return true;
+        },
+        speak: (message) async {
+          messages.add(message);
+          return true;
+        },
+      );
+      final store = await openStore(feedback: feedback);
+
+      await store.previewNavigationAlert(
+        NavAlert.junction,
+        config: const NavAlertConfig(
+          junctionMeters: 35,
+          feedbackMode: NavFeedbackMode.voice,
+        ),
+      );
+
+      expect(tones, isEmpty);
+      expect(messages, ['In 35 meters, keep left.']);
+    },
+  );
 }

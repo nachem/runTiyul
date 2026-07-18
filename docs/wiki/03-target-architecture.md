@@ -233,6 +233,21 @@ recording/paused -> discarding -> discarded
 
 Every transition that changes durable state must be persisted.
 
+Navigation alert detection remains pure Dart in `NavigationMonitor`. Platform
+side effects belong to `NavigationAlertFeedback`, which receives a complete
+`NavStatus` and the persisted output mode. Every fired alert attempts a haptic;
+the selected mode then adds a bundled tone, concise system-TTS guidance, both in
+sequence, or neither. Tone + voice plays the earcon before speech so the two do
+not mask each other. Voice-only mode falls back to the corresponding offline
+tone when no installed English voice can speak. Playback, speech, and haptic
+failures are best-effort and must never pause or fail activity recording.
+
+The two bundled earcons are immutable CC0 OGG assets with source provenance and
+hashes beside the files. System TTS uses installed platform voices rather than a
+network service, preserving offline behavior and location privacy. These prompts
+cover persistent off-route state and an approaching junction direction only;
+they are not full turn-by-turn navigation.
+
 ## 8. Metric calculation boundaries
 
 - Distance: geodesic distance between accepted sequential points.
@@ -389,6 +404,8 @@ A failed deletion remains visible and retryable.
 - Background location only when the supported recording design needs it.
 - Foreground service and persistent notification for active background
   recording.
+- TTS-service package discovery and navigation audio attributes/focus for short
+  guidance prompts; bundled tones remain the offline fallback.
 - Android 13+ notification permission where applicable.
 - Scoped storage compatible GPX import/export.
 
@@ -396,7 +413,9 @@ A failed deletion remains visible and retryable.
 
 - When-in-use location description.
 - Background/always location only when recording requirements justify it.
-- Location background mode and correct Core Location behavior.
+- Location and audio background modes. Guidance uses a shared playback session,
+  `voicePrompt` mode, Bluetooth routes, and duck/interruption options suitable
+  for occasional navigation speech.
 - File importer/exporter integration.
 
 Permissions must be requested progressively, with platform-specific recovery
@@ -410,6 +429,8 @@ instructions.
 - Geodesic distance and metric accumulation.
 - GPS accuracy/jump filters.
 - Route progress and off-route persistence.
+- Navigation output-mode routing, concise voice phrase construction, missing-TTS
+  tone fallback, and bundled-audio validation.
 - Bounds-to-tile enumeration at zoom boundaries and antimeridian.
 - Storage estimates and byte formatting.
 - Download retry/cancel/resume state machines.
@@ -421,6 +442,7 @@ instructions.
 - Permission rationale and denial recovery.
 - Route import/create workflows.
 - Recording controls and state transitions.
+- Alert output selection plus off-route/junction preview actions.
 - Download confirmation, progress, failure, and deletion.
 
 ### Integration and real-device tests
@@ -429,6 +451,8 @@ instructions.
 - Airplane-mode map rendering.
 - Process restart during download and recording.
 - Screen lock/background GPS recording on Android and iOS.
+- Physical-device tone/TTS audibility, media/silent-mode behavior,
+  Bluetooth/open-ear routing, and locked-screen alert playback.
 - Low-storage failure and recovery.
 - GPX import/export through platform pickers.
 

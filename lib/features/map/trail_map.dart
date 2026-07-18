@@ -603,7 +603,7 @@ class _TrailMapState extends State<TrailMap> {
                     ),
                 ],
               ),
-            if (_showTrails && routePoints.length > 1)
+            if (routePoints.length > 1)
               PolylineLayer(
                 polylines: [
                   Polyline(

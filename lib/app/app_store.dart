@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path/path.dart' as p;
@@ -21,6 +20,7 @@ import '../services/download_foreground_service.dart';
 import '../services/gpx_service.dart';
 import '../services/location_service.dart';
 import '../services/map_provider.dart';
+import '../services/navigation_alert_feedback.dart';
 import '../services/navigation_monitor.dart';
 import '../services/offline_download_service.dart';
 import '../services/route_trail_builder.dart';
@@ -48,6 +48,7 @@ class AppStore extends ChangeNotifier {
     required this.vectorConverter,
     required this.routeTrailBuilder,
     required this.backgroundDownloads,
+    required this._navigationAlertFeedback,
     required this._publicRasterDevUnlockCompiled,
   });
 
@@ -61,6 +62,7 @@ class AppStore extends ChangeNotifier {
   /// Keeps downloads alive while the app is backgrounded (an Android foreground
   /// service; a no-op on other platforms).
   final DownloadForegroundService backgroundDownloads;
+  final NavigationAlertFeedback _navigationAlertFeedback;
   final bool _publicRasterDevUnlockCompiled;
   final GpxService _gpxService = const GpxService();
   final LocationService _locationService = const LocationService();
@@ -200,7 +202,8 @@ class AppStore extends ChangeNotifier {
         ),
       ),
       backgroundDownloads: DownloadForegroundService(),
-        publicRasterDevUnlockCompiled:
+      navigationAlertFeedback: NavigationAlertFeedback.device(),
+      publicRasterDevUnlockCompiled:
           MapProviderConfig.publicRasterDevUnlockCompiled,
     );
     await store.reload();
@@ -214,6 +217,7 @@ class AppStore extends ChangeNotifier {
     OfflineDownloadService? downloader,
     VectorAreaConversionService? vectorConverter,
     DownloadForegroundService? backgroundDownloads,
+    NavigationAlertFeedback? navigationAlertFeedback,
     bool publicRasterDevUnlockCompiled = false,
   }) async {
     final store = AppStore._(
@@ -240,6 +244,8 @@ class AppStore extends ChangeNotifier {
         ),
       ),
       backgroundDownloads: backgroundDownloads ?? DownloadForegroundService(),
+      navigationAlertFeedback:
+          navigationAlertFeedback ?? NavigationAlertFeedback.silent(),
       publicRasterDevUnlockCompiled: publicRasterDevUnlockCompiled,
     );
     await store.reload();
@@ -642,6 +648,32 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  /// Plays a representative alert with the settings currently shown in the UI.
+  Future<NavigationFeedbackResult> previewNavigationAlert(
+    NavAlert alert, {
+    NavAlertConfig? config,
+  }) {
+    final effectiveConfig = config ?? navAlertConfig;
+    final status = switch (alert) {
+      NavAlert.offRoute => NavStatus(
+        offRoute: true,
+        distanceToRouteMeters: effectiveConfig.offRouteMeters + 10,
+        triggered: alert,
+      ),
+      NavAlert.junction => NavStatus(
+        offRoute: false,
+        junctionDistanceMeters: effectiveConfig.junctionMeters,
+        junctionTurn: TurnDirection.left,
+        triggered: alert,
+      ),
+      NavAlert.none => NavStatus.idle,
+    };
+    return _navigationAlertFeedback.notify(
+      status,
+      mode: effectiveConfig.feedbackMode,
+    );
+  }
+
   Future<void> startActivity() async {
     if (activeActivity != null) {
       _setError('Finish or discard the current activity first.');
@@ -812,7 +844,12 @@ class AppStore extends ChangeNotifier {
     );
     if (navStatus.triggered == NavAlert.offRoute ||
         navStatus.triggered == NavAlert.junction) {
-      unawaited(HapticFeedback.heavyImpact());
+      unawaited(
+        _navigationAlertFeedback.notify(
+          navStatus,
+          mode: navAlertConfig.feedbackMode,
+        ),
+      );
     }
   }
 
@@ -1213,6 +1250,7 @@ class AppStore extends ChangeNotifier {
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
     if (_backgroundServiceActive) unawaited(backgroundDownloads.stop());
+    unawaited(_navigationAlertFeedback.dispose());
     downloader.dispose();
     vectorConverter.dispose();
     super.dispose();

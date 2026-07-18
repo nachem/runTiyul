@@ -10,8 +10,9 @@ name: Release build
 #   https://github.com/<owner>/<repo>/releases/latest/download/RunTiyul.apk
 #   https://github.com/<owner>/<repo>/releases/latest/download/RunTiyul.ipa
 #
-# Trigger a release by pushing a semver tag, e.g.:
-#   git tag v1.0.0 && git push origin v1.0.0
+# Trigger a release by pushing a semver tag that matches pubspec.yaml and has
+# authored notes at docs/wiki/releases/<tag>.md, e.g.:
+#   git tag v1.2.0 && git push origin v1.2.0
 # or run this workflow manually from the Actions tab (workflow_dispatch).
 
 on:
@@ -21,7 +22,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to create (e.g. v1.0.0). Required for manual runs.'
+        description: 'Release tag to create (e.g. v1.2.0). Required for manual runs.'
         required: true
         type: string
       prerelease:
@@ -42,10 +43,57 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
+  # Release metadata and authored notes gate
+  # ---------------------------------------------------------------------------
+  metadata:
+    name: Validate release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.metadata.outputs.tag }}
+      notes_path: ${{ steps.metadata.outputs.notes_path }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate version and release notes
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Release tag must be strict semver (vMAJOR.MINOR.PATCH): $TAG"
+            exit 1
+          fi
+
+          APP_VERSION="$(awk '/^version: / {print $2}' pubspec.yaml)"
+          APP_SEMVER="${APP_VERSION%%+*}"
+          if [ "$TAG" != "v$APP_SEMVER" ]; then
+            echo "::error::Tag $TAG does not match pubspec version $APP_VERSION"
+            exit 1
+          fi
+
+          NOTES_PATH="docs/wiki/releases/$TAG.md"
+          if [ ! -s "$NOTES_PATH" ]; then
+            echo "::error::Missing authored release notes: $NOTES_PATH"
+            exit 1
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+          echo "Validated $TAG with $NOTES_PATH and app version $APP_VERSION"
+
+  # ---------------------------------------------------------------------------
   # Android APK
   # ---------------------------------------------------------------------------
   android:
     name: Build Android APK
+    needs: metadata
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -86,6 +134,7 @@ jobs:
   # ---------------------------------------------------------------------------
   ios:
     name: Build iOS (unsigned)
+    needs: metadata
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -128,21 +177,15 @@ jobs:
   # ---------------------------------------------------------------------------
   release:
     name: Publish GitHub Release
-    needs: [android, ios]
+    needs: [metadata, android, ios]
     # Publish as long as the Android APK built. The unsigned iOS build runs on a
     # macOS runner and is best-effort: if it fails we still ship the APK (the
     # site's primary download) and attach the IPA only when it is available.
-    if: ${{ always() && needs.android.result == 'success' }}
+    if: ${{ always() && needs.metadata.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Resolve release tag
-        id: tag
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "value=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Download built artifacts
         uses: actions/download-artifact@v4
@@ -163,23 +206,11 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.value }}
-          name: RunTiyul ${{ steps.tag.outputs.value }}
-          generate_release_notes: true
+          tag_name: ${{ needs.metadata.outputs.tag }}
+          name: RunTiyul ${{ needs.metadata.outputs.tag }}
+          body_path: ${{ needs.metadata.outputs.notes_path }}
           prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
           fail_on_unmatched_files: false
-          body: |
-            ## RunTiyul ${{ steps.tag.outputs.value }}
-
-            Offline-first trail running: offline maps, GPX routes, GPS recording, and on-route navigation.
-
-            ### Downloads
-            | Platform | File | Notes |
-            | --- | --- | --- |
-            | Android | `RunTiyul.apk` | Enable "install unknown apps", then open the file (or `adb install RunTiyul.apk`). |
-            | iOS | `RunTiyul.ipa` | **Unsigned** build. Sideload with [AltStore](https://altstore.io/) or [Sideloadly](https://sideloadly.io/). Not distributed via the App Store. |
-
-            See the [website](https://nachem.github.io/RunTiyul/) for full install instructions.
           files: |
             release/RunTiyul.apk
             release/RunTiyul.ipa

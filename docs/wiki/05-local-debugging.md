@@ -1,6 +1,6 @@
 # Local Run and Debug Guide
 
-Last reviewed: 2026-07-14
+Last reviewed: 2026-07-18
 
 ## 1. Supported local targets
 
@@ -140,6 +140,32 @@ Test these states separately:
 Emulator behavior does not prove background recording reliability. Complete the
 release acceptance test on a physical Android and iOS device.
 
+### 6.1 Navigation alert audio
+
+Open **Record → Alerts** before starting a routed activity. **Tone + voice** is
+the recommended default for trail use; **Voice**, **Tones**, and **Haptics only**
+are also available. Tap both **Off route** and **Junction** under **Test alerts**
+after changing the mode; previews use the unsaved selection.
+
+Voice uses an installed English system voice and works without network access.
+If speech is unavailable, Voice falls back to the bundled tone and the preview
+shows a message. The device media volume controls the output.
+
+Physical-device verification must cover:
+
+1. Phone speaker audibility indoors and outdoors with wind and footfall noise.
+2. Wired, Bluetooth, and open-ear/bone-conduction routing where available.
+3. Tone + voice sequencing while music and spoken audio are playing.
+4. Silent/Do Not Disturb and low-media-volume behavior without claiming an
+  override the OS does not grant.
+5. A selected-route run that triggers sustained off-route and approaching-left,
+  right, and straight junction prompts from simulated or real GPS movement.
+6. Screen locked and app backgrounded on Android and iOS.
+7. Missing or disabled English TTS, confirming the bundled-tone fallback.
+
+Automated tests validate event routing and phrases but cannot prove audibility,
+voice installation, output routing, or background playback.
+
 ## 7. Offline map debugging
 
 The public OpenStreetMap standard tile service must not be used for production
@@ -203,15 +229,20 @@ Record:
 
 ## 11. Latest local verification
 
-Command validation on 2026-07-16 with Flutter 3.44.6:
+Command validation on 2026-07-18 with Flutter 3.44.6:
 
 - Dart formatter on changed Dart files: passed.
 - `flutter analyze --no-pub`: passed with no issues.
-- `flutter test`: all 117 tests passed.
+- `flutter test`: all 138 tests passed.
 - `flutter build apk --debug`: passed.
-- Tests cover the debug-default OSM/CyclOSM gate, release unlock persistence and
-  compile-out behavior, locked-chip routing, per-area provider routing,
-  topographic vector baking, and legacy raw-terrain cleanup.
+- `flutter build apk --release --no-pub`: passed; embedded version is
+  `1.2.0` (`versionCode` 5).
+- Tests cover navigation feedback mode persistence, bundled OGG validity,
+  tone/voice/haptic routing, concise guidance, speech fallback, and settings
+  previews; route-screen bottom safe areas; and realtime selected/saved route
+  visibility, in addition to the prior map/download/terrain coverage.
+- The Android build emitted a non-blocking future-compatibility warning because
+  `flutter_tts` 4.2.5 still applies KGP rather than Built-in Kotlin.
 
 Last Android emulator interaction evidence remains from 2026-07-14:
 
@@ -228,4 +259,5 @@ Last Android emulator interaction evidence remains from 2026-07-14:
 - Completed offline area preview after disabling network and restarting:
   rendered local tiles.
 
-Physical-device background tracking and iOS remain unverified.
+Physical-device background tracking, alert audibility/background playback, and
+iOS remain unverified.

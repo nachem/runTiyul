@@ -11,6 +11,7 @@ class NavAlertConfig {
     this.offRoutePersistence = 3,
     this.junctionEnabled = true,
     this.junctionMeters = 25,
+    this.feedbackMode = NavFeedbackMode.toneAndVoice,
   });
 
   /// Whether off-route alerts fire at all.
@@ -29,12 +30,16 @@ class NavAlertConfig {
   /// Proximity to a junction that triggers an alert, in meters.
   final double junctionMeters;
 
+  /// Audio/haptic treatment used when a navigation alert fires.
+  final NavFeedbackMode feedbackMode;
+
   NavAlertConfig copyWith({
     bool? offRouteEnabled,
     double? offRouteMeters,
     int? offRoutePersistence,
     bool? junctionEnabled,
     double? junctionMeters,
+    NavFeedbackMode? feedbackMode,
   }) {
     return NavAlertConfig(
       offRouteEnabled: offRouteEnabled ?? this.offRouteEnabled,
@@ -42,6 +47,7 @@ class NavAlertConfig {
       offRoutePersistence: offRoutePersistence ?? this.offRoutePersistence,
       junctionEnabled: junctionEnabled ?? this.junctionEnabled,
       junctionMeters: junctionMeters ?? this.junctionMeters,
+      feedbackMode: feedbackMode ?? this.feedbackMode,
     );
   }
 
@@ -51,6 +57,7 @@ class NavAlertConfig {
     'offRoutePersistence': offRoutePersistence,
     'junctionEnabled': junctionEnabled,
     'junctionMeters': junctionMeters,
+    'feedbackMode': feedbackMode.name,
   };
 
   factory NavAlertConfig.fromJson(Map<String, dynamic> json) {
@@ -69,8 +76,23 @@ class NavAlertConfig {
       junctionMeters:
           (json['junctionMeters'] as num?)?.toDouble() ??
           fallback.junctionMeters,
+      feedbackMode: NavFeedbackMode.values.firstWhere(
+        (mode) => mode.name == json['feedbackMode'],
+        orElse: () => fallback.feedbackMode,
+      ),
     );
   }
+}
+
+/// How a live alert reaches a runner. Every mode retains haptic feedback.
+enum NavFeedbackMode { toneAndVoice, tones, voice, hapticsOnly }
+
+extension NavFeedbackModeCapabilities on NavFeedbackMode {
+  bool get usesTone =>
+      this == NavFeedbackMode.toneAndVoice || this == NavFeedbackMode.tones;
+
+  bool get usesVoice =>
+      this == NavFeedbackMode.toneAndVoice || this == NavFeedbackMode.voice;
 }
 
 /// The alert produced on a single update, if any.

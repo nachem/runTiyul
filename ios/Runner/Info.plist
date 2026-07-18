@@ -32,6 +32,7 @@
 	<string>RunTiyul uses your location to show your position, follow routes, and record activities.</string>
 	<key>UIBackgroundModes</key>
 	<array>
+		<string>audio</string>
 		<string>location</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>

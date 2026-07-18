@@ -107,7 +107,8 @@ Two GitHub Actions workflows power distribution:
 - **[`.github/workflows/release.yml`](.github/workflows/release.yml)** — on a
   pushed `v*` tag (or manual dispatch) it builds the Android APK on Ubuntu and an
   unsigned iOS `.ipa` on macOS, then publishes a GitHub Release with the stable
-  assets `RunTiyul.apk` and `RunTiyul.ipa`.
+  assets `RunTiyul.apk` and `RunTiyul.ipa`. The tag must match `pubspec.yaml`
+  and have authored notes at `docs/wiki/releases/<tag>.md`.
 - **[`.github/workflows/pages.yml`](.github/workflows/pages.yml)** — on pushes to
   `main` that touch `site/**` (or manual dispatch) it deploys the marketing site
   in [`site/`](site/) to GitHub Pages.
@@ -116,11 +117,13 @@ Two GitHub Actions workflows power distribution:
 
 1. **Enable Pages:** repository _Settings → Pages → Build and deployment →
    Source: **GitHub Actions**_.
-2. **Publish the first release** so download links resolve:
+2. **Publish a release** after following the wiki's
+  [release-note contract](docs/wiki/08-release-notes.md):
 
    ```powershell
-   git tag v1.0.0
-   git push origin v1.0.0
+  git tag v1.2.0
+  git push origin main
+  git push origin v1.2.0
    ```
 
    The stable asset names (`RunTiyul.apk` / `RunTiyul.ipa`) keep the

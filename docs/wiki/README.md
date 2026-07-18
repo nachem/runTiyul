@@ -24,6 +24,10 @@ maintenance contract.
 7. [Long-term offline map package implementation](06-offline-map-packages.md)
    - Defines the proposed legal PMTiles/MBTiles supply chain, mobile migration,
      validation, and rollout plan.
+8. [Release and distribution](07-release-and-distribution.md)
+   - Documents artifact CI, publishing, install links, and the release runbook.
+9. [Release notes](08-release-notes.md)
+   - Indexes authored per-version notes and defines the mandatory release gate.
 
 ## Source-of-truth rules
 
@@ -48,6 +52,8 @@ Every feature change should update:
 - Implementation status when code is added, removed, or validated.
 - Architecture when module boundaries or persistence formats change.
 - Setup instructions when tooling, permissions, or platform support changes.
+- Release notes and the release index whenever a version is prepared or
+   published.
 
 Use absolute dates in status notes. Avoid vague descriptions such as "recently"
 or "almost finished."

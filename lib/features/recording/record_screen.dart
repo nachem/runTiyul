@@ -45,6 +45,7 @@ class _ReadyToRecord extends StatelessWidget {
           child: TrailMap(
             store: store,
             route: store.selectedRoute,
+            routes: store.routes,
             showControls: true,
           ),
         ),
@@ -108,6 +109,7 @@ class _ActiveRecording extends StatelessWidget {
           child: TrailMap(
             store: store,
             route: route,
+            routes: store.routes,
             track: activity.samples.map((sample) => sample.latLng).toList(),
             showControls: true,
           ),
@@ -212,7 +214,7 @@ void _showAlertSettings(BuildContext context, AppStore store) {
   showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _AlertSettingsSheet(store: store),
+    builder: (_) => AlertSettingsSheet(store: store),
   );
 }
 
@@ -275,17 +277,45 @@ class _NavBanner extends StatelessWidget {
   }
 }
 
-class _AlertSettingsSheet extends StatefulWidget {
-  const _AlertSettingsSheet({required this.store});
+class AlertSettingsSheet extends StatefulWidget {
+  const AlertSettingsSheet({super.key, required this.store});
 
   final AppStore store;
 
   @override
-  State<_AlertSettingsSheet> createState() => _AlertSettingsSheetState();
+  State<AlertSettingsSheet> createState() => _AlertSettingsSheetState();
 }
 
-class _AlertSettingsSheetState extends State<_AlertSettingsSheet> {
+class _AlertSettingsSheetState extends State<AlertSettingsSheet> {
   late NavAlertConfig _config = widget.store.navAlertConfig;
+  NavAlert? _previewing;
+
+  Future<void> _preview(NavAlert alert) async {
+    setState(() => _previewing = alert);
+    final result = await widget.store.previewNavigationAlert(
+      alert,
+      config: _config,
+    );
+    if (!mounted) return;
+    setState(() => _previewing = null);
+
+    final String? message;
+    if (_config.feedbackMode.usesVoice && !result.voiceSpoken) {
+      message = result.tonePlayed
+          ? 'Voice is unavailable. The alert tone played instead.'
+          : 'Voice is unavailable. Install an English system voice.';
+    } else if (_config.feedbackMode != NavFeedbackMode.hapticsOnly &&
+        !result.audioPlayed) {
+      message = 'Alert audio could not play. Check the media volume.';
+    } else {
+      message = null;
+    }
+    if (message != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -304,6 +334,79 @@ class _AlertSettingsSheetState extends State<_AlertSettingsSheet> {
                 'Live alerts',
                 style: Theme.of(context).textTheme.titleLarge,
               ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<NavFeedbackMode>(
+                key: const ValueKey('nav-feedback-mode'),
+                initialValue: _config.feedbackMode,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Alert output',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.volume_up_outlined),
+                ),
+                items:
+                    const [
+                          NavFeedbackMode.toneAndVoice,
+                          NavFeedbackMode.voice,
+                          NavFeedbackMode.tones,
+                          NavFeedbackMode.hapticsOnly,
+                        ]
+                        .map(
+                          (mode) => DropdownMenuItem(
+                            value: mode,
+                            child: Text(_feedbackLabel(mode)),
+                          ),
+                        )
+                        .toList(growable: false),
+                onChanged: (mode) {
+                  if (mode == null) return;
+                  setState(
+                    () => _config = _config.copyWith(feedbackMode: mode),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Test alerts',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('test-off-route-alert'),
+                      onPressed: _previewing == null
+                          ? () => _preview(NavAlert.offRoute)
+                          : null,
+                      icon: _previewing == NavAlert.offRoute
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.wrong_location_outlined),
+                      label: const Text('Off route'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('test-junction-alert'),
+                      onPressed: _previewing == null
+                          ? () => _preview(NavAlert.junction)
+                          : null,
+                      icon: _previewing == NavAlert.junction
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.turn_left),
+                      label: const Text('Junction'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               SwitchListTile(
                 value: _config.offRouteEnabled,
                 onChanged: (value) => setState(
@@ -392,6 +495,13 @@ class _AlertSettingsSheetState extends State<_AlertSettingsSheet> {
     );
   }
 }
+
+String _feedbackLabel(NavFeedbackMode mode) => switch (mode) {
+  NavFeedbackMode.toneAndVoice => 'Tone + voice',
+  NavFeedbackMode.voice => 'Voice',
+  NavFeedbackMode.tones => 'Tones',
+  NavFeedbackMode.hapticsOnly => 'Haptics only',
+};
 
 class _Metric extends StatelessWidget {
   const _Metric({required this.label, required this.value});

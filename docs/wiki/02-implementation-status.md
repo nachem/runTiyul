@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-17<br>
+Snapshot date: 2026-07-18<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -21,8 +21,9 @@ RunTiyul now provides a local-first mobile MVP with:
 
 The MVP is not production-ready. A production map provider that explicitly
 permits offline downloads has not been selected. iOS and physical-device
-background recording have not been verified. Route-progress and off-route
-guidance are not implemented.
+background recording have not been verified. Route progress and course-up are
+not implemented; off-route and junction guidance is implemented but its tone,
+voice, and locked-screen behavior has not been verified on a physical device.
 
 A long-term offline-map architecture is documented in
 `06-offline-map-packages.md`. An on-device vector-to-raster conversion slice is
@@ -49,16 +50,16 @@ hosting remain proposals only.
 | Flutter iOS project | Configured, not runtime verified | Location descriptions and background location mode exist; no macOS/Xcode validation was available. |
 | Material application shell | Implemented | Five primary destinations use Material 3 `NavigationBar`. |
 | Online map display | Implemented; base-layer switch analyzer/test only | `flutter_map` tile layer, pan/zoom, provider configuration, and source-accurate attribution: a custom provider is no longer credited to OpenStreetMap, and offline previews credit each area's persisted provider. The base-layer picker offers configured **Streets**, **CyclOSM** (cycle/topographic raster with provider-baked contours/hillshade), and online-only **Esri World Imagery** satellite/orthophoto. The choice persists in `app_settings`. Viewing CyclOSM fetches only CyclOSM raster tiles, never separate elevation/Terrarium data; satellite remains view-only. |
-| Map camera controls | Implemented; primary map emulator verified, other surfaces analyzer/test only | Zoom in/out, fit content, fresh-GPS recenter, and a show/hide toggle for the saved trail overlays now appear on every map surface (primary, route detail, manual editor, activity detail, and recording). The primary, route-detail, and activity-detail maps auto-fit their content when opened. A map opened without primary content or an explicit center (for example the primary Explore view or a free-run recording) instead opens centered on the runner's current location at a neighborhood zoom (`z15`), fetching a fix if none is cached and falling back to a wide region only when no location is available. |
+| Map camera controls | Implemented; primary map emulator verified, other surfaces analyzer/test only | Zoom in/out, fit content, fresh-GPS recenter, and a show/hide toggle for the saved trail overlays now appear on every map surface (primary, route detail, manual editor, activity detail, and recording). Route detail and manual editor bodies reserve the device bottom safe area, so their action panels are not covered by edge-to-edge system navigation. The primary, route-detail, and activity-detail maps auto-fit their content when opened. A map opened without primary content or an explicit center (for example the primary Explore view or a free-run recording) instead opens centered on the runner's current location at a neighborhood zoom (`z15`), fetching a fix if none is cached and falling back to a wide region only when no location is available. |
 | Map source choice | Implemented; auto layering analyzer/test only | Auto now draws the saved (offline) map as a base with the live online map layered on top, so connected users get the freshest, most detailed tiles and fall back to the saved map where there is no connectivity; Online bypasses files; Offline makes no network requests, is always selectable, and fits/displays downloaded-area bounds for discovery. Choice persists in `app_settings`. |
 | Offline zoom limits | Implemented; overzoom analyzer/test only | Offline mode now uses the same zoom range as the online map: zoom-out is no longer locked at the downloaded minimum, and zooming in past the downloaded maximum scales (overzooms) the deepest saved tiles up to z19 instead of going blank. Where the current offline area lacks coverage (below the downloaded minimum), tiles render transparent in pure Offline mode; Auto fills them from the online layer. Auto-fit and the **Show on map** preview floor the camera at the downloaded minimum zoom (`offlineAwareFitZoom`), so previewing an area downloaded only at deep zoom levels no longer lands on a blank (gray) map below its coverage. Previewing an area that is still downloading now uses a download-progress-independent map key (`offlineAreaMapKey`), so the per-tile `updatedAt` bump no longer recreates the whole map and its controls on every downloaded tile (which had left the preview a flickering gray screen with no controls). |
 | Current GPS location | Implemented, emulator permission verified | Location service and map marker exist; denied/settings flows are surfaced as errors but not comprehensively device-tested. |
 | GPX import | Implemented, parser unit-tested | Uses the platform `file_selector`; the native picker was not exercised in the emulator verification. |
 | Manual route creation | Implemented; move/delete + save-fix + edit + follow-trails analyzer/test only | Map taps add ordered waypoints; undo, name, save, and dashed straight-line display work. A new route opens centered on the runner's current location at a closer zoom. While editing, the map no longer auto-refits when points are added or moved, so the zoom the runner set is kept. The name field is pre-filled with "Route N" and required in the editor: Save is disabled and an inline "Enter a route name" prompt shows while the field is empty (the store-level save still auto-names an empty name as a safety net). The editor closes only after a successful save, so a drawn route always lands in the list. Long-pressing selects the nearest waypoint (highlighted) to move (tap to reposition) or delete. An existing route can be reopened for editing from its detail screen (Edit waypoints), loading its points to add/move/delete and saving in place. A **Follow trails** mode (toggled beside Checkpoints) loads the real trail network for the visible area and snaps each tap onto a trail *line*, then builds the route *along* real trails between anchors — the same trail's own geometry when two anchors share a trail, or a shortest path through junctions across connected trails; trail data auto-downloads for the viewed area (with a Reload action) and anchors can be undone or deleted. Switching between Checkpoints and Follow trails keeps the points already placed — anchors become free waypoints and free waypoints are snapped back onto the network — so toggling the mode changes only how the next point is added rather than resetting the route. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
-| Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. |
+| Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit-tested, physical-device stress test pending | `RTE-003` Follow trails no longer derives its workload from a zoomed-out viewport: the first tap loads a bounded 3x3 z14 neighborhood around the tapped point, subsequent nearby areas merge into the graph, and explicit viewport reloads cap at 24 tiles centered on the screen instead of truncating from the northwest corner. A distant tap whose bounded neighborhood cannot overlap the preceding point is rejected immediately with an add-a-closer-point message. A closer tap is committed only when a connected, reasonable graph path exists, so Follow trails never silently inserts a straight waypoint leg. Existing anchors keep their stable graph indices; only the newest leg is routed, graph construction is lazy, and cross-trail shortest paths use a binary-heap frontier. Under `RTE-009`, saved/navigation geometry remains lossless while `TrailMap` reduces only its rendered point list at approximately one screen pixel for the current zoom. Very long routes still require profiling on a mid-range physical device. |
-| Route progress/off-route alerts | Not implemented | Version 1 currently provides visual line-following only. |
+| Route progress/off-route alerts | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | Route progress percentage remains unimplemented. While recording a selected route, sustained off-route distance and upcoming on-route junctions produce a visual banner and heavy haptic. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**. Tone mode uses two bundled Kenney Interface Sounds OGG cues selected for distinct warning/rising-junction signatures; the source is CC0 1.0 with provenance and hashes in `assets/audio/navigation/LICENSE.txt`. Voice mode uses an installed English system voice, concise prompts such as “Off route. Check the map.” and “In 25 meters, keep left,” navigation audio focus, and bundled-tone fallback if speech is unavailable. Record → Alerts previews both alert types using unsaved settings. Physical-device audibility in wind, media/silent-mode behavior, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
 | GPS activity tracking | Implemented and emulator verified | Start, permission request, pause, resume, finish, discard, timer, and persisted samples. |
 | Live metrics | Implemented | Elapsed time, distance, average pace, and smoothed-threshold elevation gain are shown. Moving time is not calculated separately. |
 | Background recording | Configured, not physical-device verified | Geolocator foreground notification/background settings and platform permissions exist. |
@@ -109,6 +110,7 @@ lib/
 |   |-- location_service.dart       Permission and position stream adapter
 |   |-- map_provider.dart           Compile-time provider configuration
 |   |-- map_render_theme.dart       Trail-emphasis + peak-label render theme
+|   |-- navigation_alert_feedback.dart  Haptic, CC0 tone, system-TTS, and fallback adapter
 |   |-- navigation_monitor.dart     Off-route and junction alert logic
 |   |-- terrain_contour_service.dart  Terrarium decode + contour/hillshade renderer
 |   |-- route_snapper.dart          Snaps a route onto nearby trails (hysteresis)
@@ -235,6 +237,13 @@ Implemented:
 - Elapsed time, geodesic distance, pace, and threshold-filtered elevation gain.
 - Active activity recovery as paused after process restart.
 - Route, recorded track, and current position map layers.
+- Sustained off-route and upcoming-junction detection with a visual banner,
+  heavy haptic, configurable thresholds, and per-alert enable switches.
+- Persisted **Tone + voice**, **Voice**, **Tones**, and **Haptics only** output
+  modes, with in-settings previews for representative off-route and left-turn
+  junction alerts. Missing system speech falls back to the bundled tone.
+- Two offline Kenney Interface Sounds cues bundled under CC0 1.0; system TTS
+  uses an installed English voice and platform navigation audio focus.
 - Activity history, detail summary/map, and confirmed deletion.
 - GPX 1.1 activity export through the platform save dialog.
 
@@ -245,7 +254,10 @@ Limitations:
   sequential fixes to verify distance changes live.
 - Moving time is not distinct from elapsed time.
 - Current pace uses the full activity average, not a rolling window.
-- Route progress, course-up mode, off-route detection, and alerts are absent.
+- Route progress and course-up mode are absent.
+- Alert tones, system voice availability, outdoor audibility, headphone routing,
+  and background/locked-screen playback have not been exercised on a physical
+  Android or iOS device.
 - The native GPX save dialog was not emulator-tested.
 
 ## 7. Offline maps and provider configuration
@@ -339,25 +351,33 @@ Limitations:
 - Java/Kotlin target: 17.
 - Fine, coarse, background location, foreground service, foreground location
   service, notification, wake-lock, and internet permissions are declared.
+- Text-to-speech service discovery is declared, and voice prompts request
+  navigation audio attributes/focus.
 - Release signing still uses the debug key and is not production-ready.
 
 ### iOS
 
 - Display name: `RunTiyul`.
 - When-in-use and always/background location descriptions are present.
-- Location background mode is enabled.
+- Location and audio background modes are enabled. Guidance uses a shared
+  playback session in `voicePrompt` mode that ducks other audio.
 - iOS has not been built or run in this Windows environment.
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-17 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-18 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
 | Dart formatter on changed Dart files | Passed. |
-| `flutter analyze` | Passed; no issues found. |
-| `flutter test` | Passed; 126 tests. |
+| `flutter analyze --no-pub` | Passed; no issues found. |
+| `flutter test` | Passed; 138 tests. |
 | `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
+| `flutter build apk --release --no-pub` | Passed; APK metadata reports `versionName=1.2.0`, `versionCode=5`. |
+
+The Android build emits a forward-looking Flutter warning that `flutter_tts`
+4.2.5 still applies the Kotlin Gradle plugin. It does not fail the current
+build; track a plugin release that adopts Flutter's Built-in Kotlin migration.
 
 Automated coverage includes:
 
@@ -401,6 +421,12 @@ Automated coverage includes:
   navigation
   monitor off-route persistence, junction re-arm, and disabled states; and the
   snap/alert settings persistence.
+- Navigation feedback mode persistence; tone/voice/haptic routing; concise
+  direction phrases; speech-unavailable tone fallback; valid bundled OGG
+  assets; previewing unsaved settings; and compact alert-settings layout.
+- Route detail/editor bottom-safe-area ownership; realtime recording route-list
+  wiring; and independent visibility of the selected navigation route versus
+  hideable saved-route overlays.
 - Offline-area schema v1-to-v2 migration and `source_format` default.
 
 ## 10. Android emulator verification
@@ -457,7 +483,10 @@ Not verified:
   regional data: CyclOSM visual comparison, contour labels/hillshade, z13
   overzoom, conversion speed, memory, battery, and final storage size.
 2. Verify Android and iOS background recording on physical devices.
-3. Add route progress, off-route detection, and optional alerts.
+3. Verify off-route/junction tones and system voice on physical Android and iOS
+  devices, including outdoor audibility, Bluetooth/open-ear headphones,
+  background/locked-screen playback, and missing-language fallback; add route
+  progress separately.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Configure production package identity and release signing.

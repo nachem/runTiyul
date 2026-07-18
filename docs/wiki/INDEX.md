@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-17<br>
+Last reviewed: 2026-07-18<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -19,7 +19,8 @@ completing any change that affects the wiki or project status.
 | 5 | [Local run and debug guide](05-local-debugging.md) | Toolchain setup, Android/iOS launch, VS Code debugging, GPS simulation, and offline verification. | Tooling, device IDs, launch commands, package IDs, or debug workflows change. |
 | 6 | [Offline map implementation](06-offline-map-packages.md) | Legal offline-map design and status: implemented on-device vector→raster conversion, plus proposed native MapLibre rendering, optional terrain, migration, validation, and rollout. | Offline source, format, renderer, terrain, licensing, hosting, or implementation plan changes. |
 | 7 | [Release & distribution](07-release-and-distribution.md) | Website, GitHub Pages deploy, release artifacts (APK/unsigned IPA), CI workflows, licensing, and the release runbook. | Website, release workflows, artifact names, distribution, or licensing change. |
-| 8 | [Wiki conventions](README.md) | Source-of-truth hierarchy and general documentation maintenance rules. | Wiki governance or document organization changes. |
+| 8 | [Release notes](08-release-notes.md) | Per-version authored notes and the mandatory release-note contract. | A release is prepared, published, corrected, or superseded. |
+| 9 | [Wiki conventions](README.md) | Source-of-truth hierarchy and general documentation maintenance rules. | Wiki governance or document organization changes. |
 
 Repository-wide agent requirements are in
 [`AGENTS.md`](../../AGENTS.md). GitHub Copilot also receives the same workflow
@@ -35,11 +36,11 @@ instructions are mandatory for all future agents.
 | Flutter iOS app | Configured; not built or runtime verified |
 | Application navigation | Implemented with five Material 3 destinations |
 | Online map | Implemented with provider abstraction, source-accurate attribution, and a base-layer switch: streets, CyclOSM topographic/cycle raster (provider-baked contours/hillshade; no separate elevation request), and online-only Esri satellite/orthophoto; online raster labels stay in each provider's baked-in language |
-| Map controls/source modes | Zoom, fit/reset, GPS recenter, show/hide saved trails, always-available Offline discovery, a persisted base-layer picker on every map surface, and auto-fit; a content-less map opens centered on the current location at neighborhood zoom; Auto layers live online tiles on top of saved maps from any persisted provider, and offline mode shares the online zoom range (zoom-out below downloaded minimum; zoom-in overzooms to z19) |
-| Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail |
+| Map controls/source modes | Zoom, fit/reset, GPS recenter, show/hide saved trails, always-available Offline discovery, a persisted base-layer picker on every map surface, and auto-fit; route view/edit panels honor the bottom safe area; a content-less map opens centered on the current location at neighborhood zoom; Auto layers live online tiles on top of saved maps from any persisted provider, and offline mode shares the online zoom range (zoom-out below downloaded minimum; zoom-in overzooms to z19) |
+| Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail; realtime recording receives all saved-route overlays, while the selected navigation route remains visible independently of the saved-trails toggle |
 | GPX route import | Implemented and parser tested; native picker not emulator verified |
 | GPS activity recording | Implemented; emulator permission/timer/lifecycle verified |
-| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping to nearby trails and roads on save followed by a graph pass that keeps the route on connected ways and bridges gaps (toggle), and live off-route/junction alerts (configurable) implemented; not device-verified; route progress % remains |
+| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping to nearby trails and roads on save followed by a graph pass that keeps the route on connected ways and bridges gaps (toggle), and configurable live off-route/junction banners, haptics, CC0 tones, and concise system-voice guidance implemented. Tone + voice is the default; Voice, Tones, and Haptics only plus settings previews are available. Audio/background behavior is not device-verified; route progress % remains. |
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
@@ -48,7 +49,7 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
-| Automated validation | Format/analyze pass; 126 tests pass; debug APK builds |
+| Automated validation | Format/analyze pass; 138 tests pass; debug and `1.2.0+5` release APKs build with bundled audio and native audio/TTS plugins |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -60,8 +61,9 @@ Detailed evidence belongs in
   overzoom, and measure conversion speed, memory, battery, and final storage.
 2. Verify CyclOSM online selection and small debug-only offline download on a
   device while confirming no separate Terrarium request occurs.
-3. Verify background recording and background map downloads on physical Android
-   and iOS devices.
+3. Verify background recording/downloads and off-route/junction tone + voice
+  alerts on physical Android and iOS devices, including outdoor audibility,
+  headphones, missing-language fallback, and locked-screen playback.
 4. Stress-test zoomed-out and long Follow trails routes on a mid-range physical device, including memory, tap latency, and save/reload fidelity.
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
 6. Configure production IDs, signing, and release builds.

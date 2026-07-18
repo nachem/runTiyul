@@ -177,6 +177,11 @@ For each feature:
 11. Verify local Markdown links.
 12. Report limitations honestly.
 
+For a release, also follow the mandatory
+[release-note contract](08-release-notes.md#release-note-contract): bump the app
+version/build, add the matching per-tag wiki note, update the release indexes,
+and validate before creating or pushing the tag.
+
 Do not update the status document to "implemented" before verification.
 
 ## 6. Validation commands
