@@ -28,9 +28,9 @@ Do not create a tag first and write notes afterward.
 
 ## Releases
 
-| Version | Date | Summary |
-| --- | --- | --- |
-| [v1.2.0](releases/v1.2.0.md) | 2026-07-18 | Offline tone/voice navigation alerts, alert previews, route-map visibility, and bottom-panel fixes. |
+| Version | Date | Status | Summary |
+| --- | --- | --- | --- |
+| [v1.2.0](releases/v1.2.0.md) | 2026-07-18 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.2.0) | Offline tone/voice navigation alerts, alert previews, route-map visibility, and bottom-panel fixes. |
 
 Earlier published releases predate the enforced authored-note contract and are
 available in [GitHub Releases](https://github.com/nachem/runTiyul/releases).

@@ -11,14 +11,19 @@ describes what is **implemented in the repository**, not planned work.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Built and published in `v1.0.0` (57.6 MB); latest-download link verified 200 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | Built on the macOS runner and published in `v1.0.0` (10.1 MB); latest-download link verified 200. Build succeeded in CI; on-device sideload not verified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Built and published in `v1.2.0` (61,511,724 bytes); latest-download link verified 200 on 2026-07-18 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | Built on the macOS runner and published in `v1.2.0` (15,780,126 bytes); latest-download link verified 200 on 2026-07-18. On-device sideload remains unverified |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
-`...RunTiyul.ipa`. As of the `v1.0.0` release (2026-07-16) both resolve `200`.
+`...RunTiyul.ipa`. As of the
+[`v1.2.0` release](https://github.com/nachem/runTiyul/releases/tag/v1.2.0)
+(2026-07-18), both resolve `200`. Release workflow
+[`29647773618`](https://github.com/nachem/runTiyul/actions/runs/29647773618)
+passed its metadata gate, Android build, unsigned iOS build, and publication
+jobs; the published body exactly matches `docs/wiki/releases/v1.2.0.md`.
 
 ## 2. Website (`site/`)
 
@@ -111,13 +116,13 @@ notes retrospectively.
 
 ## 5. Known limitations
 
-- The unsigned iOS `.ipa` **builds successfully in CI** (verified in `v1.0.0` on
+- The unsigned iOS `.ipa` **builds successfully in CI** (verified in `v1.2.0` on
   the macOS runner) but its on-device sideload/runtime has **not been verified**
   (the wider iOS runtime is also unverified — see
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.0.0` satisfies
+  enhancement depend on at least one published `v*` release; `v1.2.0` satisfies
   this.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
 
