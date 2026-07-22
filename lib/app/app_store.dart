@@ -16,6 +16,7 @@ import '../data/app_repository.dart';
 import '../models/offline_area.dart';
 import '../models/run_activity.dart';
 import '../models/trail_route.dart';
+import '../services/app_version_service.dart';
 import '../services/download_foreground_service.dart';
 import '../services/gpx_service.dart';
 import '../services/location_service.dart';
@@ -37,12 +38,15 @@ class AppStore extends ChangeNotifier {
   static const _navAlertConfigSetting = 'nav_alert_config';
   static const _offlineAreaOrderSetting = 'offline_area_order';
   static const _legacyTerrainCleanupSetting = 'legacy_terrain_cleanup_v1';
+  static const _lastAcknowledgedAppVersionSetting =
+      'last_acknowledged_app_version';
   static const _publicRasterDevUnlockSetting =
       'public_raster_dev_downloads_unlocked';
 
   AppStore._({
     required this.repository,
     required this.tileStore,
+    required this.appVersion,
     required this.mapProvider,
     required this.downloader,
     required this.vectorConverter,
@@ -54,6 +58,7 @@ class AppStore extends ChangeNotifier {
 
   final AppRepository repository;
   final TileStore tileStore;
+  final AppVersionInfo appVersion;
   final MapProviderConfig mapProvider;
   final OfflineDownloadService downloader;
   final VectorAreaConversionService vectorConverter;
@@ -77,6 +82,10 @@ class AppStore extends ChangeNotifier {
   String vectorSourceUrl = '';
   bool snapRoutesToTrails = true;
   bool publicRasterDevDownloadsUnlocked = false;
+  String? previousAppVersion;
+
+  /// APP-006: true when this installation has moved to a different app build.
+  bool get hasPendingAppUpdate => previousAppVersion != null;
 
   NavAlertConfig navAlertConfig = const NavAlertConfig();
   NavStatus navStatus = NavStatus.idle;
@@ -173,6 +182,7 @@ class AppStore extends ChangeNotifier {
   static Future<AppStore> create() async {
     final repository = AppRepository(AppDatabase());
     final tileStore = await TileStore.create();
+    final appVersion = await const AppVersionService().load();
     final provider = MapProviderConfig.fromEnvironment();
     final downloader = OfflineDownloadService(
       repository: repository,
@@ -190,6 +200,7 @@ class AppStore extends ChangeNotifier {
     final store = AppStore._(
       repository: repository,
       tileStore: tileStore,
+      appVersion: appVersion,
       mapProvider: provider,
       downloader: downloader,
       vectorConverter: vectorConverter,
@@ -214,6 +225,12 @@ class AppStore extends ChangeNotifier {
     required AppRepository repository,
     required TileStore tileStore,
     required MapProviderConfig mapProvider,
+    AppVersionInfo appVersion = const AppVersionInfo(
+      appName: 'RunTiyul',
+      packageName: 'com.bernoulli.trailrunner.trail_runner',
+      version: '0.0.0',
+      buildNumber: '0',
+    ),
     OfflineDownloadService? downloader,
     VectorAreaConversionService? vectorConverter,
     DownloadForegroundService? backgroundDownloads,
@@ -223,6 +240,7 @@ class AppStore extends ChangeNotifier {
     final store = AppStore._(
       repository: repository,
       tileStore: tileStore,
+      appVersion: appVersion,
       mapProvider: mapProvider,
       downloader:
           downloader ??
@@ -261,6 +279,7 @@ class AppStore extends ChangeNotifier {
       offlineAreas = await repository.loadOfflineAreas();
       offlineAreas = await _applySavedOfflineOrder(offlineAreas);
       await _cleanupLegacyTerrainStorage();
+      await _loadAppVersionState();
       final savedMapMode = await repository.loadSetting(_mapTileModeSetting);
       mapTileMode =
           MapTileMode.values
@@ -348,6 +367,19 @@ class AppStore extends ChangeNotifier {
   void focusOfflineArea(OfflineArea? area) {
     focusedOfflineArea = area;
     notifyListeners();
+  }
+
+  Future<void> acknowledgeAppUpdate() async {
+    try {
+      await repository.saveSetting(
+        _lastAcknowledgedAppVersionSetting,
+        appVersion.identity,
+      );
+      previousAppVersion = null;
+      notifyListeners();
+    } on Object catch (error) {
+      _setError('Could not save the installed app version: $error');
+    }
   }
 
   Future<void> importGpx() async {
@@ -1194,6 +1226,23 @@ class AppStore extends ChangeNotifier {
     }
     ordered.addAll(byId.values);
     return ordered;
+  }
+
+  Future<void> _loadAppVersionState() async {
+    final savedVersion = await repository.loadSetting(
+      _lastAcknowledgedAppVersionSetting,
+    );
+    if (savedVersion == null) {
+      await repository.saveSetting(
+        _lastAcknowledgedAppVersionSetting,
+        appVersion.identity,
+      );
+      previousAppVersion = null;
+      return;
+    }
+    previousAppVersion = savedVersion == appVersion.identity
+        ? null
+        : savedVersion;
   }
 
   Future<void> _persistOfflineAreaOrder() async {

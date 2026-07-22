@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_store.dart';
 import '../../models/offline_area.dart';
+import '../about/app_version_dialogs.dart';
 import '../offline_maps/offline_maps_screen.dart';
 import 'trail_map.dart';
 
@@ -42,6 +43,16 @@ class MapScreen extends StatelessWidget {
           showControls: true,
           controlsTop: offlineArea == null ? 16 : 104,
           autoFit: true,
+        ),
+        Positioned(
+          top: offlineArea == null ? 16 : 104,
+          left: 16,
+          child: Material(
+            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            elevation: 2,
+            shape: const CircleBorder(),
+            child: RunTiyulAboutButton(version: store.appVersion),
+          ),
         ),
         if (offlineArea != null)
           Positioned(

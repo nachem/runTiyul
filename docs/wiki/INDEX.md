@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-18<br>
+Last reviewed: 2026-07-21<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -35,6 +35,7 @@ instructions are mandatory for all future agents.
 | Flutter Android app | Implemented; built and exercised on Android 14 emulator |
 | Flutter iOS app | Configured; not built or runtime verified |
 | Application navigation | Implemented with five Material 3 destinations |
+| App version awareness | About displays package-derived version/build metadata; a changed build is detected from local SQLite state and announced once. Analyzer/unit/widget-tested; real two-APK upgrade remains device-unverified |
 | Online map | Implemented with provider abstraction, source-accurate attribution, and a base-layer switch: streets, CyclOSM topographic/cycle raster (provider-baked contours/hillshade; no separate elevation request), and online-only Esri satellite/orthophoto; online raster labels stay in each provider's baked-in language |
 | Map controls/source modes | Zoom, fit/reset, GPS recenter, show/hide saved trails, always-available Offline discovery, a persisted base-layer picker on every map surface, and auto-fit; route view/edit panels honor the bottom safe area; a content-less map opens centered on the current location at neighborhood zoom; Auto layers live online tiles on top of saved maps from any persisted provider, and offline mode shares the online zoom range (zoom-out below downloaded minimum; zoom-in overzooms to z19) |
 | Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail; realtime recording receives all saved-route overlays, while the selected navigation route remains visible independently of the saved-trails toggle |
@@ -44,13 +45,15 @@ instructions are mandatory for all future agents.
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
-| Latest release | `v1.2.0` published 2026-07-18 with authored wiki notes; Android APK and unsigned iOS IPA both built in CI and stable latest-download links return 200; iOS sideload/runtime remains unverified |
+| Latest published release | `v1.2.0` published 2026-07-18; Android APK and unsigned iOS IPA stable links return 200; iOS sideload/runtime remains unverified |
+| Prepared release | `v1.2.1+6` establishes the permanent Android signing baseline, CI identity/build-number gates, and installed-version awareness. Local signed APK verification passed; it is not tagged or published yet |
+| Android update compatibility | Future releases can update `v1.2.1` in place only when they retain the pinned permanent certificate and increase `versionCode`. Builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall; the resulting local-data loss cannot be repaired retroactively |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation permanently unlocks those two providers on that device. Satellite/arbitrary view-only layers cannot be unlocked. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
 | Offline tile rendering | Main-map bounds preview/edit and downloaded zoom constraints implemented; zoom-in overzooms saved tiles past the downloaded maximum. Saved tiles use an ordered, area-aware renderer, and provider/format namespaces prevent collisions. Offline-area bounding boxes remain visible as colored outlines but have fully transparent fills, so overlapping areas do not tint the map. Preview/auto-fit floor at the downloaded minimum (`offlineAwareFitZoom`), and a progress-independent map key prevents in-progress downloads from recreating the map controls |
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
-| Automated validation | Format/analyze pass; 138 tests pass; debug and `1.2.0+5` release APKs build with bundled audio and native audio/TTS plugins |
+| Automated validation | Format/analyze pass; 141 tests pass; permanently signed `1.2.1+6` release APK builds and independently verifies with the expected package, version, and pinned certificate; workflow/site syntax, release metadata, wiki links, and CRLF-aware diff checks pass |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -67,7 +70,9 @@ Detailed evidence belongs in
   headphones, missing-language fallback, and locked-screen playback.
 4. Stress-test zoomed-out and long Follow trails routes on a mid-range physical device, including memory, tap latency, and save/reload fidelity.
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
-6. Configure production IDs, signing, and release builds.
+6. Publish the permanent-key `v1.2.1` baseline, secure an independent key
+  backup, then verify a data-preserving upgrade to a later signed build on a
+  physical Android device.
 
 Do not implement production bulk download against the public
 `tile.openstreetmap.org` standard tile service.

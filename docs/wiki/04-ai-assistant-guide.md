@@ -112,7 +112,9 @@ Exit criteria:
 - Accessibility review.
 - Battery and performance profiling.
 - Permission denial and low-storage integration tests.
-- Android release signing and final application ID.
+- Preserve the configured Android application ID and permanent release signing;
+  verify an in-place, data-preserving update once two permanent-key builds
+  exist.
 - iOS bundle/signing configuration.
 - Provider credentials through secure build configuration.
 

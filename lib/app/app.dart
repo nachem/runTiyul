@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../features/about/app_version_dialogs.dart';
 import '../features/activities/activities_screen.dart';
 import '../features/map/map_screen.dart';
 import '../features/offline_maps/offline_maps_screen.dart';
@@ -55,11 +56,31 @@ class AppShell extends StatefulWidget {
 
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
   late var _index = widget.initialIndex;
+  var _versionDialogScheduled = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_showPendingVersionUpdate());
+    });
+  }
+
+  Future<void> _showPendingVersionUpdate() async {
+    final previousVersion = widget.store.previousAppVersion;
+    if (!mounted || _versionDialogScheduled || previousVersion == null) return;
+    _versionDialogScheduled = true;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AppUpdatedDialog(
+        currentVersion: widget.store.appVersion,
+        previousVersion: previousVersion,
+      ),
+    );
+    if (!mounted) return;
+    await widget.store.acknowledgeAppUpdate();
   }
 
   @override

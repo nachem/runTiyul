@@ -1,6 +1,6 @@
 # Local Run and Debug Guide
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-21
 
 ## 1. Supported local targets
 
@@ -76,6 +76,29 @@ flutter build apk --release `
 
 Converted-vector downloads remain a separate path and never authorize a raster
 endpoint.
+
+### 4.1 Android release signing
+
+Use debug builds for normal local development. Android release builds fail
+closed unless all four environment values are present:
+
+- `ANDROID_RELEASE_KEYSTORE_PATH`
+- `ANDROID_RELEASE_STORE_PASSWORD`
+- `ANDROID_RELEASE_KEY_ALIAS`
+- `ANDROID_RELEASE_KEY_PASSWORD`
+
+Do not put those values in the repository, shell history, logs, or a tracked
+`key.properties`. Authorized release owners should load them from their local
+secret store, build with `flutter build apk --release`, then verify the APK
+certificate and version with Android SDK `apksigner` and `aapt`. GitHub Actions
+reconstructs the keystore from encrypted repository secrets and performs those
+checks automatically.
+
+The permanent public certificate SHA-256 is
+`d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`.
+Changing it or the application ID prevents Android from updating an installed
+copy. The private key and password need a tested, access-controlled backup
+outside both GitHub and the development machine.
 
 For production development, configure a provider whose terms explicitly permit
 offline download:
@@ -229,18 +252,25 @@ Record:
 
 ## 11. Latest local verification
 
-Command validation on 2026-07-18 with Flutter 3.44.6:
+Command validation on 2026-07-21 with Flutter 3.44.6:
 
 - Dart formatter on changed Dart files: passed.
 - `flutter analyze --no-pub`: passed with no issues.
-- `flutter test`: all 138 tests passed.
-- `flutter build apk --debug`: passed.
-- `flutter build apk --release --no-pub`: passed; embedded version is
-  `1.2.0` (`versionCode` 5).
+- `flutter test`: all 141 tests passed.
+- `flutter build apk --release --no-pub` with protected local signing values:
+  passed; the 61,921,516-byte APK embeds `1.2.1` (`versionCode` 6).
+- `apksigner`/`aapt` verification: passed for the expected package, version,
+  and permanent certificate SHA-256. The APK SHA-256 is
+  `2fea9cbd7ccd049952868d858ad71cbbc16a782abdd08f24eb8bdf6d742f91ad`.
+- Release workflow YAML/diagnostics, step-scoped secret assertion, website
+  JavaScript syntax, release metadata/build monotonicity, wiki links, and the
+  CRLF-aware Git diff check passed. `actionlint` was unavailable locally.
 - Tests cover navigation feedback mode persistence, bundled OGG validity,
   tone/voice/haptic routing, concise guidance, speech fallback, and settings
   previews; route-screen bottom safe areas; and realtime selected/saved route
   visibility, in addition to the prior map/download/terrain coverage.
+- Tests also cover first-install/change detection, one-time version
+  acknowledgement, update-dialog content, and About version display.
 - The Android build emitted a non-blocking future-compatibility warning because
   `flutter_tts` 4.2.5 still applies KGP rather than Built-in Kotlin.
 

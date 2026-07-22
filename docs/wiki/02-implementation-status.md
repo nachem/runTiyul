@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-18<br>
+Snapshot date: 2026-07-21<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -49,6 +49,7 @@ hosting remain proposals only.
 | Flutter Android project | Implemented and emulator verified | Debug APK built and launched on Android 14 API 34. |
 | Flutter iOS project | Configured, not runtime verified | Location descriptions and background location mode exist; no macOS/Xcode validation was available. |
 | Material application shell | Implemented | Five primary destinations use Material 3 `NavigationBar`. |
+| Installed-version awareness (`APP-006`) | Implemented; analyzer/unit/widget-tested | `package_info_plus` supplies package-derived version/build metadata. About exposes the installed version, and `AppStore` persists `last_acknowledged_app_version`: a first tracked install is quiet, while a later build produces one local update dialog and is acknowledged after dismissal. No network request is involved. A real two-APK upgrade remains device-unverified. |
 | Online map display | Implemented; base-layer switch analyzer/test only | `flutter_map` tile layer, pan/zoom, provider configuration, and source-accurate attribution: a custom provider is no longer credited to OpenStreetMap, and offline previews credit each area's persisted provider. The base-layer picker offers configured **Streets**, **CyclOSM** (cycle/topographic raster with provider-baked contours/hillshade), and online-only **Esri World Imagery** satellite/orthophoto. The choice persists in `app_settings`. Viewing CyclOSM fetches only CyclOSM raster tiles, never separate elevation/Terrarium data; satellite remains view-only. |
 | Map camera controls | Implemented; primary map emulator verified, other surfaces analyzer/test only | Zoom in/out, fit content, fresh-GPS recenter, and a show/hide toggle for the saved trail overlays now appear on every map surface (primary, route detail, manual editor, activity detail, and recording). Route detail and manual editor bodies reserve the device bottom safe area, so their action panels are not covered by edge-to-edge system navigation. The primary, route-detail, and activity-detail maps auto-fit their content when opened. A map opened without primary content or an explicit center (for example the primary Explore view or a free-run recording) instead opens centered on the runner's current location at a neighborhood zoom (`z15`), fetching a fix if none is cached and falling back to a wide region only when no location is available. |
 | Map source choice | Implemented; auto layering analyzer/test only | Auto now draws the saved (offline) map as a base with the live online map layered on top, so connected users get the freshest, most detailed tiles and fall back to the saved map where there is no connectivity; Online bypasses files; Offline makes no network requests, is always selectable, and fits/displays downloaded-area bounds for discovery. Choice persists in `app_settings`. |
@@ -98,6 +99,7 @@ lib/
 |   |-- app_database.dart           SQLite initialization and version 1 schema
 |   `-- app_repository.dart         Route/activity/offline persistence
 |-- features/
+|   |-- about/                      Installed-version and update dialogs
 |   |-- activities/                 History and detail UI
 |   |-- map/                        Shared map and main map UI
 |   |-- offline_maps/               Area selection, management, preview
@@ -105,6 +107,7 @@ lib/
 |   `-- routes/                     Library, detail, and manual editor
 |-- models/                         Route, activity, and offline area entities
 |-- services/
+|   |-- app_version_service.dart    Package-derived version/build metadata
 |   |-- download_foreground_service.dart  Keep-alive service for background downloads
 |   |-- gpx_service.dart            GPX route import and activity export
 |   |-- location_service.dart       Permission and position stream adapter
@@ -353,7 +356,19 @@ Limitations:
   service, notification, wake-lock, and internet permissions are declared.
 - Text-to-speech service discovery is declared, and voice prompts request
   navigation audio attributes/focus.
-- Release signing still uses the debug key and is not production-ready.
+- Release builds require the permanent secret-backed RSA key and fail closed
+  when any signing value is absent. GitHub Actions holds four encrypted signing
+  secrets; the workflow pins certificate SHA-256
+  `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`,
+  rejects non-increasing build numbers, and verifies package/version/certificate
+  metadata before upload. The private key has an access-controlled local
+  recovery copy outside the repository; an independent off-machine backup is
+  still an operational requirement.
+- `v1.2.1` (`versionCode` 6) is the first permanent-signing baseline. APKs
+  through `v1.2.0` used different ephemeral debug certificates, so their users
+  must uninstall once (normally losing local app data) before installing this
+  baseline. A data-preserving in-place update cannot be verified until a later
+  permanent-key build exists.
 
 ### iOS
 
@@ -365,15 +380,17 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-18 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-21 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
 | Dart formatter on changed Dart files | Passed. |
 | `flutter analyze --no-pub` | Passed; no issues found. |
-| `flutter test` | Passed; 138 tests. |
+| `flutter test` | Passed; 141 tests. |
 | `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
-| `flutter build apk --release --no-pub` | Passed; APK metadata reports `versionName=1.2.0`, `versionCode=5`. |
+| `flutter build apk --release --no-pub` with protected local signing values | Passed; produced a 61,921,516-byte APK. |
+| Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.1`, `versionCode=6`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `2fea9cbd7ccd049952868d858ad71cbbc16a782abdd08f24eb8bdf6d742f91ad`. |
+| Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; `node --check site/main.js`, release metadata/build monotonicity, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
 
 The Android build emits a forward-looking Flutter warning that `flutter_tts`
 4.2.5 still applies the Kotlin Gradle plugin. It does not fail the current
@@ -428,6 +445,9 @@ Automated coverage includes:
   wiring; and independent visibility of the selected navigation route versus
   hideable saved-route overlays.
 - Offline-area schema v1-to-v2 migration and `source_format` default.
+- First-install versus changed-build detection, one-time version
+  acknowledgement persistence, update-dialog content, and About version
+  display.
 
 ## 10. Android emulator verification
 
@@ -489,4 +509,6 @@ Not verified:
   progress separately.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
-6. Configure production package identity and release signing.
+6. Publish the permanent-key `v1.2.1` baseline, secure an independent signing
+  backup, then verify a data-preserving Android upgrade with a later signed
+  build on a physical device.

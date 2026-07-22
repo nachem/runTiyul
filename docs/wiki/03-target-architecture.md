@@ -44,6 +44,8 @@ Rules:
 - Repositories return explicit errors or typed results; storage failures must
   not become empty lists.
 - External APIs are wrapped so unit tests can use deterministic fakes.
+- Installed package metadata is read through `AppVersionService`; widgets and
+  application state do not query platform package channels directly.
 
 ## 3. Recommended feature-oriented source layout
 
@@ -189,6 +191,12 @@ Suggested tables:
 - `tiles`
 - `offline_area_tiles`
 - `app_settings`
+
+`app_settings.last_acknowledged_app_version` stores the package-derived
+`versionName+versionCode` identity last accepted by the user. Absence means the
+first tracked install and is initialized silently; a different identity means
+an upgrade notice is pending until acknowledgement. This check is entirely
+local and does not determine whether a newer release exists online.
 
 Required constraints:
 
@@ -400,6 +408,9 @@ A failed deletion remains visible and retryable.
 
 ### Android
 
+- Stable application ID, monotonically increasing `versionCode`, and the pinned
+  permanent release certificate form the update identity. Release CI must fail
+  before publication if any of those values drift.
 - Fine/coarse location permission.
 - Background location only when the supported recording design needs it.
 - Foreground service and persistent notification for active background

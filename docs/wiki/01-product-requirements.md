@@ -76,6 +76,7 @@ notes.
 | APP-003 | The app shall handle denied, permanently denied, and disabled-location states. | The user sees a specific recovery action; the app does not fail silently. |
 | APP-004 | The app shall show OpenStreetMap data attribution on map screens. | Attribution remains visible or is available through the standard map attribution control. |
 | APP-005 | The app shall expose units and key application settings. | Metric units are the version 1 default and are consistently displayed. |
+| APP-006 | The app shall expose its installed version and recognize a successful app upgrade. | About shows package-derived version/build information. The first tracked install is quiet; a later build is announced once and acknowledged locally without a network request. |
 
 ### 4.2 Online and offline map
 
@@ -335,6 +336,9 @@ Version 1 is not complete until all of the following are demonstrated:
 - `flutter analyze` and all automated tests pass.
 - Release builds use non-debug signing/configuration and approved provider
   credentials.
+- Android releases retain one application ID and signing certificate, use a
+  strictly increasing `versionCode`, and pass an in-place upgrade test without
+  deleting local app data.
 
 ## 9. Open product decisions
 

@@ -40,6 +40,8 @@ concurrency:
 
 env:
   FLUTTER_CHANNEL: stable
+  # Public certificate identity. Changing this value/key breaks Android updates.
+  ANDROID_RELEASE_CERT_SHA256: d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -51,9 +53,13 @@ jobs:
     outputs:
       tag: ${{ steps.metadata.outputs.tag }}
       notes_path: ${{ steps.metadata.outputs.notes_path }}
+      version_name: ${{ steps.metadata.outputs.version_name }}
+      version_code: ${{ steps.metadata.outputs.version_code }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate version and release notes
         id: metadata
@@ -72,9 +78,32 @@ jobs:
           fi
 
           APP_VERSION="$(awk '/^version: / {print $2}' pubspec.yaml)"
-          APP_SEMVER="${APP_VERSION%%+*}"
+          if [[ "$APP_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\+([1-9][0-9]*)$ ]]; then
+            APP_SEMVER="${BASH_REMATCH[1]}"
+            BUILD_NUMBER="${BASH_REMATCH[2]}"
+          else
+            echo "::error::pubspec version must include semver and a positive Android build number: $APP_VERSION"
+            exit 1
+          fi
           if [ "$TAG" != "v$APP_SEMVER" ]; then
             echo "::error::Tag $TAG does not match pubspec version $APP_VERSION"
+            exit 1
+          fi
+
+          MAX_PREVIOUS_BUILD=0
+          while IFS= read -r EXISTING_TAG; do
+            [ "$EXISTING_TAG" = "$TAG" ] && continue
+            EXISTING_VERSION="$(git show "${EXISTING_TAG}:pubspec.yaml" 2>/dev/null | awk '/^version: / {print $2}' || true)"
+            if [[ "$EXISTING_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+([1-9][0-9]*)$ ]]; then
+              EXISTING_BUILD=$((10#${BASH_REMATCH[1]}))
+              if (( EXISTING_BUILD > MAX_PREVIOUS_BUILD )); then
+                MAX_PREVIOUS_BUILD=$EXISTING_BUILD
+              fi
+            fi
+          done < <(git tag --list 'v*')
+
+          if (( 10#$BUILD_NUMBER <= MAX_PREVIOUS_BUILD )); then
+            echo "::error::Android build number $BUILD_NUMBER must be greater than every prior release ($MAX_PREVIOUS_BUILD)"
             exit 1
           fi
 
@@ -86,6 +115,8 @@ jobs:
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+          echo "version_name=$APP_SEMVER" >> "$GITHUB_OUTPUT"
+          echo "version_code=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
           echo "Validated $TAG with $NOTES_PATH and app version $APP_VERSION"
 
   # ---------------------------------------------------------------------------
@@ -114,8 +145,88 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Configure Android release signing
+        id: android-signing
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_RELEASE_KEYSTORE_BASE64:-}" ]; then
+            echo "::error::Missing required Actions secret: ANDROID_RELEASE_KEYSTORE_BASE64"
+            exit 1
+          fi
+
+          KEYSTORE_PATH="$RUNNER_TEMP/runtiyul-release.jks"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          if [ ! -s "$KEYSTORE_PATH" ]; then
+            echo "::error::Decoded Android release keystore is empty"
+            exit 1
+          fi
+          chmod 600 "$KEYSTORE_PATH"
+          echo "keystore_path=$KEYSTORE_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Build release APK
+        env:
+          ANDROID_RELEASE_KEYSTORE_PATH: ${{ steps.android-signing.outputs.keystore_path }}
+          ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_STORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
         run: flutter build apk --release
+
+      - name: Remove decoded signing key
+        if: ${{ always() }}
+        env:
+          KEYSTORE_PATH: ${{ steps.android-signing.outputs.keystore_path }}
+        shell: bash
+        run: |
+          if [ -n "${KEYSTORE_PATH:-}" ]; then
+            rm -f "$KEYSTORE_PATH"
+          fi
+
+      - name: Verify APK identity and signature
+        env:
+          EXPECTED_VERSION_NAME: ${{ needs.metadata.outputs.version_name }}
+          EXPECTED_VERSION_CODE: ${{ needs.metadata.outputs.version_code }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+          AAPT="$BUILD_TOOLS_DIR/aapt"
+          for tool in "$APKSIGNER" "$AAPT"; do
+            if [ ! -x "$tool" ]; then
+              echo "::error::Required Android build tool not found: $tool"
+              exit 1
+            fi
+          done
+
+          CERT_OUTPUT="$($APKSIGNER verify --print-certs "$APK_PATH")"
+          BADGING_OUTPUT="$($AAPT dump badging "$APK_PATH")"
+          CERT_SHA256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<< "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]')"
+          PACKAGE_LINE="$(sed -n '/^package:/p' <<< "$BADGING_OUTPUT")"
+          PACKAGE_NAME="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
+          VERSION_CODE="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
+          VERSION_NAME="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
+
+          [ "$CERT_SHA256" = "$ANDROID_RELEASE_CERT_SHA256" ] || {
+            echo "::error::Unexpected Android signing certificate: $CERT_SHA256"
+            exit 1
+          }
+          [ "$PACKAGE_NAME" = "com.bernoulli.trailrunner.trail_runner" ] || {
+            echo "::error::Unexpected Android package: $PACKAGE_NAME"
+            exit 1
+          }
+          [ "$VERSION_CODE" = "$EXPECTED_VERSION_CODE" ] || {
+            echo "::error::APK versionCode $VERSION_CODE does not match $EXPECTED_VERSION_CODE"
+            exit 1
+          }
+          [ "$VERSION_NAME" = "$EXPECTED_VERSION_NAME" ] || {
+            echo "::error::APK versionName $VERSION_NAME does not match $EXPECTED_VERSION_NAME"
+            exit 1
+          }
+          echo "Verified $PACKAGE_NAME $VERSION_NAME+$VERSION_CODE signed by $CERT_SHA256"
 
       - name: Stage artifact
         run: |

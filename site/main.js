@@ -93,6 +93,16 @@
       applyAsset(["ctaAndroid", "dlAndroid"], apk);
       applyAsset(["ctaIos", "dlIos"], ipa);
 
+      var signingTransition = document.getElementById("androidSigningTransition");
+      var versionMatch = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(rel.tag_name || "");
+      if (signingTransition && versionMatch) {
+        var versionParts = versionMatch.slice(1).map(Number);
+        var permanentSigningAvailable = versionParts[0] > 1 ||
+          (versionParts[0] === 1 && versionParts[1] > 2) ||
+          (versionParts[0] === 1 && versionParts[1] === 2 && versionParts[2] >= 1);
+        signingTransition.hidden = !permanentSigningAvailable;
+      }
+
       var meta = document.getElementById("releaseMeta");
       if (meta && rel.tag_name) {
         var date = rel.published_at ? new Date(rel.published_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) : "";

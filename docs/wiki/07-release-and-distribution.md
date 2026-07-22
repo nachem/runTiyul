@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-07-18
+Last reviewed: 2026-07-21
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -58,7 +58,15 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
   match the semantic version in `pubspec.yaml`, and a non-empty matching note at
   `docs/wiki/releases/<tag>.md` must exist.
 - **Android job (Ubuntu):** `flutter build apk --release`, renamed to
-  `RunTiyul.apk`.
+  `RunTiyul.apk`. Before building, it decodes the permanent keystore from
+  Actions secrets into the runner's temporary directory. Gradle fails closed
+  unless all signing values are present.
+- **Android identity gate:** the metadata job requires a positive build number
+  greater than every prior tagged release. After building, CI verifies package
+  `com.bernoulli.trailrunner.trail_runner`, the expected version name/code, and
+  release certificate SHA-256
+  `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`
+  before the APK can be uploaded.
 - **iOS job (macOS):** `flutter build ios --release --no-codesign`, then the
   `Runner.app` is zipped into a `Payload/` structure to produce an **unsigned**
   `RunTiyul.ipa`. No Apple signing secrets are used.
@@ -86,12 +94,23 @@ One-time setup (both completed 2026-07-16):
    Actions**_ (done; also settable with
    `gh api -X POST repos/nachem/runTiyul/pages -f build_type=workflow`).
 
-To publish a release (example `v1.2.0`):
+Required repository Actions secrets (configured 2026-07-21):
+
+- `ANDROID_RELEASE_KEYSTORE_BASE64`
+- `ANDROID_RELEASE_STORE_PASSWORD`
+- `ANDROID_RELEASE_KEY_ALIAS`
+- `ANDROID_RELEASE_KEY_PASSWORD`
+
+Secret values and the private key must never be committed or printed. The
+release owner must retain an access-controlled backup outside the repository;
+losing the key makes future in-place Android updates impossible.
+
+To publish a release (example `v1.2.1`):
 
 1. Choose the next semantic version and a monotonically increasing Flutter
   build number.
-2. Update `pubspec.yaml` (for example `version: 1.2.0+5`).
-3. Add `docs/wiki/releases/v1.2.0.md`, update the
+2. Update `pubspec.yaml` (for example `version: 1.2.1+6`).
+3. Add `docs/wiki/releases/v1.2.1.md`, update the
   [release-notes index](08-release-notes.md), and synchronize this page and
   `INDEX.md`.
 4. Run formatting, analyzer, tests, the relevant platform build, and local wiki
@@ -99,9 +118,9 @@ To publish a release (example `v1.2.0`):
 5. Commit the complete release state, then tag and push that exact commit:
 
 ```powershell
-git tag v1.2.0
+git tag v1.2.1
 git push origin main
-git push origin v1.2.0
+git push origin v1.2.1
 ```
 
 This runs `release.yml`, builds both artifacts, and creates the Release. After
@@ -111,8 +130,19 @@ that pushing/merging to `main` does **not** trigger a release build — only a
 only when a push to `main` changes files under `site/**`.
 
 The workflow fails before platform builds if the tag, `pubspec.yaml`, and
-authored wiki note do not agree. Never move an existing release tag or add its
-notes retrospectively.
+authored wiki note do not agree, if the Android build number is not greater than
+all earlier tagged releases, or if signing/identity verification fails. Never
+move an existing release tag or add its notes retrospectively.
+
+### Android signing transition
+
+Published APKs through `v1.2.0` used runner-local debug keys; their certificate
+fingerprints differ, so Android rejects one as an update to another. `v1.2.1`
+is prepared as the first permanent-signing baseline. Users of an older build
+must uninstall it once before installing `v1.2.1`, which normally deletes that
+installation's local app data. Starting from `v1.2.1`, every later release must
+keep the application ID and pinned certificate and increase `versionCode` so
+Android can update in place.
 
 ## 5. Known limitations
 
@@ -125,6 +155,8 @@ notes retrospectively.
   enhancement depend on at least one published `v*` release; `v1.2.0` satisfies
   this.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
+- An in-place Android upgrade using the permanent certificate cannot be
+  device-verified until both the `v1.2.1` baseline and a later signed APK exist.
 
 ## 6. Licensing & attribution
 
