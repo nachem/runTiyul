@@ -394,6 +394,13 @@ Latest validation on 2026-07-22 with Flutter 3.44.6 stable:
 | Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.2`, `versionCode=7`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`. |
 | Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; exact Bash metadata/build monotonicity with CRLF normalization, `node --check site/main.js`, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
 
+The first `v1.2.2` tag run (`29896550967`) built the signed Android APK and
+unsigned iOS IPA, but its Android post-build gate could not parse the
+certificate digest from Linux `apksigner` output. Publication remained blocked
+and no release assets were created. The parser now reads combined output with a
+case-insensitive field match and rejects an empty digest before the manual
+publication retry.
+
 The Android build emits a forward-looking Flutter warning that `flutter_tts`
 4.2.5 still applies the Kotlin Gradle plugin. It does not fail the current
 build; track a plugin release that adopts Flutter's Built-in Kotlin migration.

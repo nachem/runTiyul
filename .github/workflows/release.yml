@@ -202,14 +202,19 @@ jobs:
             fi
           done
 
-          CERT_OUTPUT="$($APKSIGNER verify --print-certs "$APK_PATH")"
+          CERT_OUTPUT="$($APKSIGNER verify --print-certs "$APK_PATH" 2>&1)"
           BADGING_OUTPUT="$($AAPT dump badging "$APK_PATH")"
-          CERT_SHA256="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' <<< "$CERT_OUTPUT" | tr '[:upper:]' '[:lower:]')"
+          CERT_SHA256="$(awk -F': ' 'tolower($0) ~ /certificate sha-256 digest/ {print tolower($NF); exit}' <<< "$CERT_OUTPUT" | tr -d '\r[:space:]')"
           PACKAGE_LINE="$(sed -n '/^package:/p' <<< "$BADGING_OUTPUT")"
           PACKAGE_NAME="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
           VERSION_CODE="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
           VERSION_NAME="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<< "$PACKAGE_LINE")"
 
+          [ -n "$CERT_SHA256" ] || {
+            echo "::error::Could not read the Android signing certificate digest"
+            printf '%s\n' "$CERT_OUTPUT"
+            exit 1
+          }
           [ "$CERT_SHA256" = "$ANDROID_RELEASE_CERT_SHA256" ] || {
             echo "::error::Unexpected Android signing certificate: $CERT_SHA256"
             exit 1
