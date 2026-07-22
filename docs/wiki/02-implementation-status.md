@@ -398,8 +398,15 @@ The first `v1.2.2` tag run (`29896550967`) built the signed Android APK and
 unsigned iOS IPA, but its Android post-build gate could not parse the
 certificate digest from Linux `apksigner` output. Publication remained blocked
 and no release assets were created. The parser now reads combined output with a
-case-insensitive field match and rejects an empty digest before the manual
-publication retry.
+case-insensitive field match and rejects an empty digest. Manual retry
+`29896994686` passed all jobs and published both assets. Independent inspection
+of the downloaded public APK confirmed package
+`com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.2`, `versionCode=7`,
+and the pinned permanent certificate. GitHub reports public SHA-256 digests APK
+`eebf3b4c24c19552365148b5fa1d578f84226d6d59d864e7abc73493c1c50a70`
+and IPA
+`a536a6076eee24daa2be33940a3d15da1dacbfd9e76f2fe1131d1eb50085d6a2`;
+both stable latest-download URLs returned 200.
 
 The Android build emits a forward-looking Flutter warning that `flutter_tts`
 4.2.5 still applies the Kotlin Gradle plugin. It does not fail the current
@@ -518,6 +525,5 @@ Not verified:
   progress separately.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
-6. Publish the permanent-key `v1.2.2` baseline, secure an independent signing
-  backup, then verify a data-preserving Android upgrade with a later signed
-  build on a physical device.
+6. Secure an independent signing backup, then verify a data-preserving Android
+  upgrade from `v1.2.2` to a later signed build on a physical device.

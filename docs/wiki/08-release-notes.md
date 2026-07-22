@@ -30,7 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| [v1.2.2](releases/v1.2.2.md) | 2026-07-22 | Prepared | Permanent Android release signing, CRLF-safe update gates, and installed-version awareness. |
+| [v1.2.2](releases/v1.2.2.md) | 2026-07-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.2.2) | Permanent Android release signing baseline, CRLF-safe update gates, and installed-version awareness. |
 | [v1.2.1](releases/v1.2.1.md) | 2026-07-22 | Unpublished | Tag workflow stopped at metadata validation because CRLF was not normalized; no artifacts or GitHub Release were published. Superseded by `v1.2.2`. |
 | [v1.2.0](releases/v1.2.0.md) | 2026-07-18 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.2.0) | Offline tone/voice navigation alerts, alert previews, route-map visibility, and bottom-panel fixes. |
 

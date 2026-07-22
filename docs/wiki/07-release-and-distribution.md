@@ -11,19 +11,23 @@ describes what is **implemented in the repository**, not planned work.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Built and published in `v1.2.0` (61,511,724 bytes); latest-download link verified 200 on 2026-07-18 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | Built on the macOS runner and published in `v1.2.0` (15,780,126 bytes); latest-download link verified 200 on 2026-07-18. On-device sideload remains unverified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.2.2` published (61,937,784 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-22 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.2.2` published (15,844,405 bytes); latest-download link returned 200 on 2026-07-22. On-device sideload remains unverified |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
 `...RunTiyul.ipa`. As of the
-[`v1.2.0` release](https://github.com/nachem/runTiyul/releases/tag/v1.2.0)
-(2026-07-18), both resolve `200`. Release workflow
-[`29647773618`](https://github.com/nachem/runTiyul/actions/runs/29647773618)
-passed its metadata gate, Android build, unsigned iOS build, and publication
-jobs; the published body exactly matches `docs/wiki/releases/v1.2.0.md`.
+[`v1.2.2` release](https://github.com/nachem/runTiyul/releases/tag/v1.2.2)
+(2026-07-22), both resolve `200`. Release workflow retry
+[`29896994686`](https://github.com/nachem/runTiyul/actions/runs/29896994686)
+passed its metadata gate, permanent-signature Android verification, unsigned
+iOS build, and publication jobs. GitHub reports SHA-256
+`eebf3b4c24c19552365148b5fa1d578f84226d6d59d864e7abc73493c1c50a70`
+for the APK and
+`a536a6076eee24daa2be33940a3d15da1dacbfd9e76f2fe1131d1eb50085d6a2`
+for the IPA.
 
 ## 2. Website (`site/`)
 
@@ -154,8 +158,8 @@ update in place.
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.2.0` satisfies
-  this.
+  enhancement depend on at least one published `v*` release; `v1.2.2` is the
+  current latest release.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
 - An in-place Android upgrade using the permanent certificate cannot be
   device-verified until both the `v1.2.2` baseline and a later signed APK exist.
