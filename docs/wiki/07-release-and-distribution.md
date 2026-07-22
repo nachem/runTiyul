@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-07-21
+Last reviewed: 2026-07-22
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -105,12 +105,12 @@ Secret values and the private key must never be committed or printed. The
 release owner must retain an access-controlled backup outside the repository;
 losing the key makes future in-place Android updates impossible.
 
-To publish a release (example `v1.2.1`):
+To publish a release (example `v1.2.2`):
 
 1. Choose the next semantic version and a monotonically increasing Flutter
   build number.
-2. Update `pubspec.yaml` (for example `version: 1.2.1+6`).
-3. Add `docs/wiki/releases/v1.2.1.md`, update the
+2. Update `pubspec.yaml` (for example `version: 1.2.2+7`).
+3. Add `docs/wiki/releases/v1.2.2.md`, update the
   [release-notes index](08-release-notes.md), and synchronize this page and
   `INDEX.md`.
 4. Run formatting, analyzer, tests, the relevant platform build, and local wiki
@@ -118,9 +118,9 @@ To publish a release (example `v1.2.1`):
 5. Commit the complete release state, then tag and push that exact commit:
 
 ```powershell
-git tag v1.2.1
+git tag v1.2.2
 git push origin main
-git push origin v1.2.1
+git push origin v1.2.2
 ```
 
 This runs `release.yml`, builds both artifacts, and creates the Release. After
@@ -137,12 +137,14 @@ move an existing release tag or add its notes retrospectively.
 ### Android signing transition
 
 Published APKs through `v1.2.0` used runner-local debug keys; their certificate
-fingerprints differ, so Android rejects one as an update to another. `v1.2.1`
-is prepared as the first permanent-signing baseline. Users of an older build
-must uninstall it once before installing `v1.2.1`, which normally deletes that
-installation's local app data. Starting from `v1.2.1`, every later release must
-keep the application ID and pinned certificate and increase `versionCode` so
-Android can update in place.
+fingerprints differ, so Android rejects one as an update to another. The
+`v1.2.1` tag produced no artifacts because its metadata job did not normalize
+CRLF; it remains an immutable unpublished tag. `v1.2.2` is prepared as the first
+published permanent-signing baseline. Users of an older build must uninstall it
+once before installing `v1.2.2`, which normally deletes that installation's
+local app data. Starting from `v1.2.2`, every later release must keep the
+application ID and pinned certificate and increase `versionCode` so Android can
+update in place.
 
 ## 5. Known limitations
 
@@ -156,7 +158,7 @@ Android can update in place.
   this.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
 - An in-place Android upgrade using the permanent certificate cannot be
-  device-verified until both the `v1.2.1` baseline and a later signed APK exist.
+  device-verified until both the `v1.2.2` baseline and a later signed APK exist.
 
 ## 6. Licensing & attribution
 

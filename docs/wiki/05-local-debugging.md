@@ -1,6 +1,6 @@
 # Local Run and Debug Guide
 
-Last reviewed: 2026-07-21
+Last reviewed: 2026-07-22
 
 ## 1. Supported local targets
 
@@ -252,19 +252,20 @@ Record:
 
 ## 11. Latest local verification
 
-Command validation on 2026-07-21 with Flutter 3.44.6:
+Command validation on 2026-07-22 with Flutter 3.44.6:
 
 - Dart formatter on changed Dart files: passed.
 - `flutter analyze --no-pub`: passed with no issues.
 - `flutter test`: all 141 tests passed.
 - `flutter build apk --release --no-pub` with protected local signing values:
-  passed; the 61,921,516-byte APK embeds `1.2.1` (`versionCode` 6).
+  passed; the 61,921,516-byte APK embeds `1.2.2` (`versionCode` 7).
 - `apksigner`/`aapt` verification: passed for the expected package, version,
   and permanent certificate SHA-256. The APK SHA-256 is
-  `2fea9cbd7ccd049952868d858ad71cbbc16a782abdd08f24eb8bdf6d742f91ad`.
+  `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`.
 - Release workflow YAML/diagnostics, step-scoped secret assertion, website
-  JavaScript syntax, release metadata/build monotonicity, wiki links, and the
-  CRLF-aware Git diff check passed. `actionlint` was unavailable locally.
+  JavaScript syntax, exact CRLF-normalized Bash metadata/build monotonicity,
+  wiki links, and the CRLF-aware Git diff check passed. `actionlint` was
+  unavailable locally.
 - Tests cover navigation feedback mode persistence, bundled OGG validity,
   tone/voice/haptic routing, concise guidance, speech fallback, and settings
   previews; route-screen bottom safe areas; and realtime selected/saved route

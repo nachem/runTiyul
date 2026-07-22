@@ -99,7 +99,7 @@
         var versionParts = versionMatch.slice(1).map(Number);
         var permanentSigningAvailable = versionParts[0] > 1 ||
           (versionParts[0] === 1 && versionParts[1] > 2) ||
-          (versionParts[0] === 1 && versionParts[1] === 2 && versionParts[2] >= 1);
+          (versionParts[0] === 1 && versionParts[1] === 2 && versionParts[2] >= 2);
         signingTransition.hidden = !permanentSigningAvailable;
       }
 

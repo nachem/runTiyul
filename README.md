@@ -60,9 +60,9 @@ same links are surfaced on the [website](https://nachem.github.io/runTiyul/):
 
 **Android:** enable "install unknown apps" for your browser/file manager, then
 open the `.apk` (or `adb install RunTiyul.apk`). When moving from `v1.2.0` or
-older to `v1.2.1` or any later permanent-key release, uninstall the old build
+older to `v1.2.2` or any later permanent-key release, uninstall the old build
 first; Android normally removes that installation's local data. Releases after
-the `v1.2.1` baseline can update in place when they retain the permanent signing
+the `v1.2.2` baseline can update in place when they retain the permanent signing
 identity.
 
 **iOS:** the `.ipa` is **unsigned**. Sideload it with
@@ -133,9 +133,9 @@ Two GitHub Actions workflows power distribution:
   [release-note contract](docs/wiki/08-release-notes.md):
 
    ```powershell
-  git tag v1.2.1
+  git tag v1.2.2
   git push origin main
-  git push origin v1.2.1
+  git push origin v1.2.2
    ```
 
    The stable asset names (`RunTiyul.apk` / `RunTiyul.ipa`) keep the

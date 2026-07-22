@@ -1,6 +1,6 @@
 # Release Notes Index
 
-Last reviewed: 2026-07-21
+Last reviewed: 2026-07-22
 
 This page is the durable index and policy for RunTiyul release notes. Detailed,
 authored notes live under [`releases/`](releases/) and are also used verbatim as
@@ -30,7 +30,8 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| [v1.2.1](releases/v1.2.1.md) | 2026-07-21 | Prepared | Permanent Android release signing, update-safety CI gates, and installed-version awareness. |
+| [v1.2.2](releases/v1.2.2.md) | 2026-07-22 | Prepared | Permanent Android release signing, CRLF-safe update gates, and installed-version awareness. |
+| [v1.2.1](releases/v1.2.1.md) | 2026-07-22 | Unpublished | Tag workflow stopped at metadata validation because CRLF was not normalized; no artifacts or GitHub Release were published. Superseded by `v1.2.2`. |
 | [v1.2.0](releases/v1.2.0.md) | 2026-07-18 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.2.0) | Offline tone/voice navigation alerts, alert previews, route-map visibility, and bottom-panel fixes. |
 
 Earlier published releases predate the enforced authored-note contract and are

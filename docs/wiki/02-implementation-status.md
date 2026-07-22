@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-21<br>
+Snapshot date: 2026-07-22<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -364,11 +364,13 @@ Limitations:
   metadata before upload. The private key has an access-controlled local
   recovery copy outside the repository; an independent off-machine backup is
   still an operational requirement.
-- `v1.2.1` (`versionCode` 6) is the first permanent-signing baseline. APKs
-  through `v1.2.0` used different ephemeral debug certificates, so their users
-  must uninstall once (normally losing local app data) before installing this
-  baseline. A data-preserving in-place update cannot be verified until a later
-  permanent-key build exists.
+- `v1.2.1` (`versionCode` 6) was signed locally but its tag workflow stopped at
+  metadata validation because CRLF was not normalized; no artifact or GitHub
+  Release was published. `v1.2.2` (`versionCode` 7) supersedes it as the first
+  publishable permanent-signing baseline. APKs through `v1.2.0` used different
+  ephemeral debug certificates, so their users must uninstall once (normally
+  losing local app data) before installing this baseline. A data-preserving
+  in-place update cannot be verified until a later permanent-key build exists.
 
 ### iOS
 
@@ -380,7 +382,7 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-21 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-22 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
@@ -388,9 +390,9 @@ Latest validation on 2026-07-21 with Flutter 3.44.6 stable:
 | `flutter analyze --no-pub` | Passed; no issues found. |
 | `flutter test` | Passed; 141 tests. |
 | `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
-| `flutter build apk --release --no-pub` with protected local signing values | Passed; produced a 61,921,516-byte APK. |
-| Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.1`, `versionCode=6`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `2fea9cbd7ccd049952868d858ad71cbbc16a782abdd08f24eb8bdf6d742f91ad`. |
-| Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; `node --check site/main.js`, release metadata/build monotonicity, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
+| `flutter build apk --release --no-pub` with protected local signing values | Passed for `1.2.2+7`; produced a 61,921,516-byte APK. |
+| Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.2`, `versionCode=7`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`. |
+| Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; exact Bash metadata/build monotonicity with CRLF normalization, `node --check site/main.js`, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
 
 The Android build emits a forward-looking Flutter warning that `flutter_tts`
 4.2.5 still applies the Kotlin Gradle plugin. It does not fail the current
@@ -509,6 +511,6 @@ Not verified:
   progress separately.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
-6. Publish the permanent-key `v1.2.1` baseline, secure an independent signing
+6. Publish the permanent-key `v1.2.2` baseline, secure an independent signing
   backup, then verify a data-preserving Android upgrade with a later signed
   build on a physical device.
