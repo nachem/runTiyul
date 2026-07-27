@@ -11,28 +11,25 @@ describes what is **implemented in the repository**, not planned work.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | `v1.3.0+8` prepared; permanently signed `v1.2.2` remains latest published until the tag workflow succeeds |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` prepared; `v1.2.2` remains latest published. On-device sideload remains unverified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.0+8` published (62,085,540 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-27 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` published (15,857,479 bytes); latest-download link returned 200 on 2026-07-27. On-device sideload remains unverified |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
 `...RunTiyul.ipa`. As of the
-[`v1.2.2` release](https://github.com/nachem/runTiyul/releases/tag/v1.2.2)
-(2026-07-22), both resolve `200`. Release workflow retry
-[`29896994686`](https://github.com/nachem/runTiyul/actions/runs/29896994686)
-passed its metadata gate, permanent-signature Android verification, unsigned
-iOS build, and publication jobs. GitHub reports SHA-256
-`eebf3b4c24c19552365148b5fa1d578f84226d6d59d864e7abc73493c1c50a70`
-for the APK and
-`a536a6076eee24daa2be33940a3d15da1dacbfd9e76f2fe1131d1eb50085d6a2`
-for the IPA.
-
-`v1.3.0+8` is prepared on 2026-07-27 with authored notes at
-[`releases/v1.3.0.md`](releases/v1.3.0.md). Its tag workflow and public artifact
-verification are pending; do not treat it as published until those checks are
-recorded here.
+[`v1.3.0` release](https://github.com/nachem/runTiyul/releases/tag/v1.3.0)
+(2026-07-27), both resolve `200`. Release workflow
+[`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
+passed its metadata gate, permanent-signature Android identity verification,
+unsigned iOS build, and publication jobs. Independent downloads match the
+GitHub-reported SHA-256 digests: APK
+`341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`
+and IPA
+`d5fe1f765ee31b2de71027536dfb3acdb04fd7f1f513db0e0a8d0253c0181601`.
+The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
+`versionName=1.3.0`, `versionCode=8`, and the pinned permanent certificate.
 
 ## 2. Website (`site/`)
 
@@ -148,7 +145,7 @@ move an existing release tag or add its notes retrospectively.
 Published APKs through `v1.2.0` used runner-local debug keys; their certificate
 fingerprints differ, so Android rejects one as an update to another. The
 `v1.2.1` tag produced no artifacts because its metadata job did not normalize
-CRLF; it remains an immutable unpublished tag. `v1.2.2` is prepared as the first
+CRLF; it remains an immutable unpublished tag. `v1.2.2` is the first
 published permanent-signing baseline. Users of an older build must uninstall it
 once before installing `v1.2.2`, which normally deletes that installation's
 local app data. Starting from `v1.2.2`, every later release must keep the
@@ -163,11 +160,12 @@ update in place.
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.2.2` is the
+  enhancement depend on at least one published `v*` release; `v1.3.0` is the
   current latest release.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
-- An in-place Android upgrade using the permanent certificate cannot be
-  device-verified until both the `v1.2.2` baseline and a later signed APK exist.
+- `v1.2.2` and `v1.3.0` now provide both permanently signed APKs needed for an
+  in-place upgrade test, but data preservation remains physical-device
+  unverified.
 
 ## 6. Licensing & attribution
 

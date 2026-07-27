@@ -261,24 +261,30 @@ Record:
 
 ## 11. Latest local verification
 
-Command validation on 2026-07-22 with Flutter 3.44.6:
+Command validation on 2026-07-27 with Flutter 3.44.6:
 
 - Dart formatter on changed Dart files: passed.
 - `flutter analyze --no-pub`: passed with no issues.
-- `flutter test`: all 141 tests passed.
-- `flutter build apk --release --no-pub` with protected local signing values:
-  passed; the 61,921,516-byte APK embeds `1.2.2` (`versionCode` 7).
-- `apksigner`/`aapt` verification: passed for the expected package, version,
-  and permanent certificate SHA-256. The APK SHA-256 is
-  `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`.
-- Release workflow YAML/diagnostics, step-scoped secret assertion, website
-  JavaScript syntax, exact CRLF-normalized Bash metadata/build monotonicity,
-  wiki links, and the CRLF-aware Git diff check passed. `actionlint` was
+- `flutter test`: all 148 tests passed.
+- `flutter build apk --debug --no-pub`: passed; the APK embeds `1.3.0`
+  (`versionCode` 8) and the expected package.
+- Release run
+  [`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
+  passed metadata, protected Android signing/identity verification, unsigned
+  iOS packaging, and publication.
+- Independent `apksigner`/`aapt` verification of the public APK passed for
+  package `com.bernoulli.trailrunner.trail_runner`, `1.3.0+8`, and the permanent
+  certificate. Public APK SHA-256 is
+  `341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`.
+- Public IPA SHA-256 is
+  `d5fe1f765ee31b2de71027536dfb3acdb04fd7f1f513db0e0a8d0253c0181601`;
+  both stable latest-download URLs returned 200.
+- Wiki links and the CRLF-aware Git diff check passed. `actionlint` was
   unavailable locally.
-- Tests cover navigation feedback mode persistence, bundled OGG validity,
-  tone/voice/haptic routing, concise guidance, speech fallback, and settings
-  previews; route-screen bottom safe areas; and realtime selected/saved route
-  visibility, in addition to the prior map/download/terrain coverage.
+- Tests cover nearest-route bearing and relative direction, off-route trend
+  cadence, monotonic distance/time progress milestones, junction priority,
+  tone/voice/haptic routing, speech fallback, persistence, and four settings
+  previews, in addition to the prior map/download/terrain coverage.
 - Tests also cover first-install/change detection, one-time version
   acknowledgement, update-dialog content, and About version display.
 - The Android build emitted a non-blocking future-compatibility warning because

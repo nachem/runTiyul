@@ -32,8 +32,9 @@ As of 2026-07-27:
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
 - Format and analyzer pass; 148 automated tests pass.
-- `v1.3.0+8` is prepared with authored release notes; publication evidence must
-  be recorded only after the tag workflow and public asset checks succeed.
+- `v1.3.0+8` is published. Workflow `30255797959`, public asset hashes and
+  sizes, stable download URLs, and independent APK identity/signature checks
+  passed on 2026-07-27.
 - Monotonic route-progress announcements and directional off-route route-finder
   alerts are implemented and unit/widget-tested. Their heading quality, audio,
   and locked-screen behavior remain physical-device unverified.

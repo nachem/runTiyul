@@ -396,9 +396,18 @@ Latest validation on 2026-07-27 with Flutter 3.44.6 stable:
 | `flutter analyze --no-pub` | Passed; no issues found. |
 | `flutter test` | Passed; 148 tests. |
 | `flutter build apk --debug --no-pub` | Passed for `1.3.0+8`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, and `versionCode=8`. |
-| `flutter build apk --release --no-pub` with protected local signing values | Passed for `1.2.2+7`; produced a 61,921,516-byte APK. |
-| Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.2`, `versionCode=7`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`. |
-| Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; exact Bash metadata/build monotonicity with CRLF normalization, `node --check site/main.js`, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
+| GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.0+8` in run `30255797959`; published a 62,085,540-byte APK. |
+| Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, `versionCode=8`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`. |
+| Release workflow/site/repository checks | Run `30255797959` passed metadata, Android, iOS, and publish jobs; signing secrets are build-step scoped. Local wiki links and the CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
+
+Release run
+[`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
+published `v1.3.0+8` from commit `d58df53`. Both the Android and unsigned iOS
+jobs passed. Independent downloads matched the GitHub API hashes: APK
+`341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`
+(62,085,540 bytes) and IPA
+`d5fe1f765ee31b2de71027536dfb3acdb04fd7f1f513db0e0a8d0253c0181601`
+(15,857,479 bytes). Both stable latest-download URLs returned 200.
 
 The first `v1.2.2` tag run (`29896550967`) built the signed Android APK and
 unsigned iOS IPA, but its Android post-build gate could not parse the
@@ -533,4 +542,4 @@ Not verified:
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android
-  upgrade from `v1.2.2` to a later signed build on a physical device.
+  upgrade from `v1.2.2` to `v1.3.0` on a physical device.
