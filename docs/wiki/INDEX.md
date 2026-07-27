@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-22<br>
+Last reviewed: 2026-07-27<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -41,10 +41,11 @@ instructions are mandatory for all future agents.
 | Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail; realtime recording receives all saved-route overlays, while the selected navigation route remains visible independently of the saved-trails toggle |
 | GPX route import | Implemented and parser tested; native picker not emulator verified |
 | GPS activity recording | Implemented; emulator permission/timer/lifecycle verified |
-| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping to nearby trails and roads on save followed by a graph pass that keeps the route on connected ways and bridges gaps (toggle), and configurable live off-route/junction banners, haptics, CC0 tones, and concise system-voice guidance implemented. Tone + voice is the default; Voice, Tones, and Haptics only plus settings previews are available. Audio/background behavior is not device-verified; route progress % remains. |
+| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping on save, and configurable live guidance implemented. Off-route cues repeat with nearest-route compass/relative direction: slow pairs indicate approaching and fast triples moving away. Monotonic completed/remaining progress can announce by distance or time. Tone + voice is the default; Voice, Tones, Haptics only, and four previews are available. Audio, heading quality, and background behavior are not device-verified; visual progress percentage remains. |
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
+| Prepared release | `v1.3.0+8` prepared 2026-07-27 with directional route-recovery cues and configurable on-route progress guidance; tag workflow and public artifacts pending |
 | Latest published release | `v1.2.2+7` published 2026-07-22 as the permanent Android signing baseline; Android APK and unsigned iOS IPA stable links return 200; iOS sideload/runtime remains unverified |
 | Release workflow | Manual retry `29896994686` passed metadata, Android permanent-signature/identity verification, unsigned iOS build, and publication after fixing CRLF metadata and Linux certificate parsing. `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | Future releases can update `v1.2.2` in place only when they retain the pinned permanent certificate and increase `versionCode`. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall; the resulting local-data loss cannot be repaired retroactively |
@@ -53,7 +54,7 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
-| Automated validation | Format/analyze pass; 141 tests pass; published `1.2.2+7` APK independently verifies with the expected package, build number, and pinned certificate; public APK/IPA digests and stable latest URLs verified |
+| Automated validation | Format/analyze pass; 148 tests pass; published `1.2.2+7` APK independently verifies with the expected package, build number, and pinned certificate; public APK/IPA digests and stable latest URLs verified |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -65,9 +66,10 @@ Detailed evidence belongs in
   overzoom, and measure conversion speed, memory, battery, and final storage.
 2. Verify CyclOSM online selection and small debug-only offline download on a
   device while confirming no separate Terrarium request occurs.
-3. Verify background recording/downloads and off-route/junction tone + voice
-  alerts on physical Android and iOS devices, including outdoor audibility,
-  headphones, missing-language fallback, and locked-screen playback.
+3. Verify background recording/downloads and navigation audio on physical
+  Android and iOS devices: off-route slow/fast trend cadence, compass/relative
+  heading accuracy, junction/progress cues, outdoor audibility, headphones,
+  missing-language fallback, and locked-screen playback.
 4. Stress-test zoomed-out and long Follow trails routes on a mid-range physical device, including memory, tap latency, and save/reload fidelity.
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
 6. Secure an independent signing-key backup, then verify a data-preserving

@@ -72,8 +72,13 @@ void main() {
         offRouteEnabled: false,
         offRouteMeters: 55,
         offRoutePersistence: 5,
+        offRouteReminderSeconds: 35,
         junctionEnabled: false,
         junctionMeters: 40,
+        progressEnabled: true,
+        progressIntervalMode: ProgressIntervalMode.time,
+        progressDistanceMeters: 2000,
+        progressIntervalMinutes: 15,
         feedbackMode: NavFeedbackMode.voice,
       ),
     );
@@ -83,8 +88,13 @@ void main() {
     expect(config.offRouteEnabled, isFalse);
     expect(config.offRouteMeters, 55);
     expect(config.offRoutePersistence, 5);
+    expect(config.offRouteReminderSeconds, 35);
     expect(config.junctionEnabled, isFalse);
     expect(config.junctionMeters, 40);
+    expect(config.progressEnabled, isTrue);
+    expect(config.progressIntervalMode, ProgressIntervalMode.time);
+    expect(config.progressDistanceMeters, 2000);
+    expect(config.progressIntervalMinutes, 15);
     expect(config.feedbackMode, NavFeedbackMode.voice);
   });
 
@@ -94,7 +104,7 @@ void main() {
       final tones = <NavAlert>[];
       final messages = <String>[];
       final feedback = NavigationAlertFeedback(
-        haptic: () async {},
+        haptic: (_) async {},
         playTone: (alert) async {
           tones.add(alert);
           return true;

@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-07-22
+Last reviewed: 2026-07-27
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -11,8 +11,8 @@ describes what is **implemented in the repository**, not planned work.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.2.2` published (61,937,784 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-22 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.2.2` published (15,844,405 bytes); latest-download link returned 200 on 2026-07-22. On-device sideload remains unverified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | `v1.3.0+8` prepared; permanently signed `v1.2.2` remains latest published until the tag workflow succeeds |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` prepared; `v1.2.2` remains latest published. On-device sideload remains unverified |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
@@ -28,6 +28,11 @@ iOS build, and publication jobs. GitHub reports SHA-256
 for the APK and
 `a536a6076eee24daa2be33940a3d15da1dacbfd9e76f2fe1131d1eb50085d6a2`
 for the IPA.
+
+`v1.3.0+8` is prepared on 2026-07-27 with authored notes at
+[`releases/v1.3.0.md`](releases/v1.3.0.md). Its tag workflow and public artifact
+verification are pending; do not treat it as published until those checks are
+recorded here.
 
 ## 2. Website (`site/`)
 

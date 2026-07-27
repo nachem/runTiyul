@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-22<br>
+Snapshot date: 2026-07-27<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -21,9 +21,10 @@ RunTiyul now provides a local-first mobile MVP with:
 
 The MVP is not production-ready. A production map provider that explicitly
 permits offline downloads has not been selected. iOS and physical-device
-background recording have not been verified. Route progress and course-up are
-not implemented; off-route and junction guidance is implemented but its tone,
-voice, and locked-screen behavior has not been verified on a physical device.
+background recording have not been verified. Monotonic route-progress guidance
+and route-finding off-route guidance are implemented; visual progress percentage
+and course-up are not. Tone, voice, heading quality, and locked-screen behavior
+have not been verified on a physical device.
 
 A long-term offline-map architecture is documented in
 `06-offline-map-packages.md`. An on-device vector-to-raster conversion slice is
@@ -60,7 +61,7 @@ hosting remain proposals only.
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit-tested, physical-device stress test pending | `RTE-003` Follow trails no longer derives its workload from a zoomed-out viewport: the first tap loads a bounded 3x3 z14 neighborhood around the tapped point, subsequent nearby areas merge into the graph, and explicit viewport reloads cap at 24 tiles centered on the screen instead of truncating from the northwest corner. A distant tap whose bounded neighborhood cannot overlap the preceding point is rejected immediately with an add-a-closer-point message. A closer tap is committed only when a connected, reasonable graph path exists, so Follow trails never silently inserts a straight waypoint leg. Existing anchors keep their stable graph indices; only the newest leg is routed, graph construction is lazy, and cross-trail shortest paths use a binary-heap frontier. Under `RTE-009`, saved/navigation geometry remains lossless while `TrailMap` reduces only its rendered point list at approximately one screen pixel for the current zoom. Very long routes still require profiling on a mid-range physical device. |
-| Route progress/off-route alerts | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | Route progress percentage remains unimplemented. While recording a selected route, sustained off-route distance and upcoming on-route junctions produce a visual banner and heavy haptic. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**. Tone mode uses two bundled Kenney Interface Sounds OGG cues selected for distinct warning/rising-junction signatures; the source is CC0 1.0 with provenance and hashes in `assets/audio/navigation/LICENSE.txt`. Voice mode uses an installed English system voice, concise prompts such as “Off route. Check the map.” and “In 25 meters, keep left,” navigation audio focus, and bundled-tone fallback if speech is unavailable. Record → Alerts previews both alert types using unsaved settings. Physical-device audibility in wind, media/silent-mode behavior, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
+| Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
 | GPS activity tracking | Implemented and emulator verified | Start, permission request, pause, resume, finish, discard, timer, and persisted samples. |
 | Live metrics | Implemented | Elapsed time, distance, average pace, and smoothed-threshold elevation gain are shown. Moving time is not calculated separately. |
 | Background recording | Configured, not physical-device verified | Geolocator foreground notification/background settings and platform permissions exist. |
@@ -114,7 +115,7 @@ lib/
 |   |-- map_provider.dart           Compile-time provider configuration
 |   |-- map_render_theme.dart       Trail-emphasis + peak-label render theme
 |   |-- navigation_alert_feedback.dart  Haptic, CC0 tone, system-TTS, and fallback adapter
-|   |-- navigation_monitor.dart     Off-route and junction alert logic
+|   |-- navigation_monitor.dart     Off-route, progress, and junction alert logic
 |   |-- terrain_contour_service.dart  Terrarium decode + contour/hillshade renderer
 |   |-- route_snapper.dart          Snaps a route onto nearby trails (hysteresis)
 |   |-- route_trail_builder.dart    Route/viewport trail-network builder
@@ -241,10 +242,15 @@ Implemented:
 - Active activity recovery as paused after process restart.
 - Route, recorded track, and current position map layers.
 - Sustained off-route and upcoming-junction detection with a visual banner,
-  heavy haptic, configurable thresholds, and per-alert enable switches.
+  semantic haptics (heavy warning, medium junction, light progress),
+  configurable thresholds, reminder cadence, nearest-route compass/relative
+  direction, and per-alert enable switches.
+- Monotonic along-route progress with optional completed/remaining announcements
+  at configurable distance or elapsed-time intervals while on route.
 - Persisted **Tone + voice**, **Voice**, **Tones**, and **Haptics only** output
-  modes, with in-settings previews for representative off-route and left-turn
-  junction alerts. Missing system speech falls back to the bundled tone.
+  modes, with in-settings previews for initial off-route, route-finder trend,
+  progress, and left-turn junction alerts. Missing system speech falls back to
+  the corresponding bundled-tone cadence.
 - Two offline Kenney Interface Sounds cues bundled under CC0 1.0; system TTS
   uses an installed English voice and platform navigation audio focus.
 - Activity history, detail summary/map, and confirmed deletion.
@@ -257,7 +263,7 @@ Limitations:
   sequential fixes to verify distance changes live.
 - Moving time is not distinct from elapsed time.
 - Current pace uses the full activity average, not a rolling window.
-- Route progress and course-up mode are absent.
+- Visual route-progress percentage and course-up mode are absent.
 - Alert tones, system voice availability, outdoor audibility, headphone routing,
   and background/locked-screen playback have not been exercised on a physical
   Android or iOS device.
@@ -382,14 +388,14 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-22 with Flutter 3.44.6 stable:
+Latest validation on 2026-07-27 with Flutter 3.44.6 stable:
 
 | Command | Result |
 | --- | --- |
 | Dart formatter on changed Dart files | Passed. |
 | `flutter analyze --no-pub` | Passed; no issues found. |
-| `flutter test` | Passed; 141 tests. |
-| `flutter build apk --debug` | Passed; produced `build/app/outputs/flutter-apk/app-debug.apk`. |
+| `flutter test` | Passed; 148 tests. |
+| `flutter build apk --debug --no-pub` | Passed for `1.3.0+8`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, and `versionCode=8`. |
 | `flutter build apk --release --no-pub` with protected local signing values | Passed for `1.2.2+7`; produced a 61,921,516-byte APK. |
 | Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.2.2`, `versionCode=7`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `5dd91bdc699b94e612d5f39a3461b6d925e063e696d3d46a8abdd1b448eddd29`. |
 | Release workflow/site/repository checks | Workflow YAML parse and VS Code diagnostics passed; signing secrets are build-step scoped; exact Bash metadata/build monotonicity with CRLF normalization, `node --check site/main.js`, local wiki links, and CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
@@ -451,12 +457,13 @@ Automated coverage includes:
   junction queries; and route-to-trail snapping.
 - Route-trail builder tile coverage, empty-source handling, and on-network
   graph refinement (bridging an off-network gap along connected ways);
-  navigation
-  monitor off-route persistence, junction re-arm, and disabled states; and the
-  snap/alert settings persistence.
-- Navigation feedback mode persistence; tone/voice/haptic routing; concise
-  direction phrases; speech-unavailable tone fallback; valid bundled OGG
-  assets; previewing unsaved settings; and compact alert-settings layout.
+  navigation monitor off-route persistence, nearest-route bearing and relative
+  direction, repeated trend cues, monotonic distance/time progress milestones,
+  junction re-arm, disabled states, and snap/alert settings persistence.
+- Navigation feedback mode persistence; slow/fast off-route and relaxed
+  progress tone patterns; compass/relative voice phrases; completed/remaining
+  guidance; speech-unavailable matching-tone fallback; valid bundled OGG
+  assets; four unsaved-setting previews; and alert-settings layout.
 - Route detail/editor bottom-safe-area ownership; realtime recording route-list
   wiring; and independent visibility of the selected navigation route versus
   hideable saved-route overlays.
@@ -519,10 +526,10 @@ Not verified:
   regional data: CyclOSM visual comparison, contour labels/hillshade, z13
   overzoom, conversion speed, memory, battery, and final storage size.
 2. Verify Android and iOS background recording on physical devices.
-3. Verify off-route/junction tones and system voice on physical Android and iOS
-  devices, including outdoor audibility, Bluetooth/open-ear headphones,
-  background/locked-screen playback, and missing-language fallback; add route
-  progress separately.
+3. Verify navigation tones and system voice on physical Android and iOS:
+  off-route slow/fast trend cadence, compass/relative heading quality,
+  junction/progress distinction, outdoor audibility, Bluetooth/open-ear
+  headphones, background/locked-screen playback, and missing-language fallback.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android

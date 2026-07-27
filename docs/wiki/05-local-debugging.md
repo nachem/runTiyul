@@ -167,8 +167,10 @@ release acceptance test on a physical Android and iOS device.
 
 Open **Record → Alerts** before starting a routed activity. **Tone + voice** is
 the recommended default for trail use; **Voice**, **Tones**, and **Haptics only**
-are also available. Tap both **Off route** and **Junction** under **Test alerts**
-after changing the mode; previews use the unsaved selection.
+are also available. Tap **Off route**, **Junction**, **Route finder**, and
+**Progress** under **Test alerts** after changing the mode; previews use the
+unsaved selection. The same sheet configures off-route reminder cadence and
+on-route progress announcements by distance or time.
 
 Voice uses an installed English system voice and works without network access.
 If speech is unavailable, Voice falls back to the bundled tone and the preview
@@ -183,8 +185,15 @@ Physical-device verification must cover:
   override the OS does not grant.
 5. A selected-route run that triggers sustained off-route and approaching-left,
   right, and straight junction prompts from simulated or real GPS movement.
-6. Screen locked and app backgrounded on Android and iOS.
-7. Missing or disabled English TTS, confirming the bundled-tone fallback.
+6. While off route, move closer and confirm two slow warning cues; then move
+  away and confirm three fast warning cues. Check compass and left/right/behind
+  guidance against the map, including a stationary or unavailable-heading fix.
+7. On route, cross a configured distance milestone and a time milestone;
+  confirm completed/remaining distance and that no progress cue masks an
+  off-route warning.
+8. Screen locked and app backgrounded on Android and iOS.
+9. Missing or disabled English TTS, confirming the matching tone-pattern
+  fallback.
 
 Automated tests validate event routing and phrases but cannot prove audibility,
 voice installation, output routing, or background playback.

@@ -118,9 +118,9 @@ turn-by-turn instructions.
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
 | NAV-001 | The recording screen shall show the selected route, recorded track, and live location. | All three use distinct visual styles. |
-| NAV-002 | The app shall show progress along the selected route. | Progress does not decrease substantially due only to GPS jitter. |
+| NAV-002 | The app shall show progress along the selected route and optionally announce it while the runner remains on route. | Progress does not decrease due only to GPS jitter. The runner can disable announcements or schedule completed/remaining guidance by configurable route distance or elapsed-time intervals. |
 | NAV-003 | The app shall detect when the runner is meaningfully off route. | Threshold and persistence avoid alerts from a single inaccurate point. |
-| NAV-004 | Off-route state shall use visual and optional haptic/audio feedback. | Each alert can be disabled. The runner can choose Tone + voice, Voice, Tones, or Haptics only and preview representative off-route and junction alerts before a run. Voice remains concise status/direction guidance, falls back to a tone when no offline system voice is available, and does not claim rescue-grade accuracy. |
+| NAV-004 | Off-route state shall use visual and optional haptic/audio feedback that helps the runner regain the route. | Each alert can be disabled. Persistent off-route guidance repeats at a configurable interval, reports distance plus compass direction and runner-relative direction when heading is available, and uses distinct slow/fast tone cadences to indicate approaching versus moving away. The runner can choose Tone + voice, Voice, Tones, or Haptics only and preview representative route-finder, off-route, progress, and junction alerts before a run. Voice falls back to the corresponding tone pattern when no offline system voice is available and does not claim rescue-grade accuracy. |
 | NAV-005 | The app shall allow north-up and course-up presentation. | The chosen mode is obvious and can be changed during a run. |
 | NAV-006 | Navigation shall operate with downloaded map data and no network. | Route, track, metrics, and covered map tiles remain available in airplane mode. |
 
@@ -351,7 +351,8 @@ considered final:
 3. Background download behavior on iOS. Android keeps the process alive with a
   foreground service during downloads; iOS currently relies on foreground
   auto-resume.
-4. Exact default off-route threshold and persistence duration.
+4. Exact default off-route threshold, persistence/reminder cadence, and
+  distance/time progress intervals.
 5. Elevation source and smoothing algorithm.
 6. Whether manual waypoint routes remain straight-line only in version 1.
 7. Supported minimum Android and iOS versions.

@@ -52,7 +52,7 @@ void main() {
     final tones = <NavAlert>[];
     final messages = <String>[];
     final feedback = NavigationAlertFeedback(
-      haptic: () async {},
+      haptic: (_) async {},
       playTone: (alert) async {
         tones.add(alert);
         return true;
@@ -82,6 +82,14 @@ void main() {
     expect(find.text('Alert output'), findsOneWidget);
     expect(find.byKey(const ValueKey('test-off-route-alert')), findsOneWidget);
     expect(find.byKey(const ValueKey('test-junction-alert')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('test-recovery-guidance')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('test-progress-guidance')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byKey(const ValueKey('nav-feedback-mode')));
     await tester.pumpAndSettle();

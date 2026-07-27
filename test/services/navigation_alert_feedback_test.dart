@@ -9,6 +9,8 @@ void main() {
   const offRoute = NavStatus(
     offRoute: true,
     distanceToRouteMeters: 42,
+    bearingToRouteDegrees: 90,
+    routeRelativeDirection: RouteRelativeDirection.right,
     triggered: NavAlert.offRoute,
   );
   const junction = NavStatus(
@@ -24,7 +26,7 @@ void main() {
       var hapticCount = 0;
       final events = <String>[];
       final feedback = NavigationAlertFeedback(
-        haptic: () async => hapticCount++,
+        haptic: (_) async => hapticCount++,
         playTone: (alert) async {
           events.add('tone:${alert.name}');
           return true;
@@ -54,7 +56,7 @@ void main() {
     var toneCount = 0;
     var voiceCount = 0;
     final feedback = NavigationAlertFeedback(
-      haptic: () async => hapticCount++,
+      haptic: (_) async => hapticCount++,
       playTone: (_) async {
         toneCount++;
         return true;
@@ -79,7 +81,7 @@ void main() {
     () async {
       var toneCount = 0;
       final feedback = NavigationAlertFeedback(
-        haptic: () async {},
+        haptic: (_) async {},
         playTone: (_) async {
           toneCount++;
           return true;
@@ -102,13 +104,70 @@ void main() {
   test('guidance is concise and includes junction direction', () {
     expect(
       NavigationAlertFeedback.guidanceFor(offRoute),
-      'Off route. Check the map.',
+      '40 meters off route. Go east, to your right for 40 meters.',
     );
     expect(
       NavigationAlertFeedback.guidanceFor(junction),
       'In 25 meters, keep left.',
     );
   });
+
+  test('off-route tone cadence reflects recovery trend', () async {
+    final tones = <NavAlert>[];
+    final feedback = NavigationAlertFeedback(
+      haptic: (_) async {},
+      playTone: (alert) async {
+        tones.add(alert);
+        return true;
+      },
+      speak: (_) async => true,
+      wait: (_) async {},
+    );
+    const improving = NavStatus(
+      offRoute: true,
+      distanceToRouteMeters: 80,
+      offRouteTrend: OffRouteTrend.approaching,
+      triggered: NavAlert.offRouteReminder,
+    );
+
+    await feedback.notify(improving, mode: NavFeedbackMode.tones);
+
+    expect(tones, [NavAlert.offRouteReminder, NavAlert.offRouteReminder]);
+    expect(
+      NavigationAlertFeedback.guidanceFor(improving),
+      '80 meters off route. You are getting closer.',
+    );
+  });
+
+  test(
+    'progress uses relaxed rising cues and reports route distance',
+    () async {
+      final tones = <NavAlert>[];
+      final feedback = NavigationAlertFeedback(
+        haptic: (_) async {},
+        playTone: (alert) async {
+          tones.add(alert);
+          return true;
+        },
+        speak: (_) async => true,
+        wait: (_) async {},
+      );
+      const progress = NavStatus(
+        offRoute: false,
+        routeCompletedMeters: 8000,
+        routeRemainingMeters: 3000,
+        triggered: NavAlert.progress,
+      );
+
+      await feedback.notify(progress, mode: NavFeedbackMode.tones);
+
+      expect(tones, [NavAlert.progress, NavAlert.progress]);
+      expect(
+        NavigationAlertFeedback.guidanceFor(progress),
+        '8.0 kilometers completed, 3.0 kilometers remaining.',
+      );
+    },
+  );
 
   test(
     'Android voice selection requires an installed offline English voice',
@@ -166,7 +225,7 @@ void main() {
 
   test('feedback failures do not escape into activity recording', () async {
     final feedback = NavigationAlertFeedback(
-      haptic: () => Future<void>.error(StateError('haptic unavailable')),
+      haptic: (_) => Future<void>.error(StateError('haptic unavailable')),
       playTone: (_) => Future<bool>.error(StateError('audio unavailable')),
       speak: (_) => Future<bool>.error(StateError('voice unavailable')),
       stop: () => Future<void>.error(StateError('stop unavailable')),

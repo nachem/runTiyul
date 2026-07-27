@@ -52,6 +52,138 @@ void main() {
     }
   });
 
+  test('off-route state points the runner back to the nearest route', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteMeters: 30,
+        offRoutePersistence: 1,
+        junctionEnabled: false,
+      ),
+    );
+
+    final status = monitor.update(
+      const LatLng(0.001, 0.005),
+      route: route,
+      headingDegrees: 0,
+    );
+
+    expect(status.offRoute, isTrue);
+    expect(status.nearestRoutePoint, isNotNull);
+    expect(status.bearingToRouteDegrees, closeTo(180, 1));
+    expect(status.routeRelativeDirection, RouteRelativeDirection.behind);
+  });
+
+  test('off-route reminders report whether recovery is improving', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteMeters: 30,
+        offRoutePersistence: 1,
+        offRouteReminderSeconds: 20,
+        junctionEnabled: false,
+      ),
+    );
+    final started = DateTime.utc(2026, 7, 26, 8);
+
+    expect(
+      monitor
+          .update(const LatLng(0.001, 0.005), route: route, timestamp: started)
+          .triggered,
+      NavAlert.offRoute,
+    );
+    expect(
+      monitor
+          .update(
+            const LatLng(0.0008, 0.005),
+            route: route,
+            timestamp: started.add(const Duration(seconds: 19)),
+          )
+          .triggered,
+      NavAlert.none,
+    );
+    final reminder = monitor.update(
+      const LatLng(0.0006, 0.005),
+      route: route,
+      timestamp: started.add(const Duration(seconds: 20)),
+    );
+    expect(reminder.triggered, NavAlert.offRouteReminder);
+    expect(reminder.offRouteTrend, OffRouteTrend.approaching);
+  });
+
+  test('distance progress is monotonic and announces configured intervals', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteEnabled: false,
+        junctionEnabled: false,
+        progressDistanceMeters: 250,
+      ),
+    );
+
+    final first = monitor.update(const LatLng(0, 0.001), route: route);
+    final milestone = monitor.update(const LatLng(0, 0.0035), route: route);
+    final jitterBack = monitor.update(const LatLng(0, 0.003), route: route);
+
+    expect(first.triggered, NavAlert.none);
+    expect(milestone.triggered, NavAlert.progress);
+    expect(milestone.routeCompletedMeters, greaterThan(350));
+    expect(jitterBack.routeCompletedMeters, milestone.routeCompletedMeters);
+  });
+
+  test('time progress announces only while on route', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteMeters: 30,
+        offRoutePersistence: 1,
+        junctionEnabled: false,
+        progressIntervalMode: ProgressIntervalMode.time,
+        progressIntervalMinutes: 5,
+      ),
+    );
+
+    monitor.update(
+      const LatLng(0, 0.001),
+      route: route,
+      elapsed: const Duration(minutes: 1),
+    );
+    final milestone = monitor.update(
+      const LatLng(0, 0.002),
+      route: route,
+      elapsed: const Duration(minutes: 5),
+    );
+    final offRoute = monitor.update(
+      const LatLng(0.001, 0.002),
+      route: route,
+      elapsed: const Duration(minutes: 10),
+    );
+
+    expect(milestone.triggered, NavAlert.progress);
+    expect(offRoute.triggered, NavAlert.offRoute);
+  });
+
+  test('junction alert takes priority over a progress milestone', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteEnabled: false,
+        junctionMeters: 100,
+        progressDistanceMeters: 100,
+      ),
+    );
+    const junction = LatLng(0, 0.002);
+    monitor.update(
+      const LatLng(0, 0.0005),
+      route: route,
+      junctions: const [junction],
+    );
+
+    final status = monitor.update(
+      const LatLng(0, 0.0015),
+      route: route,
+      junctions: const [junction],
+    );
+
+    expect(status.routeCompletedMeters, greaterThan(100));
+    expect(status.triggered, NavAlert.junction);
+  });
+
   test('junction fires once when approaching and re-arms after leaving', () {
     final monitor = NavigationMonitor(
       config: const NavAlertConfig(offRouteEnabled: false, junctionMeters: 25),

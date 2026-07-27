@@ -21,7 +21,7 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-07-14:
+As of 2026-07-27:
 
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
@@ -31,10 +31,15 @@ As of 2026-07-14:
   development-only override is configured.
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
-- Format and analyzer pass; 14 automated tests pass.
-- iOS, physical-device background tracking, native GPX picking, route progress,
-  off-route alerts, free-space checks, and production provider configuration
-  remain unverified or unimplemented.
+- Format and analyzer pass; 148 automated tests pass.
+- `v1.3.0+8` is prepared with authored release notes; publication evidence must
+  be recorded only after the tag workflow and public asset checks succeed.
+- Monotonic route-progress announcements and directional off-route route-finder
+  alerts are implemented and unit/widget-tested. Their heading quality, audio,
+  and locked-screen behavior remain physical-device unverified.
+- iOS, physical-device background tracking, native GPX picking, free-space
+  checks, and production provider configuration remain unverified or
+  unimplemented.
 
 Use `02-implementation-status.md` for the exact feature matrix. Do not upgrade a
 partial or emulator-only status without new source, tests, and runnable

@@ -690,6 +690,16 @@ class AppStore extends ChangeNotifier {
       NavAlert.offRoute => NavStatus(
         offRoute: true,
         distanceToRouteMeters: effectiveConfig.offRouteMeters + 10,
+        bearingToRouteDegrees: 90,
+        routeRelativeDirection: RouteRelativeDirection.right,
+        triggered: alert,
+      ),
+      NavAlert.offRouteReminder => NavStatus(
+        offRoute: true,
+        distanceToRouteMeters: effectiveConfig.offRouteMeters + 40,
+        bearingToRouteDegrees: 90,
+        routeRelativeDirection: RouteRelativeDirection.right,
+        offRouteTrend: OffRouteTrend.movingAway,
         triggered: alert,
       ),
       NavAlert.junction => NavStatus(
@@ -697,6 +707,12 @@ class AppStore extends ChangeNotifier {
         junctionDistanceMeters: effectiveConfig.junctionMeters,
         junctionTurn: TurnDirection.left,
         triggered: alert,
+      ),
+      NavAlert.progress => const NavStatus(
+        offRoute: false,
+        routeCompletedMeters: 8000,
+        routeRemainingMeters: 3000,
+        triggered: NavAlert.progress,
       ),
       NavAlert.none => NavStatus.idle,
     };
@@ -867,15 +883,21 @@ class AppStore extends ChangeNotifier {
     _navMonitor.reset();
   }
 
-  void _updateNavigation(LatLng position) {
+  void _updateNavigation(
+    LatLng position, {
+    double? headingDegrees,
+    required DateTime timestamp,
+  }) {
     if (_navRoute.length < 2) return;
     navStatus = _navMonitor.update(
       position,
       route: _navRoute,
       junctions: _navJunctions,
+      headingDegrees: headingDegrees,
+      timestamp: timestamp,
+      elapsed: activeActivity?.elapsed ?? Duration.zero,
     );
-    if (navStatus.triggered == NavAlert.offRoute ||
-        navStatus.triggered == NavAlert.junction) {
+    if (navStatus.triggered != NavAlert.none) {
       unawaited(
         _navigationAlertFeedback.notify(
           navStatus,
@@ -937,7 +959,19 @@ class AppStore extends ChangeNotifier {
       samples: [...activity.samples, sample],
     );
     currentLocation = sample.latLng;
-    _updateNavigation(sample.latLng);
+    final movingCourse =
+        position.speed >= 0.8 &&
+            position.headingAccuracy > 0 &&
+            position.headingAccuracy <= 45
+        ? sample.heading
+        : previous != null && addedDistance >= 5
+        ? _distance.bearingDegrees(previous.latLng, sample.latLng)
+        : null;
+    _updateNavigation(
+      sample.latLng,
+      headingDegrees: movingCourse,
+      timestamp: sample.recordedAt,
+    );
     activeActivity = updated;
     _replaceActivity(updated, persist: false);
     try {

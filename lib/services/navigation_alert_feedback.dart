@@ -6,7 +6,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 
 import 'navigation_monitor.dart';
 
-typedef AlertHaptic = Future<void> Function();
+typedef AlertHaptic = Future<void> Function(NavAlert alert);
 typedef AlertTonePlayer = Future<bool> Function(NavAlert alert);
 typedef AlertVoicePlayer = Future<bool> Function(String message);
 typedef AlertWait = Future<void> Function(Duration duration);
@@ -60,11 +60,17 @@ class NavigationAlertFeedback {
     ).build();
     Future<String?>? speechSetup;
     return NavigationAlertFeedback(
-      haptic: HapticFeedback.heavyImpact,
+      haptic: (alert) => switch (alert) {
+        NavAlert.offRoute ||
+        NavAlert.offRouteReminder => HapticFeedback.heavyImpact(),
+        NavAlert.junction => HapticFeedback.mediumImpact(),
+        NavAlert.progress => HapticFeedback.lightImpact(),
+        NavAlert.none => _noOp(),
+      },
       playTone: (alert) async {
         final asset = switch (alert) {
-          NavAlert.offRoute => _offRouteToneAsset,
-          NavAlert.junction => _junctionToneAsset,
+          NavAlert.offRoute || NavAlert.offRouteReminder => _offRouteToneAsset,
+          NavAlert.junction || NavAlert.progress => _junctionToneAsset,
           NavAlert.none => null,
         };
         if (asset == null) return false;
@@ -84,10 +90,7 @@ class NavigationAlertFeedback {
             return false;
           }
           await textToSpeech.stop();
-          return await textToSpeech.speak(
-                message,
-                focus: Platform.isAndroid,
-              ) ==
+          return await textToSpeech.speak(message, focus: Platform.isAndroid) ==
               1;
         } on Object {
           speechSetup = null;
@@ -105,7 +108,7 @@ class NavigationAlertFeedback {
   }
 
   factory NavigationAlertFeedback.silent() => NavigationAlertFeedback(
-    haptic: _noOp,
+    haptic: (_) => _noOp(),
     playTone: (_) async => false,
     speak: (_) async => false,
   );
@@ -129,13 +132,13 @@ class NavigationAlertFeedback {
     if (alert == NavAlert.none) return const NavigationFeedbackResult();
 
     final generation = ++_generation;
-    final haptic = _bestEffortAction(_haptic);
+    final haptic = _bestEffortAction(() => _haptic(alert));
     await _bestEffortAction(_stop);
 
     var tonePlayed = false;
     var voiceSpoken = false;
     if (mode.usesTone) {
-      tonePlayed = await _bestEffortBool(() => _playTone(alert));
+      tonePlayed = await _playTonePattern(status, generation);
     }
 
     if (mode.usesVoice && generation == _generation) {
@@ -154,7 +157,7 @@ class NavigationAlertFeedback {
     if (mode == NavFeedbackMode.voice &&
         !voiceSpoken &&
         generation == _generation) {
-      tonePlayed = await _bestEffortBool(() => _playTone(alert));
+      tonePlayed = await _playTonePattern(status, generation);
       usedToneFallback = tonePlayed;
     } else if (mode == NavFeedbackMode.toneAndVoice &&
         !voiceSpoken &&
@@ -178,10 +181,98 @@ class NavigationAlertFeedback {
 
   static String? guidanceFor(NavStatus status) {
     return switch (status.triggered) {
-      NavAlert.offRoute => 'Off route. Check the map.',
+      NavAlert.offRoute ||
+      NavAlert.offRouteReminder => _offRouteGuidance(status),
       NavAlert.junction => _junctionGuidance(status),
+      NavAlert.progress => _progressGuidance(status),
       NavAlert.none => null,
     };
+  }
+
+  Future<bool> _playTonePattern(NavStatus status, int generation) async {
+    final count = switch (status.triggered) {
+      NavAlert.offRouteReminder
+          when status.offRouteTrend == OffRouteTrend.approaching =>
+        2,
+      NavAlert.offRouteReminder
+          when status.offRouteTrend == OffRouteTrend.movingAway =>
+        3,
+      NavAlert.progress => 2,
+      _ => 1,
+    };
+    final gap = switch (status.triggered) {
+      NavAlert.progress => const Duration(milliseconds: 600),
+      _ when status.offRouteTrend == OffRouteTrend.approaching =>
+        const Duration(milliseconds: 900),
+      _ => const Duration(milliseconds: 220),
+    };
+    var played = false;
+    for (var index = 0; index < count && generation == _generation; index++) {
+      played =
+          await _bestEffortBool(() => _playTone(status.triggered)) || played;
+      if (index < count - 1) {
+        await _wait(_toneDuration(status.triggered) + gap);
+      }
+    }
+    return played;
+  }
+
+  static String _offRouteGuidance(NavStatus status) {
+    final distance = status.distanceToRouteMeters;
+    final relative = switch (status.routeRelativeDirection) {
+      RouteRelativeDirection.ahead => 'ahead',
+      RouteRelativeDirection.left => 'to your left',
+      RouteRelativeDirection.right => 'to your right',
+      RouteRelativeDirection.behind => 'behind you',
+      null => null,
+    };
+    final compass = status.bearingToRouteDegrees == null
+        ? null
+        : _compassDirection(status.bearingToRouteDegrees!);
+    final target = [?compass, ?relative].join(', ');
+    final lead = distance == null
+        ? 'Off route'
+        : '${_spokenDistance(distance)} meters off route';
+    final trend = switch (status.offRouteTrend) {
+      OffRouteTrend.approaching => 'You are getting closer.',
+      OffRouteTrend.movingAway => 'You are moving away.',
+      OffRouteTrend.steady => 'Distance is unchanged.',
+      null => '',
+    };
+    return [
+      '$lead.',
+      if (target.isNotEmpty)
+        'Go $target${distance == null ? '' : ' for ${_spokenDistance(distance)} meters'}.',
+      if (trend.isNotEmpty) trend,
+    ].join(' ');
+  }
+
+  static String _progressGuidance(NavStatus status) {
+    final completed = status.routeCompletedMeters;
+    final remaining = status.routeRemainingMeters;
+    if (completed == null || remaining == null) return 'On route.';
+    return '${_spokenRouteDistance(completed)} completed, '
+        '${_spokenRouteDistance(remaining)} remaining.';
+  }
+
+  static String _spokenRouteDistance(double meters) {
+    if (meters < 1000) return '${_spokenDistance(meters)} meters';
+    final kilometers = (meters / 1000).toStringAsFixed(1);
+    return '$kilometers kilometers';
+  }
+
+  static String _compassDirection(double bearing) {
+    const directions = [
+      'north',
+      'north-east',
+      'east',
+      'south-east',
+      'south',
+      'south-west',
+      'west',
+      'north-west',
+    ];
+    return directions[((bearing + 22.5) ~/ 45) % directions.length];
   }
 
   static String _junctionGuidance(NavStatus status) {
@@ -204,8 +295,9 @@ class NavigationAlertFeedback {
   }
 
   static Duration _toneDuration(NavAlert alert) => switch (alert) {
-    NavAlert.offRoute => const Duration(milliseconds: 556),
-    NavAlert.junction => const Duration(milliseconds: 501),
+    NavAlert.offRoute ||
+    NavAlert.offRouteReminder => const Duration(milliseconds: 556),
+    NavAlert.junction || NavAlert.progress => const Duration(milliseconds: 501),
     NavAlert.none => Duration.zero,
   };
 

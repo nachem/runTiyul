@@ -243,18 +243,32 @@ Every transition that changes durable state must be persisted.
 
 Navigation alert detection remains pure Dart in `NavigationMonitor`. Platform
 side effects belong to `NavigationAlertFeedback`, which receives a complete
-`NavStatus` and the persisted output mode. Every fired alert attempts a haptic;
+`NavStatus` and the persisted output mode. Every fired alert attempts a
+semantic haptic (heavy off-route, medium junction, light progress);
 the selected mode then adds a bundled tone, concise system-TTS guidance, both in
 sequence, or neither. Tone + voice plays the earcon before speech so the two do
 not mask each other. Voice-only mode falls back to the corresponding offline
 tone when no installed English voice can speak. Playback, speech, and haptic
 failures are best-effort and must never pause or fail activity recording.
 
+`NavStatus` carries the nearest route point, distance, compass bearing,
+runner-relative direction when a usable heading exists, distance trend since
+the previous reminder, and monotonic completed/remaining route distance.
+`NavigationMonitor` owns configurable reminder and progress milestones so GPS
+jitter, widget rebuilds, and audio completion cannot re-arm them accidentally.
+Off-route and junction events take priority over progress on the same GPS
+update. Runner-relative guidance uses course over ground only while moving;
+when that is unavailable, guidance remains compass-based rather than guessing
+which way a stationary runner faces.
+
 The two bundled earcons are immutable CC0 OGG assets with source provenance and
 hashes beside the files. System TTS uses installed platform voices rather than a
-network service, preserving offline behavior and location privacy. These prompts
-cover persistent off-route state and an approaching junction direction only;
-they are not full turn-by-turn navigation.
+network service, preserving offline behavior and location privacy. Warning-tone
+cadence communicates route recovery without speech: slow pairs mean approaching
+the route and fast triples mean moving away. A single rising cue identifies a
+junction; a relaxed pair identifies progress. Spoken prompts add nearest-route
+direction and configurable completed/remaining progress. These prompts are not
+full turn-by-turn navigation.
 
 ## 8. Metric calculation boundaries
 
@@ -266,8 +280,8 @@ they are not full turn-by-turn navigation.
 - Average pace: moving time divided by accepted distance.
 - Elevation gain: positive changes after accuracy checks and smoothing; missing
   altitude yields unavailable, not zero.
-- Route progress: nearest plausible route segment with forward-bias and jitter
-  tolerance.
+- Route progress: nearest plausible route segment with monotonic forward bias;
+  configurable distance/time milestones fire only while on route.
 - Off-route: distance to route exceeds threshold for a sustained duration and
   location accuracy is adequate.
 
@@ -440,8 +454,9 @@ instructions.
 - Geodesic distance and metric accumulation.
 - GPS accuracy/jump filters.
 - Route progress and off-route persistence.
-- Navigation output-mode routing, concise voice phrase construction, missing-TTS
-  tone fallback, and bundled-audio validation.
+- Navigation output-mode routing, off-route trend cadence, relative/compass
+  voice guidance, progress milestones, matching missing-TTS tone fallback, and
+  bundled-audio validation.
 - Bounds-to-tile enumeration at zoom boundaries and antimeridian.
 - Storage estimates and byte formatting.
 - Download retry/cancel/resume state machines.
@@ -453,7 +468,8 @@ instructions.
 - Permission rationale and denial recovery.
 - Route import/create workflows.
 - Recording controls and state transitions.
-- Alert output selection plus off-route/junction preview actions.
+- Alert output selection; reminder/progress controls; and off-route,
+  route-finder, progress, and junction preview actions.
 - Download confirmation, progress, failure, and deletion.
 
 ### Integration and real-device tests

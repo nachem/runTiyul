@@ -9,8 +9,13 @@ class NavAlertConfig {
     this.offRouteEnabled = true,
     this.offRouteMeters = 30,
     this.offRoutePersistence = 3,
+    this.offRouteReminderSeconds = 20,
     this.junctionEnabled = true,
     this.junctionMeters = 25,
+    this.progressEnabled = true,
+    this.progressIntervalMode = ProgressIntervalMode.distance,
+    this.progressDistanceMeters = 1000,
+    this.progressIntervalMinutes = 10,
     this.feedbackMode = NavFeedbackMode.toneAndVoice,
   });
 
@@ -24,11 +29,20 @@ class NavAlertConfig {
   /// against a single inaccurate GPS point).
   final int offRoutePersistence;
 
+  /// Seconds between guidance updates while the runner remains off route.
+  final int offRouteReminderSeconds;
+
   /// Whether junction alerts fire at all.
   final bool junctionEnabled;
 
   /// Proximity to a junction that triggers an alert, in meters.
   final double junctionMeters;
+
+  /// Whether calm on-route completion/remaining updates are announced.
+  final bool progressEnabled;
+  final ProgressIntervalMode progressIntervalMode;
+  final double progressDistanceMeters;
+  final int progressIntervalMinutes;
 
   /// Audio/haptic treatment used when a navigation alert fires.
   final NavFeedbackMode feedbackMode;
@@ -37,16 +51,29 @@ class NavAlertConfig {
     bool? offRouteEnabled,
     double? offRouteMeters,
     int? offRoutePersistence,
+    int? offRouteReminderSeconds,
     bool? junctionEnabled,
     double? junctionMeters,
+    bool? progressEnabled,
+    ProgressIntervalMode? progressIntervalMode,
+    double? progressDistanceMeters,
+    int? progressIntervalMinutes,
     NavFeedbackMode? feedbackMode,
   }) {
     return NavAlertConfig(
       offRouteEnabled: offRouteEnabled ?? this.offRouteEnabled,
       offRouteMeters: offRouteMeters ?? this.offRouteMeters,
       offRoutePersistence: offRoutePersistence ?? this.offRoutePersistence,
+      offRouteReminderSeconds:
+          offRouteReminderSeconds ?? this.offRouteReminderSeconds,
       junctionEnabled: junctionEnabled ?? this.junctionEnabled,
       junctionMeters: junctionMeters ?? this.junctionMeters,
+      progressEnabled: progressEnabled ?? this.progressEnabled,
+      progressIntervalMode: progressIntervalMode ?? this.progressIntervalMode,
+      progressDistanceMeters:
+          progressDistanceMeters ?? this.progressDistanceMeters,
+      progressIntervalMinutes:
+          progressIntervalMinutes ?? this.progressIntervalMinutes,
       feedbackMode: feedbackMode ?? this.feedbackMode,
     );
   }
@@ -55,8 +82,13 @@ class NavAlertConfig {
     'offRouteEnabled': offRouteEnabled,
     'offRouteMeters': offRouteMeters,
     'offRoutePersistence': offRoutePersistence,
+    'offRouteReminderSeconds': offRouteReminderSeconds,
     'junctionEnabled': junctionEnabled,
     'junctionMeters': junctionMeters,
+    'progressEnabled': progressEnabled,
+    'progressIntervalMode': progressIntervalMode.name,
+    'progressDistanceMeters': progressDistanceMeters,
+    'progressIntervalMinutes': progressIntervalMinutes,
     'feedbackMode': feedbackMode.name,
   };
 
@@ -71,11 +103,26 @@ class NavAlertConfig {
       offRoutePersistence:
           (json['offRoutePersistence'] as num?)?.toInt() ??
           fallback.offRoutePersistence,
+      offRouteReminderSeconds:
+          (json['offRouteReminderSeconds'] as num?)?.toInt() ??
+          fallback.offRouteReminderSeconds,
       junctionEnabled:
           json['junctionEnabled'] as bool? ?? fallback.junctionEnabled,
       junctionMeters:
           (json['junctionMeters'] as num?)?.toDouble() ??
           fallback.junctionMeters,
+      progressEnabled:
+          json['progressEnabled'] as bool? ?? fallback.progressEnabled,
+      progressIntervalMode: ProgressIntervalMode.values.firstWhere(
+        (mode) => mode.name == json['progressIntervalMode'],
+        orElse: () => fallback.progressIntervalMode,
+      ),
+      progressDistanceMeters:
+          (json['progressDistanceMeters'] as num?)?.toDouble() ??
+          fallback.progressDistanceMeters,
+      progressIntervalMinutes:
+          (json['progressIntervalMinutes'] as num?)?.toInt() ??
+          fallback.progressIntervalMinutes,
       feedbackMode: NavFeedbackMode.values.firstWhere(
         (mode) => mode.name == json['feedbackMode'],
         orElse: () => fallback.feedbackMode,
@@ -87,6 +134,8 @@ class NavAlertConfig {
 /// How a live alert reaches a runner. Every mode retains haptic feedback.
 enum NavFeedbackMode { toneAndVoice, tones, voice, hapticsOnly }
 
+enum ProgressIntervalMode { distance, time }
+
 extension NavFeedbackModeCapabilities on NavFeedbackMode {
   bool get usesTone =>
       this == NavFeedbackMode.toneAndVoice || this == NavFeedbackMode.tones;
@@ -96,16 +145,28 @@ extension NavFeedbackModeCapabilities on NavFeedbackMode {
 }
 
 /// The alert produced on a single update, if any.
-enum NavAlert { none, offRoute, junction }
+enum NavAlert { none, offRoute, offRouteReminder, junction, progress }
 
 /// Which way the planned route turns at an upcoming junction.
 enum TurnDirection { straight, left, right }
+
+/// Runner-relative direction of the shortest path back to the route.
+enum RouteRelativeDirection { ahead, left, right, behind }
+
+/// Whether the latest off-route reminder shows recovery or deterioration.
+enum OffRouteTrend { approaching, steady, movingAway }
 
 /// The navigation state after processing a position update.
 class NavStatus {
   const NavStatus({
     required this.offRoute,
     this.distanceToRouteMeters,
+    this.nearestRoutePoint,
+    this.bearingToRouteDegrees,
+    this.routeRelativeDirection,
+    this.offRouteTrend,
+    this.routeCompletedMeters,
+    this.routeRemainingMeters,
     this.junctionAhead,
     this.junctionDistanceMeters,
     this.junctionTurn,
@@ -114,6 +175,16 @@ class NavStatus {
 
   final bool offRoute;
   final double? distanceToRouteMeters;
+
+  /// Closest point on the planned route and the direction needed to reach it.
+  final LatLng? nearestRoutePoint;
+  final double? bearingToRouteDegrees;
+  final RouteRelativeDirection? routeRelativeDirection;
+  final OffRouteTrend? offRouteTrend;
+
+  /// Monotonic progress along the planned route, not raw activity distance.
+  final double? routeCompletedMeters;
+  final double? routeRemainingMeters;
 
   /// Location of the next on-route junction within alert range, if any.
   final LatLng? junctionAhead;
@@ -149,23 +220,39 @@ class NavigationMonitor {
 
   /// Turns smaller than this are reported as "continue straight".
   static const double _straightToleranceDegrees = 20;
+  static const double _trendToleranceMeters = 5;
 
   int _offRouteStreak = 0;
   bool _offRouteActive = false;
+  DateTime? _lastOffRouteCueAt;
+  double? _distanceAtLastOffRouteCue;
   LatLng? _lastJunction;
+  double _maxRouteProgressMeters = 0;
+  double? _nextProgressMeters;
+  Duration? _nextProgressElapsed;
 
   void reset() {
     _offRouteStreak = 0;
     _offRouteActive = false;
+    _lastOffRouteCueAt = null;
+    _distanceAtLastOffRouteCue = null;
     _lastJunction = null;
+    _maxRouteProgressMeters = 0;
+    _nextProgressMeters = null;
+    _nextProgressElapsed = null;
   }
 
   NavStatus update(
     LatLng position, {
     List<LatLng> route = const [],
     List<LatLng> junctions = const [],
+    double? headingDegrees,
+    DateTime? timestamp,
+    Duration elapsed = Duration.zero,
   }) {
     var triggered = NavAlert.none;
+    var progressDue = false;
+    OffRouteTrend? offRouteTrend;
 
     PolylineProjection? userProjection;
     double? distanceToRoute;
@@ -180,10 +267,69 @@ class NavigationMonitor {
         if (!_offRouteActive && _offRouteStreak >= config.offRoutePersistence) {
           _offRouteActive = true;
           triggered = NavAlert.offRoute;
+          _lastOffRouteCueAt = timestamp;
+          _distanceAtLastOffRouteCue = distanceToRoute;
+        } else if (_offRouteActive &&
+            timestamp != null &&
+            _lastOffRouteCueAt != null &&
+            timestamp.difference(_lastOffRouteCueAt!).inSeconds >=
+                config.offRouteReminderSeconds) {
+          final previousDistance = _distanceAtLastOffRouteCue;
+          final change = previousDistance == null
+              ? 0
+              : distanceToRoute - previousDistance;
+          offRouteTrend = change <= -_trendToleranceMeters
+              ? OffRouteTrend.approaching
+              : change >= _trendToleranceMeters
+              ? OffRouteTrend.movingAway
+              : OffRouteTrend.steady;
+          triggered = NavAlert.offRouteReminder;
+          _lastOffRouteCueAt = timestamp;
+          _distanceAtLastOffRouteCue = distanceToRoute;
         }
       } else {
         _offRouteStreak = 0;
         _offRouteActive = false;
+        _lastOffRouteCueAt = null;
+        _distanceAtLastOffRouteCue = null;
+      }
+    }
+
+    double? routeCompleted;
+    double? routeRemaining;
+    if (route.length >= 2 && userProjection != null) {
+      final projectedProgress = _alongRoute(route, userProjection);
+      if (projectedProgress > _maxRouteProgressMeters) {
+        _maxRouteProgressMeters = projectedProgress;
+      }
+      final routeLength = distance.pathLengthMeters(route);
+      routeCompleted = _maxRouteProgressMeters.clamp(0, routeLength);
+      routeRemaining = (routeLength - routeCompleted).clamp(0, routeLength);
+      if (config.progressEnabled && !_offRouteActive) {
+        if (config.progressIntervalMode == ProgressIntervalMode.distance) {
+          final interval = config.progressDistanceMeters;
+          _nextProgressMeters ??=
+              ((routeCompleted / interval).floor() + 1) * interval;
+          if (routeCompleted >= _nextProgressMeters!) {
+            progressDue = true;
+            while (_nextProgressMeters! <= routeCompleted) {
+              _nextProgressMeters = _nextProgressMeters! + interval;
+            }
+          }
+        } else {
+          final interval = Duration(minutes: config.progressIntervalMinutes);
+          _nextProgressElapsed ??= Duration(
+            minutes:
+                (elapsed.inMinutes ~/ config.progressIntervalMinutes + 1) *
+                config.progressIntervalMinutes,
+          );
+          if (elapsed >= _nextProgressElapsed!) {
+            progressDue = true;
+            while (_nextProgressElapsed! <= elapsed) {
+              _nextProgressElapsed = _nextProgressElapsed! + interval;
+            }
+          }
+        }
       }
     }
 
@@ -232,14 +378,49 @@ class NavigationMonitor {
       }
     }
 
+    if (triggered == NavAlert.none && progressDue) {
+      triggered = NavAlert.progress;
+    }
+
     return NavStatus(
       offRoute: _offRouteActive,
       distanceToRouteMeters: distanceToRoute,
+      nearestRoutePoint: userProjection?.point,
+      bearingToRouteDegrees: userProjection == null
+          ? null
+          : distance.bearingDegrees(position, userProjection.point),
+      routeRelativeDirection: userProjection == null || headingDegrees == null
+          ? null
+          : _relativeDirection(
+              headingDegrees,
+              distance.bearingDegrees(position, userProjection.point),
+            ),
+      offRouteTrend: offRouteTrend,
+      routeCompletedMeters: routeCompleted,
+      routeRemainingMeters: routeRemaining,
       junctionAhead: junctionAhead,
       junctionDistanceMeters: junctionDistance,
       junctionTurn: junctionTurn,
       triggered: triggered,
     );
+  }
+
+  RouteRelativeDirection _relativeDirection(
+    double headingDegrees,
+    double targetBearingDegrees,
+  ) {
+    var delta = targetBearingDegrees - headingDegrees;
+    while (delta > 180) {
+      delta -= 360;
+    }
+    while (delta < -180) {
+      delta += 360;
+    }
+    if (delta.abs() <= 45) return RouteRelativeDirection.ahead;
+    if (delta.abs() >= 135) return RouteRelativeDirection.behind;
+    return delta > 0
+        ? RouteRelativeDirection.right
+        : RouteRelativeDirection.left;
   }
 
   /// Distance from the route start to [projection], measured along the route.

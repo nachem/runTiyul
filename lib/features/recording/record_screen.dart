@@ -230,12 +230,24 @@ class _NavBanner extends StatelessWidget {
     final color = offRoute ? scheme.error : scheme.tertiary;
     final distance = status.distanceToRouteMeters;
     final IconData icon;
-    final String text;
+    String text;
     if (offRoute) {
       icon = Icons.wrong_location;
+      final routeDirection = switch (status.routeRelativeDirection) {
+        RouteRelativeDirection.ahead => 'ahead',
+        RouteRelativeDirection.left => 'left',
+        RouteRelativeDirection.right => 'right',
+        RouteRelativeDirection.behind => 'behind',
+        null => null,
+      };
+      final compass = status.bearingToRouteDegrees == null
+          ? null
+          : _compassLabel(status.bearingToRouteDegrees!);
+      final target = [?compass, ?routeDirection].join(', ');
       text = distance != null
           ? 'Off route \u2022 ${distance.round()} m away'
           : 'Off route';
+      if (target.isNotEmpty) text = '$text \u2022 route $target';
     } else {
       final turn = status.junctionTurn;
       icon = switch (turn) {
@@ -407,6 +419,32 @@ class _AlertSettingsSheetState extends State<AlertSettingsSheet> {
                 ],
               ),
               const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('test-recovery-guidance'),
+                      onPressed: _previewing == null
+                          ? () => _preview(NavAlert.offRouteReminder)
+                          : null,
+                      icon: const Icon(Icons.assistant_direction_outlined),
+                      label: const Text('Route finder'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('test-progress-guidance'),
+                      onPressed: _previewing == null
+                          ? () => _preview(NavAlert.progress)
+                          : null,
+                      icon: const Icon(Icons.flag_outlined),
+                      label: const Text('Progress'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
               SwitchListTile(
                 value: _config.offRouteEnabled,
                 onChanged: (value) => setState(
@@ -453,6 +491,28 @@ class _AlertSettingsSheetState extends State<AlertSettingsSheet> {
                       : null,
                 ),
               ),
+              ListTile(
+                enabled: _config.offRouteEnabled,
+                title: Text(
+                  'Guide me every ${_config.offRouteReminderSeconds} seconds',
+                ),
+                subtitle: Slider(
+                  min: 10,
+                  max: 60,
+                  divisions: 10,
+                  value: _config.offRouteReminderSeconds
+                      .clamp(10, 60)
+                      .toDouble(),
+                  label: '${_config.offRouteReminderSeconds} s',
+                  onChanged: _config.offRouteEnabled
+                      ? (value) => setState(
+                          () => _config = _config.copyWith(
+                            offRouteReminderSeconds: value.round(),
+                          ),
+                        )
+                      : null,
+                ),
+              ),
               const Divider(),
               SwitchListTile(
                 value: _config.junctionEnabled,
@@ -480,6 +540,78 @@ class _AlertSettingsSheetState extends State<AlertSettingsSheet> {
                       : null,
                 ),
               ),
+              const Divider(),
+              SwitchListTile(
+                value: _config.progressEnabled,
+                onChanged: (value) => setState(
+                  () => _config = _config.copyWith(progressEnabled: value),
+                ),
+                title: const Text('On-route progress guidance'),
+              ),
+              if (_config.progressEnabled) ...[
+                SegmentedButton<ProgressIntervalMode>(
+                  segments: const [
+                    ButtonSegment(
+                      value: ProgressIntervalMode.distance,
+                      label: Text('Distance'),
+                      icon: Icon(Icons.straighten),
+                    ),
+                    ButtonSegment(
+                      value: ProgressIntervalMode.time,
+                      label: Text('Time'),
+                      icon: Icon(Icons.schedule),
+                    ),
+                  ],
+                  selected: {_config.progressIntervalMode},
+                  onSelectionChanged: (selection) => setState(
+                    () => _config = _config.copyWith(
+                      progressIntervalMode: selection.single,
+                    ),
+                  ),
+                ),
+                ListTile(
+                  title: Text(
+                    _config.progressIntervalMode ==
+                            ProgressIntervalMode.distance
+                        ? 'Update every ${(_config.progressDistanceMeters / 1000).toStringAsFixed(1)} km'
+                        : 'Update every ${_config.progressIntervalMinutes} minutes',
+                  ),
+                  subtitle: Slider(
+                    min: 1,
+                    max:
+                        _config.progressIntervalMode ==
+                            ProgressIntervalMode.distance
+                        ? 10
+                        : 12,
+                    divisions:
+                        _config.progressIntervalMode ==
+                            ProgressIntervalMode.distance
+                        ? 18
+                        : 11,
+                    value:
+                        _config.progressIntervalMode ==
+                            ProgressIntervalMode.distance
+                        ? (_config.progressDistanceMeters / 500).clamp(1, 10)
+                        : (_config.progressIntervalMinutes / 5).clamp(1, 12),
+                    label:
+                        _config.progressIntervalMode ==
+                            ProgressIntervalMode.distance
+                        ? '${(_config.progressDistanceMeters / 1000).toStringAsFixed(1)} km'
+                        : '${_config.progressIntervalMinutes} min',
+                    onChanged: (value) => setState(
+                      () =>
+                          _config.progressIntervalMode ==
+                              ProgressIntervalMode.distance
+                          ? _config = _config.copyWith(
+                              progressDistanceMeters: value * 500,
+                            )
+                          : _config = _config.copyWith(
+                              progressIntervalMinutes: value.round() * 5,
+                            ),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               FilledButton(
                 onPressed: () async {
@@ -502,6 +634,11 @@ String _feedbackLabel(NavFeedbackMode mode) => switch (mode) {
   NavFeedbackMode.tones => 'Tones',
   NavFeedbackMode.hapticsOnly => 'Haptics only',
 };
+
+String _compassLabel(double bearing) {
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  return directions[((bearing + 22.5) ~/ 45) % directions.length];
+}
 
 class _Metric extends StatelessWidget {
   const _Metric({required this.label, required this.value});
