@@ -21,7 +21,7 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-07-27:
+As of 2026-08-01:
 
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
@@ -32,6 +32,13 @@ As of 2026-07-27:
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
 - Format and analyzer pass; 148 automated tests pass.
+- Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
+  Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
+  The new hosted CI and release additions have not run yet.
+- Contribution, conduct, support, privacy, and security policies plus issue/PR
+  templates and CODEOWNERS are present. GitHub private vulnerability reporting,
+  Dependabot security updates, secret scanning, and push protection are enabled;
+  `main` remains unprotected.
 - `v1.3.0+8` is published. Workflow `30255797959`, public asset hashes and
   sizes, stable download URLs, and independent APK identity/signature checks
   passed on 2026-07-27.

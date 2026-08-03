@@ -1,0 +1,9 @@
+# Default review routing for this single-maintainer project.
+* @nachem
+
+# Require explicit attention to release, platform, and policy surfaces.
+/.github/ @nachem
+/android/ @nachem
+/ios/ @nachem
+/docs/wiki/ @nachem
+/SECURITY.md @nachem

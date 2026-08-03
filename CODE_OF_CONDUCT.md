@@ -59,8 +59,10 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the community leaders responsible for enforcement at
-.
+reported to the project maintainer, [@nachem](https://github.com/nachem). For a
+confidential report, use the repository's
+[private reporting form](https://github.com/nachem/runTiyul/security/advisories/new)
+and identify the report as a Code of Conduct matter.
 All complaints will be reviewed and investigated promptly and fairly.
 
 All community leaders are obligated to respect the privacy and security of the

@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-07-27<br>
+Last reviewed: 2026-08-01<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -18,7 +18,7 @@ completing any change that affects the wiki or project status.
 | 4 | [AI assistant guide](04-ai-assistant-guide.md) | Implementation sequence, engineering rules, validation, and handoff protocol. | Agent workflow, implementation order, tooling, or known traps change. |
 | 5 | [Local run and debug guide](05-local-debugging.md) | Toolchain setup, Android/iOS launch, VS Code debugging, GPS simulation, and offline verification. | Tooling, device IDs, launch commands, package IDs, or debug workflows change. |
 | 6 | [Offline map implementation](06-offline-map-packages.md) | Legal offline-map design and status: implemented on-device vector→raster conversion, plus proposed native MapLibre rendering, optional terrain, migration, validation, and rollout. | Offline source, format, renderer, terrain, licensing, hosting, or implementation plan changes. |
-| 7 | [Release & distribution](07-release-and-distribution.md) | Website, GitHub Pages deploy, release artifacts (APK/unsigned IPA), CI workflows, licensing, and the release runbook. | Website, release workflows, artifact names, distribution, or licensing change. |
+| 7 | [Release & distribution](07-release-and-distribution.md) | Website, release artifacts, CI, supply-chain controls, community health, licensing, and the release runbook. | Website, automation, repository security, community policies, artifact names, distribution, or licensing change. |
 | 8 | [Release notes](08-release-notes.md) | Per-version authored notes and the mandatory release-note contract. | A release is prepared, published, corrected, or superseded. |
 | 9 | [Wiki conventions](README.md) | Source-of-truth hierarchy and general documentation maintenance rules. | Wiki governance or document organization changes. |
 
@@ -53,7 +53,8 @@ instructions are mandatory for all future agents.
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
-| Automated validation | Format/analyze pass; 148 tests pass; published `1.3.0+8` APK independently verifies with the expected package, build number, and pinned certificate; public APK/IPA digests and stable latest URLs verified |
+| Open-source project health | Contribution, conduct, support, privacy, and security policies; CODEOWNERS; issue/PR templates; Dependabot; SHA-pinned Actions; and version-pinned PR/release workflows are configured. Private vulnerability reporting, dependency alerts/security updates, secret scanning, and push protection are enabled. Hosted CI/provenance remain unexercised and `main` is not protected |
+| Automated validation | On 2026-08-01, format/analyze pass and 148 tests pass on Flutter 3.44.6/Dart 3.12.2; checksum-verified `actionlint` 1.7.12, GitHub YAML/invariant checks, live security-setting/alert checks, and all local Markdown targets pass. Published `1.3.0+8` APK identity, public APK/IPA digests, and stable latest URLs remain independently verified |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -73,6 +74,9 @@ Detailed evidence belongs in
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
 6. Secure an independent signing-key backup, then verify a data-preserving
   upgrade from `v1.2.2` to `v1.3.0` on a physical Android device.
+7. Merge and observe the new CI, then require its checks on `main`; exercise
+  checksum/provenance publication on the next release and decide whether to
+  publish an SBOM/dependency-license inventory.
 
 Do not implement production bulk download against the public
 `tile.openstreetmap.org` standard tile service.

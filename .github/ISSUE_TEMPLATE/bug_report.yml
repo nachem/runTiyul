@@ -1,0 +1,93 @@
+name: Bug report
+description: Report a reproducible problem in RunTiyul
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Search existing issues first. For a security vulnerability, stop and use the private reporting link shown on the issue chooser.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and discussions for this problem.
+          required: true
+        - label: I removed exact coordinates, GPX tracks, home locations, credentials, and other private data.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: RunTiyul version
+      description: Find the version and build number in About.
+      placeholder: "1.3.0+8"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android
+        - iOS
+        - Development tooling or CI
+        - Website or documentation
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Device and operating system
+      placeholder: "Pixel 8, Android 16"
+    validations:
+      required: true
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation source
+      options:
+        - GitHub Release APK
+        - GitHub Release unsigned IPA
+        - Local debug build
+        - Local release build
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use synthetic routes and locations. Include the smallest reliable sequence.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or screenshots
+      description: Remove personal locations, tracks, tokens, provider credentials, and signing data.
+      render: shell
+  - type: checkboxes
+    id: conduct
+    attributes:
+      label: Code of Conduct
+      options:
+        - label: I agree to follow the repository's Code of Conduct.
+          required: true

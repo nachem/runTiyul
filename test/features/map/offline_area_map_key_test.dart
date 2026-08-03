@@ -74,9 +74,15 @@ void main() {
       );
     });
 
-    test('changes when a different area is shown, and none has a fixed key', () {
-      expect(offlineAreaMapKey(_area(id: 'a')), isNot(offlineAreaMapKey(_area(id: 'b'))));
-      expect(offlineAreaMapKey(null), 'main-map-none');
-    });
+    test(
+      'changes when a different area is shown, and none has a fixed key',
+      () {
+        expect(
+          offlineAreaMapKey(_area(id: 'a')),
+          isNot(offlineAreaMapKey(_area(id: 'b'))),
+        );
+        expect(offlineAreaMapKey(null), 'main-map-none');
+      },
+    );
   });
 }

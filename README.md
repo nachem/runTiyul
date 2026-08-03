@@ -16,9 +16,10 @@ _An open-source app by **[Bernoulli Software](https://github.com/nachem/runTiyul
 [![Download APK](https://img.shields.io/badge/Android-Download%20APK-3ddc84?style=flat-square&logo=android&logoColor=white)](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk)
 [![Download IPA](https://img.shields.io/badge/iOS-Download%20IPA-000000?style=flat-square&logo=apple&logoColor=white)](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.ipa)
 [![License: MIT](https://img.shields.io/badge/License-MIT-f97316?style=flat-square)](LICENSE)
+[![CI](https://github.com/nachem/runTiyul/actions/workflows/ci.yml/badge.svg)](https://github.com/nachem/runTiyul/actions/workflows/ci.yml)
 [![Built with Flutter](https://img.shields.io/badge/Built%20with-Flutter-027DFD?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
 
-**[🌐 Website](https://nachem.github.io/runTiyul/) · [⬇️ Download](https://github.com/nachem/runTiyul/releases/latest) · [📖 Wiki](docs/wiki/INDEX.md) · [🤝 Become a maintainer](https://github.com/nachem/runTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul)**
+**[🌐 Website](https://nachem.github.io/runTiyul/) · [⬇️ Download](https://github.com/nachem/runTiyul/releases/latest) · [📖 Wiki](docs/wiki/INDEX.md) · [Contributing](CONTRIBUTING.md) · [Privacy](PRIVACY.md) · [Security](SECURITY.md) · [🤝 Become a maintainer](https://github.com/nachem/runTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul)**
 
 </div>
 
@@ -26,8 +27,8 @@ _An open-source app by **[Bernoulli Software](https://github.com/nachem/runTiyul
 
 RunTiyul is an offline-first Flutter application for trail route management,
 on-route navigation, GPS activity recording, and offline map storage. It is
-designed for the backcountry: everything you need works with the phone in
-airplane mode, and nothing about your runs leaves your device.
+designed for the backcountry: routes, downloaded maps, navigation state, and
+activity history remain available without uploading recorded runs.
 
 > **Current status:** functional Android-verified MVP. Production map-provider
 > configuration, iOS runtime validation, and physical-device background tracking
@@ -58,6 +59,9 @@ same links are surfaced on the [website](https://nachem.github.io/runTiyul/):
 | Android | `RunTiyul.apk` | [Download APK](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk) |
 | iOS (unsigned) | `RunTiyul.ipa` | [Download IPA](https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.ipa) |
 
+See [all GitHub releases](https://github.com/nachem/runTiyul/releases) and the
+[authored release notes](docs/wiki/08-release-notes.md) for version history.
+
 **Android:** enable "install unknown apps" for your browser/file manager, then
 open the `.apk` (or `adb install RunTiyul.apk`). When moving from `v1.2.0` or
 older to `v1.2.2` or any later permanent-key release, uninstall the old build
@@ -69,6 +73,9 @@ identity.
 [AltStore](https://altstore.io) or [Sideloadly](https://sideloadly.io) using
 your own Apple ID, then trust the developer profile in
 _Settings → General → VPN & Device Management_.
+
+> **iOS status:** the unsigned artifact builds in CI, but installation and
+> runtime behavior have not been verified on a physical iOS device.
 
 > Download links resolve once the first `v*` release has been published by CI.
 
@@ -112,10 +119,13 @@ The credential names, pinned public fingerprint, backup requirement, and CI
 procedure are in the
 [release runbook](docs/wiki/07-release-and-distribution.md#4-operational-runbook).
 
-## Continuous delivery
+## Continuous integration and delivery
 
-Two GitHub Actions workflows power distribution:
+Three GitHub Actions workflows validate and distribute the project:
 
+- **[`.github/workflows/ci.yml`](.github/workflows/ci.yml)** — on pull requests
+  and pushes to `main`, it checks Dart formatting, runs static analysis, and
+  executes the Flutter test suite.
 - **[`.github/workflows/release.yml`](.github/workflows/release.yml)** — on a
   pushed `v*` tag (or manual dispatch) it builds the Android APK on Ubuntu and an
   unsigned iOS `.ipa` on macOS, then publishes a GitHub Release with the stable
@@ -124,6 +134,12 @@ Two GitHub Actions workflows power distribution:
 - **[`.github/workflows/pages.yml`](.github/workflows/pages.yml)** — on pushes to
   `main` that touch `site/**` (or manual dispatch) it deploys the marketing site
   in [`site/`](site/) to GitHub Pages.
+
+All external Actions are pinned to immutable commit SHAs. Dependabot monitors
+Dart, GitHub Actions, and Android Gradle dependencies weekly through
+[`dependabot.yml`](.github/dependabot.yml). Release builds use the validated
+Flutter 3.44.6 toolchain and publish SHA-256 checksums plus GitHub build
+provenance attestations with each release.
 
 ### One-time setup
 
@@ -166,6 +182,13 @@ wiki pages plus the index whenever project status or documentation changes.
 RunTiyul is open source and **actively looking for maintainers and
 contributors**. Whether you want to fix a bug, improve the docs, verify iOS, or
 help steward the project long-term — you're welcome here.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation, privacy, and pull
+request expectations. Community participation is governed by the
+[Code of Conduct](CODE_OF_CONDUCT.md), and support channels are listed in
+[SUPPORT.md](SUPPORT.md). Suspected vulnerabilities must be reported privately
+under [SECURITY.md](SECURITY.md). The handling of local GPS data and provider
+network requests is documented in [PRIVACY.md](PRIVACY.md).
 
 **New here and want to help maintain RunTiyul?** The easiest first step is to
 [open an issue or leave a comment](https://github.com/nachem/runTiyul/issues/new?title=I%27d%20like%20to%20help%20maintain%20RunTiyul&body=Hi%20Bernoulli%20Software%2C%20I%27d%20like%20to%20contribute%2Fbecome%20a%20maintainer.%20Here%27s%20a%20bit%20about%20me%3A)

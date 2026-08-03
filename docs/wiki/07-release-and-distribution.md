@@ -1,10 +1,12 @@
 # Release & Distribution
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-01
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
-describes what is **implemented in the repository**, not planned work.
+also records the public repository's contribution and security controls. It
+distinguishes repository configuration from checks actually exercised by a
+hosted run or release.
 
 ## 1. Summary
 
@@ -13,6 +15,9 @@ describes what is **implemented in the repository**, not planned work.
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
 | Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.0+8` published (62,085,540 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-27 |
 | iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` published (15,857,479 bytes); latest-download link returned 200 on 2026-07-27. On-device sideload remains unverified |
+| Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Configured with Flutter 3.44.6 and locally equivalent checks pass; first hosted run pending |
+| Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Signing and identity gate verified for `v1.3.0`; checksum/provenance additions await the next release |
+| Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
 
@@ -52,10 +57,29 @@ The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
   import/route builder, GPS recording, on-route navigation, history/GPX export,
   privacy-first local storage). Copy must not claim unverified capabilities;
   keep it aligned with [implementation status](02-implementation-status.md).
+- The footer links the privacy and security policies. Public copy states that
+  physical-device screen-lock and iOS runtime verification remain pending and
+  does not claim the unimplemented course-up mode.
 
 Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 
-## 3. CI workflows
+## 3. Repository automation and community health
+
+### `.github/workflows/ci.yml`
+
+- **Triggers:** pull requests, pushes to `main`, and manual dispatch.
+- **Flutter validation:** pins Flutter 3.44.6, installs locked dependencies,
+  checks Dart formatting, runs `flutter analyze --no-pub`, and executes
+  `flutter test --no-pub`.
+- **Dependency review:** pull requests are checked with GitHub's dependency
+  review Action for newly introduced vulnerable dependencies.
+- **Safety:** read-only repository permission, non-persisted checkout
+  credentials, concurrency cancellation for superseded runs, job timeouts, and
+  immutable Action commit SHAs.
+
+The equivalent local format, analyzer, and test commands passed on 2026-08-01.
+Checksum-verified `actionlint` 1.7.12 also passed. The workflow has not run on
+GitHub yet because it is not on `main`.
 
 ### `.github/workflows/release.yml`
 
@@ -63,6 +87,10 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 - **Metadata gate:** before any platform build, strict `vMAJOR.MINOR.PATCH` must
   match the semantic version in `pubspec.yaml`, and a non-empty matching note at
   `docs/wiki/releases/<tag>.md` must exist.
+- **Toolchain and Actions:** Flutter is pinned to validated version 3.44.6;
+  third-party Actions use immutable commit SHAs; checkout credentials are not
+  persisted. Workflow-level access is read-only, and only the publish job gets
+  release and provenance write permissions.
 - **Android job (Ubuntu):** `flutter build apk --release`, renamed to
   `RunTiyul.apk`. Before building, it decodes the permanent keystore from
   Actions secrets into the runner's temporary directory. Gradle fails closed
@@ -76,12 +104,12 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 - **iOS job (macOS):** `flutter build ios --release --no-codesign`, then the
   `Runner.app` is zipped into a `Payload/` structure to produce an **unsigned**
   `RunTiyul.ipa`. No Apple signing secrets are used.
-- **Publish:** both assets are attached to a GitHub Release via
-  `softprops/action-gh-release@v2` (needs `permissions: contents: write`). The
-  matching wiki release-note file is used verbatim as the Release body. The
-  publish job is resilient: it runs whenever the Android APK build succeeds and
-  attaches the iOS `.ipa` only when that best-effort macOS build produced one, so
-  a failing iOS build never blocks the APK release.
+- **Publish:** the publish job generates `SHA256SUMS.txt`, attests available app
+  artifacts with GitHub build provenance, and attaches them through a pinned
+  release Action. The matching wiki release-note file is used verbatim as the
+  Release body. The job runs whenever the Android APK succeeds and attaches the
+  iOS `.ipa` only when that best-effort macOS build produced one, so a failing
+  iOS build never blocks the APK release.
 - Stable asset names are required so `releases/latest/download/...` links stay
   valid across releases.
 
@@ -89,7 +117,30 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 
 - **Triggers:** push to `main` touching `site/**`, or manual dispatch.
 - **Deploy:** `actions/configure-pages` → `upload-pages-artifact` →
-  `deploy-pages`, publishing the `site/` directory.
+  `deploy-pages`, publishing the `site/` directory. All Actions are SHA-pinned
+  and checkout credentials are not persisted.
+
+### Dependency and repository security
+
+- `dependabot.yml` checks Dart packages, GitHub Actions, and Android Gradle
+  dependencies weekly; referenced triage labels exist in the repository.
+- GitHub private vulnerability reporting is enabled and is the confidential
+  channel linked from `SECURITY.md` and the issue chooser.
+- Dependabot vulnerability alerts and automated security updates are enabled.
+- Secret scanning and secret push protection are enabled.
+- Authenticated checks on 2026-08-01 found zero open Dependabot alerts and zero
+  open secret-scanning alerts. GitHub's dependency graph inventories 161
+  packages and can produce an SPDX SBOM.
+- `main` has no branch protection or repository ruleset as of 2026-08-01. Add
+  required CI checks only after `ci.yml` has merged and completed successfully.
+
+### Community files
+
+The repository root contains contribution, privacy, security, support, license,
+and conduct policies. `.github/` provides CODEOWNERS, structured bug and feature
+forms, issue-routing links, and a pull-request checklist. The website and README
+link the privacy and security policies. Reports are explicitly told not to
+include personal GPS data or credentials.
 
 ## 4. Operational runbook
 
@@ -166,6 +217,12 @@ update in place.
 - `v1.2.2` and `v1.3.0` now provide both permanently signed APKs needed for an
   in-place upgrade test, but data preservation remains physical-device
   unverified.
+- The new pull-request CI, dependency review, checksum asset, and provenance
+  attestation are configured but have not run on GitHub. The current `v1.3.0`
+  release predates those additions.
+- `main` is not protected by a branch rule or ruleset. Although GitHub's
+  dependency graph can produce an SPDX SBOM, no SBOM or aggregated
+  dependency-license inventory is currently published with releases.
 
 ## 6. Licensing & attribution
 

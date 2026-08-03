@@ -51,12 +51,12 @@ void main() {
   test('tileIntersectsBounds matches only overlapping tiles', () {
     final plan = const TilePlanner().plan(_bounds, 12, 12);
     final inside = plan.coordinates.first;
-    expect(
-      tileIntersectsBounds(_bounds, inside.z, inside.x, inside.y),
-      isTrue,
-    );
+    expect(tileIntersectsBounds(_bounds, inside.z, inside.x, inside.y), isTrue);
     // A far-away tile does not intersect the small area.
-    expect(tileIntersectsBounds(_bounds, 12, inside.x + 100, inside.y), isFalse);
+    expect(
+      tileIntersectsBounds(_bounds, 12, inside.x + 100, inside.y),
+      isFalse,
+    );
   });
 
   group('OrderedOfflineTileProvider', () {
@@ -87,7 +87,10 @@ void main() {
     }
 
     test('returns the top area tile where areas overlap', () {
-      final vector = _area(id: 'v', format: OfflineSourceFormat.convertedVector);
+      final vector = _area(
+        id: 'v',
+        format: OfflineSourceFormat.convertedVector,
+      );
       final raster = _area(id: 'r', format: OfflineSourceFormat.rasterTiles);
 
       final topVector = imageFor([vector, raster]);
@@ -112,7 +115,10 @@ void main() {
     });
 
     test('returns a transparent tile when no area covers it', () {
-      final vector = _area(id: 'v', format: OfflineSourceFormat.convertedVector);
+      final vector = _area(
+        id: 'v',
+        format: OfflineSourceFormat.convertedVector,
+      );
       final provider = OrderedOfflineTileProvider(
         store: store,
         areas: [vector],

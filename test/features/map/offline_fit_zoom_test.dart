@@ -23,17 +23,20 @@ void main() {
       expect(fit.max, 16);
     });
 
-    test('offline fitting raises the cap when the download starts above it', () {
-      // Raising the minimum download zoom to 17 (the reported scenario): both
-      // the floor and cap become 17 so "Show on map" lands on real tiles
-      // instead of gray.
-      final fit = offlineAwareFitZoom(
-        offlineMode: true,
-        offlineRange: (17, 17),
-      );
-      expect(fit.min, 17);
-      expect(fit.max, 17);
-    });
+    test(
+      'offline fitting raises the cap when the download starts above it',
+      () {
+        // Raising the minimum download zoom to 17 (the reported scenario): both
+        // the floor and cap become 17 so "Show on map" lands on real tiles
+        // instead of gray.
+        final fit = offlineAwareFitZoom(
+          offlineMode: true,
+          offlineRange: (17, 17),
+        );
+        expect(fit.min, 17);
+        expect(fit.max, 17);
+      },
+    );
 
     test('offline with no saved coverage keeps the default cap', () {
       final fit = offlineAwareFitZoom(offlineMode: true, offlineRange: null);

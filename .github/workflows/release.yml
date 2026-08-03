@@ -32,13 +32,14 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
+  FLUTTER_VERSION: '3.44.6'
   FLUTTER_CHANNEL: stable
   # Public certificate identity. Changing this value/key breaks Android updates.
   ANDROID_RELEASE_CERT_SHA256: d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5
@@ -57,9 +58,10 @@ jobs:
       version_code: ${{ steps.metadata.outputs.version_code }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate version and release notes
         id: metadata
@@ -128,17 +130,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@d7793b545071e98d581d3bf084a51c3213318a07 # v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
 
@@ -239,7 +244,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk dist/RunTiyul.apk
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: runtiyul-apk
           path: dist/RunTiyul.apk
@@ -254,11 +259,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: ${{ env.FLUTTER_CHANNEL }}
           cache: true
 
@@ -282,7 +290,7 @@ jobs:
           ls -lh dist
 
       - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: runtiyul-ipa
           path: dist/RunTiyul.ipa
@@ -299,12 +307,18 @@ jobs:
     # site's primary download) and attach the IPA only when it is available.
     if: ${{ always() && needs.metadata.result == 'success' && needs.android.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Download built artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: artifacts
 
@@ -317,10 +331,23 @@ jobs:
           else
             echo "::warning::iOS IPA unavailable; publishing Android APK only."
           fi
+          (
+            cd release
+            sha256sum RunTiyul.apk > SHA256SUMS.txt
+            if [ -f RunTiyul.ipa ]; then
+              sha256sum RunTiyul.ipa >> SHA256SUMS.txt
+            fi
+          )
           ls -lh release
+          cat release/SHA256SUMS.txt
+
+      - name: Attest release provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: release/RunTiyul.*
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.metadata.outputs.tag }}
           name: RunTiyul ${{ needs.metadata.outputs.tag }}
@@ -330,3 +357,4 @@ jobs:
           files: |
             release/RunTiyul.apk
             release/RunTiyul.ipa
+            release/SHA256SUMS.txt

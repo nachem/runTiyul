@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-07-27<br>
+Snapshot date: 2026-08-01<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -82,7 +82,8 @@ hosting remain proposals only.
 | Offline area ordering | Implemented; analyzer/unit-tested | The saved-areas list is drag-to-reorder (`ReorderableListView` with a drag handle); the order persists in `app_settings` (`offline_area_order`) and is restored on reload. Index 0 is the top area, which the ordered renderer draws over lower areas where they overlap. Reorder persistence and ordered tile resolution are unit-tested. |
 | Download crash recovery | Implemented and unit-tested | Areas left `downloading` after restart become `paused` and resumable. |
 | Free-space check/orphan cleanup | Not implemented | The app does not yet show available device bytes or reconcile orphaned files. |
-| Product documentation | Implemented | Requirements, architecture, AI instructions, local debugging, and current status are indexed. |
+| Product documentation | Implemented | Requirements, architecture, AI instructions, local debugging, current status, privacy, security, support, and contribution expectations are documented and linked from the README. |
+| Open-source project health | Implemented locally; hosted CI pending | The repository has a Code of Conduct with a usable confidential contact, `SECURITY.md`, `PRIVACY.md`, `CONTRIBUTING.md`, `SUPPORT.md`, CODEOWNERS, structured bug/feature forms, a pull-request template, weekly Dependabot coverage, and pull-request CI for format/analyze/test plus dependency review. External Actions are SHA-pinned, checkout credentials are not persisted, and release builds pin Flutter 3.44.6 and are configured to publish checksums plus GitHub provenance attestations. GitHub private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection are enabled. No branch protection/ruleset or published SBOM exists; the new hosted CI and release provenance have not run yet. |
 
 ## 3. Source architecture
 
@@ -388,17 +389,19 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest validation on 2026-07-27 with Flutter 3.44.6 stable:
+Latest validation on 2026-08-01 with Flutter 3.44.6 stable and Dart 3.12.2:
 
 | Command | Result |
 | --- | --- |
-| Dart formatter on changed Dart files | Passed. |
+| `dart format --output=none --set-exit-if-changed lib test` | Passed; 82 files checked, zero changes after three pre-existing test files were normalized. |
 | `flutter analyze --no-pub` | Passed; no issues found. |
-| `flutter test` | Passed; 148 tests. |
+| `flutter test --no-pub` | Passed; 148 tests. |
+| GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
+| GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
 | `flutter build apk --debug --no-pub` | Passed for `1.3.0+8`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, and `versionCode=8`. |
 | GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.0+8` in run `30255797959`; published a 62,085,540-byte APK. |
 | Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, `versionCode=8`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`. |
-| Release workflow/site/repository checks | Run `30255797959` passed metadata, Android, iOS, and publish jobs; signing secrets are build-step scoped. Local wiki links and the CRLF-aware `git diff --check` passed. `actionlint` was unavailable locally. |
+| Release workflow/site/repository checks | Run `30255797959` passed metadata, Android, iOS, and publish jobs; signing secrets are build-step scoped. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
 
 Release run
 [`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
@@ -543,3 +546,6 @@ Not verified:
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android
   upgrade from `v1.2.2` to `v1.3.0` on a physical device.
+7. Merge and observe the new hosted CI, then protect `main` with its required
+  checks. Exercise checksum and provenance publication on the next release, and
+  decide whether to publish an SBOM/dependency-license inventory.
