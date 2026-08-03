@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-08-01
+Last reviewed: 2026-08-03
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -12,10 +12,10 @@ hosted run or release.
 
 | Concern | Mechanism | Status |
 | --- | --- | --- |
-| Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/ (verified 2026-07-16) |
+| Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
 | Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.0+8` published (62,085,540 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-27 |
 | iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` published (15,857,479 bytes); latest-download link returned 200 on 2026-07-27. On-device sideload remains unverified |
-| Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Configured with Flutter 3.44.6 and locally equivalent checks pass; first hosted run pending |
+| Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `30808751609` passed format/analyze/test with Flutter 3.44.6; dependency review awaits a pull request |
 | Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Signing and identity gate verified for `v1.3.0`; checksum/provenance additions await the next release |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
@@ -77,9 +77,12 @@ Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
   credentials, concurrency cancellation for superseded runs, job timeouts, and
   immutable Action commit SHAs.
 
-The equivalent local format, analyzer, and test commands passed on 2026-08-01.
-Checksum-verified `actionlint` 1.7.12 also passed. The workflow has not run on
-GitHub yet because it is not on `main`.
+The equivalent local format, analyzer, and test commands passed on 2026-08-01,
+and checksum-verified `actionlint` 1.7.12 passed. Hosted push run
+[`30808751609`](https://github.com/nachem/runTiyul/actions/runs/30808751609)
+then passed setup, dependency installation, formatting, analysis, and tests on
+2026-08-03. Dependency review correctly skipped for that push and remains to be
+verified on a pull request.
 
 ### `.github/workflows/release.yml`
 
@@ -217,9 +220,9 @@ update in place.
 - `v1.2.2` and `v1.3.0` now provide both permanently signed APKs needed for an
   in-place upgrade test, but data preservation remains physical-device
   unverified.
-- The new pull-request CI, dependency review, checksum asset, and provenance
-  attestation are configured but have not run on GitHub. The current `v1.3.0`
-  release predates those additions.
+- Push CI passed in run `30808751609`. Pull-request dependency review remains
+  unexercised. The checksum asset and provenance attestation are configured but
+  have not run; the current `v1.3.0` release predates those additions.
 - `main` is not protected by a branch rule or ruleset. Although GitHub's
   dependency graph can produce an SPDX SBOM, no SBOM or aggregated
   dependency-license inventory is currently published with releases.
