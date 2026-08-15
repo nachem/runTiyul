@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trail_runner/services/navigation_alert_feedback.dart';
@@ -74,6 +76,48 @@ void main() {
     expect(hapticCount, 3);
     expect(toneCount, 1);
     expect(voiceCount, 1);
+  });
+
+  test('tone alerts release audio focus after the final cue', () async {
+    var stopCount = 0;
+    final waits = <Duration>[];
+    final feedback = NavigationAlertFeedback(
+      haptic: (_) async {},
+      playTone: (_) async => true,
+      speak: (_) async => false,
+      stop: () async => stopCount++,
+      wait: (duration) async => waits.add(duration),
+    );
+
+    await feedback.notify(offRoute, mode: NavFeedbackMode.tones);
+
+    expect(waits, [const Duration(milliseconds: 556)]);
+    expect(stopCount, 2);
+  });
+
+  test('a superseded alert does not release the newer alert audio', () async {
+    final firstCueStarted = Completer<void>();
+    final firstCueFinished = Completer<void>();
+    var toneCount = 0;
+    var stopCount = 0;
+    final feedback = NavigationAlertFeedback(
+      haptic: (_) async {},
+      playTone: (_) async => ++toneCount == 1,
+      speak: (_) async => false,
+      stop: () async => stopCount++,
+      wait: (_) {
+        firstCueStarted.complete();
+        return firstCueFinished.future;
+      },
+    );
+
+    final firstAlert = feedback.notify(offRoute, mode: NavFeedbackMode.tones);
+    await firstCueStarted.future;
+    await feedback.notify(offRoute, mode: NavFeedbackMode.tones);
+    firstCueFinished.complete();
+    await firstAlert;
+
+    expect(stopCount, 3);
   });
 
   test(

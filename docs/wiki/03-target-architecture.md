@@ -250,6 +250,10 @@ sequence, or neither. Tone + voice plays the earcon before speech so the two do
 not mask each other. Voice-only mode falls back to the corresponding offline
 tone when no installed English voice can speak. Playback, speech, and haptic
 failures are best-effort and must never pause or fail activity recording.
+After the final cue or completed utterance, the adapter must explicitly abandon
+transient audio focus. On iOS it must deactivate the shared session with
+`notifyOthersOnDeactivation`; alert generations prevent a superseded prompt
+from releasing focus owned by its replacement.
 
 `NavStatus` carries the nearest route point, distance, compass bearing,
 runner-relative direction when a usable heading exists, distance trend since
@@ -430,7 +434,9 @@ A failed deletion remains visible and retryable.
 - Foreground service and persistent notification for active background
   recording.
 - TTS-service package discovery and navigation audio attributes/focus for short
-  guidance prompts; bundled tones remain the offline fallback.
+  guidance prompts; bundled tones remain the offline fallback. Low-latency
+  SoundPool tones require an explicit stop after their known final-cue duration
+  because that backend has no playback-completion callback.
 - Android 13+ notification permission where applicable.
 - Scoped storage compatible GPX import/export.
 
@@ -440,7 +446,8 @@ A failed deletion remains visible and retryable.
 - Background/always location only when recording requirements justify it.
 - Location and audio background modes. Guidance uses a shared playback session,
   `voicePrompt` mode, Bluetooth routes, and duck/interruption options suitable
-  for occasional navigation speech.
+  for occasional navigation speech. Prompt completion deactivates the session
+  with `notifyOthersOnDeactivation` so interrupted media can resume.
 - File importer/exporter integration.
 
 Permissions must be requested progressively, with platform-specific recovery
@@ -456,7 +463,8 @@ instructions.
 - Route progress and off-route persistence.
 - Navigation output-mode routing, off-route trend cadence, relative/compass
   voice guidance, progress milestones, matching missing-TTS tone fallback, and
-  bundled-audio validation.
+  bundled-audio validation, final-cue focus release, and overlapping-alert
+  ownership.
 - Bounds-to-tile enumeration at zoom boundaries and antimeridian.
 - Storage estimates and byte formatting.
 - Download retry/cancel/resume state machines.
@@ -479,7 +487,8 @@ instructions.
 - Process restart during download and recording.
 - Screen lock/background GPS recording on Android and iOS.
 - Physical-device tone/TTS audibility, media/silent-mode behavior,
-  Bluetooth/open-ear routing, and locked-screen alert playback.
+  interrupted-media resumption, Bluetooth/open-ear routing, and locked-screen
+  alert playback.
 - Low-storage failure and recovery.
 - GPX import/export through platform pickers.
 

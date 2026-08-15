@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-08-03<br>
+Snapshot date: 2026-08-15<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -61,7 +61,7 @@ hosting remain proposals only.
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit-tested, physical-device stress test pending | `RTE-003` Follow trails no longer derives its workload from a zoomed-out viewport: the first tap loads a bounded 3x3 z14 neighborhood around the tapped point, subsequent nearby areas merge into the graph, and explicit viewport reloads cap at 24 tiles centered on the screen instead of truncating from the northwest corner. A distant tap whose bounded neighborhood cannot overlap the preceding point is rejected immediately with an add-a-closer-point message. A closer tap is committed only when a connected, reasonable graph path exists, so Follow trails never silently inserts a straight waypoint leg. Existing anchors keep their stable graph indices; only the newest leg is routed, graph construction is lazy, and cross-trail shortest paths use a binary-heap frontier. Under `RTE-009`, saved/navigation geometry remains lossless while `TrailMap` reduces only its rendered point list at approximately one screen pixel for the current zoom. Very long routes still require profiling on a mid-range physical device. |
-| Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
+| Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Completed cues explicitly release transient audio focus; iOS deactivates its shared session with `notifyOthersOnDeactivation`, and a generation guard prevents an older cue from releasing a newer alert's audio. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior and recovery, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
 | GPS activity tracking | Implemented and emulator verified | Start, permission request, pause, resume, finish, discard, timer, and persisted samples. |
 | Live metrics | Implemented | Elapsed time, distance, average pace, and smoothed-threshold elevation gain are shown. Moving time is not calculated separately. |
 | Background recording | Configured, not physical-device verified | Geolocator foreground notification/background settings and platform permissions exist. |
@@ -254,6 +254,10 @@ Implemented:
   the corresponding bundled-tone cadence.
 - Two offline Kenney Interface Sounds cues bundled under CC0 1.0; system TTS
   uses an installed English voice and platform navigation audio focus.
+- Explicit transient-focus release after the final cue or spoken prompt. Android
+  low-latency tones are stopped after their known duration; iOS deactivates the
+  shared audio session while notifying interrupted audio apps so music can
+  resume. Superseded alerts cannot release a newer alert's audio ownership.
 - Activity history, detail summary/map, and confirmed deletion.
 - GPX 1.1 activity export through the platform save dialog.
 
@@ -266,8 +270,8 @@ Limitations:
 - Current pace uses the full activity average, not a rolling window.
 - Visual route-progress percentage and course-up mode are absent.
 - Alert tones, system voice availability, outdoor audibility, headphone routing,
-  and background/locked-screen playback have not been exercised on a physical
-  Android or iOS device.
+  interrupted-music resumption, and background/locked-screen playback have not
+  been exercised on a physical Android or iOS device.
 - The native GPX save dialog was not emulator-tested.
 
 ## 7. Offline maps and provider configuration
@@ -361,8 +365,9 @@ Limitations:
 - Java/Kotlin target: 17.
 - Fine, coarse, background location, foreground service, foreground location
   service, notification, wake-lock, and internet permissions are declared.
-- Text-to-speech service discovery is declared, and voice prompts request
-  navigation audio attributes/focus.
+- Text-to-speech service discovery is declared, voice prompts request navigation
+  audio attributes/focus, and low-latency tone playback is explicitly stopped
+  after its final cue to abandon transient focus.
 - Release builds require the permanent secret-backed RSA key and fail closed
   when any signing value is absent. GitHub Actions holds four encrypted signing
   secrets; the workflow pins certificate SHA-256
@@ -384,23 +389,24 @@ Limitations:
 - Display name: `RunTiyul`.
 - When-in-use and always/background location descriptions are present.
 - Location and audio background modes are enabled. Guidance uses a shared
-  playback session in `voicePrompt` mode that ducks other audio.
+  playback session in `voicePrompt` mode that ducks other audio, then deactivates
+  it with `notifyOthersOnDeactivation` so the interrupted app can resume.
 - iOS has not been built or run in this Windows environment.
 
 ## 9. Automated validation
 
-Latest validation on 2026-08-03 with Flutter 3.44.6 stable and Dart 3.12.2:
+Latest code validation on 2026-08-15 with Flutter 3.44.6 stable and Dart 3.12.2:
 
 | Command | Result |
 | --- | --- |
-| `dart format --output=none --set-exit-if-changed lib test` | Passed; 82 files checked, zero changes after three pre-existing test files were normalized. |
+| `dart format --output=none --set-exit-if-changed lib test` | Passed; 82 files checked with zero changes. |
 | `flutter analyze --no-pub` | Passed; no issues found. |
-| `flutter test --no-pub` | Passed; 148 tests. |
+| VS Code Flutter test runner (full suite) | Passed; 150 tests. |
 | GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
 | GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
 | GitHub Actions `Continuous integration` | Run [`30808751609`](https://github.com/nachem/runTiyul/actions/runs/30808751609) passed setup, dependency install, format, analyze, and all tests for commit `87290ca` on 2026-08-03. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
 | GitHub Actions `Deploy website` | Run [`30808751792`](https://github.com/nachem/runTiyul/actions/runs/30808751792) passed for commit `87290ca` on 2026-08-03. |
-| `flutter build apk --debug --no-pub` | Passed for `1.3.0+8`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, and `versionCode=8`. |
+| `flutter build apk --debug --no-pub` | Passed for `1.3.1+9`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, and `versionCode=9`. |
 | GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.0+8` in run `30255797959`; published a 62,085,540-byte APK. |
 | Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, `versionCode=8`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`. |
 | Release workflow/site/repository checks | Run `30255797959` passed metadata, Android, iOS, and publish jobs; signing secrets are build-step scoped. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
@@ -477,7 +483,8 @@ Automated coverage includes:
 - Navigation feedback mode persistence; slow/fast off-route and relaxed
   progress tone patterns; compass/relative voice phrases; completed/remaining
   guidance; speech-unavailable matching-tone fallback; valid bundled OGG
-  assets; four unsaved-setting previews; and alert-settings layout.
+  assets; final-cue focus release; stale-alert ownership protection; four
+  unsaved-setting previews; and alert-settings layout.
 - Route detail/editor bottom-safe-area ownership; realtime recording route-list
   wiring; and independent visibility of the selected navigation route versus
   hideable saved-route overlays.
@@ -543,7 +550,8 @@ Not verified:
 3. Verify navigation tones and system voice on physical Android and iOS:
   off-route slow/fast trend cadence, compass/relative heading quality,
   junction/progress distinction, outdoor audibility, Bluetooth/open-ear
-  headphones, background/locked-screen playback, and missing-language fallback.
+  headphones, interrupted-music resumption, background/locked-screen playback,
+  and missing-language fallback.
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android

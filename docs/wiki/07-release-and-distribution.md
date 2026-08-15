@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-08-03
+Last reviewed: 2026-08-15
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -13,8 +13,8 @@ hosted run or release.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.0+8` published (62,085,540 bytes); package/version/certificate independently verified and latest-download link returned 200 on 2026-07-27 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.0+8` published (15,857,479 bytes); latest-download link returned 200 on 2026-07-27. On-device sideload remains unverified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | `v1.3.1+9` prepared with the navigation media-resumption fix; its local debug APK identity is verified, while permanently signed `v1.3.0+8` remains the latest published artifact |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.1+9` prepared with explicit audio-session release; `v1.3.0+8` remains the latest published artifact. On-device sideload remains unverified |
 | Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `30808751609` passed format/analyze/test with Flutter 3.44.6; dependency review awaits a pull request |
 | Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Signing and identity gate verified for `v1.3.0`; checksum/provenance additions await the next release |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
@@ -23,9 +23,10 @@ hosted run or release.
 
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
-`...RunTiyul.ipa`. As of the
+`...RunTiyul.ipa`. `v1.3.1+9` is prepared for publication on 2026-08-15; until
+its tag workflow completes, both links continue to resolve to the
 [`v1.3.0` release](https://github.com/nachem/runTiyul/releases/tag/v1.3.0)
-(2026-07-27), both resolve `200`. Release workflow
+(2026-07-27) and return HTTP `200`. Release workflow
 [`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
 passed its metadata gate, permanent-signature Android identity verification,
 unsigned iOS build, and publication jobs. Independent downloads match the
@@ -214,8 +215,8 @@ update in place.
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.3.0` is the
-  current latest release.
+  enhancement depend on at least one published `v*` release; `v1.3.0` remains
+  current while `v1.3.1` is prepared.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
 - `v1.2.2` and `v1.3.0` now provide both permanently signed APKs needed for an
   in-place upgrade test, but data preservation remains physical-device

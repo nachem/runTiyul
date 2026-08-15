@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-08-03<br>
+Last reviewed: 2026-08-15<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -41,11 +41,11 @@ instructions are mandatory for all future agents.
 | Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail; realtime recording receives all saved-route overlays, while the selected navigation route remains visible independently of the saved-trails toggle |
 | GPX route import | Implemented and parser tested; native picker not emulator verified |
 | GPS activity recording | Implemented; emulator permission/timer/lifecycle verified |
-| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping on save, and configurable live guidance implemented. Off-route cues repeat with nearest-route compass/relative direction: slow pairs indicate approaching and fast triples moving away. Monotonic completed/remaining progress can announce by distance or time. Tone + voice is the default; Voice, Tones, Haptics only, and four previews are available. Audio, heading quality, and background behavior are not device-verified; visual progress percentage remains. |
+| Visual route navigation | Trail-follow route creation (tap real trails and roads; a new waypoint keeps the previous one's way type, trail vs road, when near both), route snapping on save, and configurable live guidance implemented. Off-route cues repeat with nearest-route compass/relative direction: slow pairs indicate approaching and fast triples moving away. Monotonic completed/remaining progress can announce by distance or time. Tone + voice is the default; Voice, Tones, Haptics only, and four previews are available. Completed prompts now release transient audio focus, with iOS notifying interrupted audio apps so music can resume; overlap behavior is unit-tested. Audio, media recovery, heading quality, and background behavior are not device-verified; visual progress percentage remains. |
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
-| Latest published release | `v1.3.0+8` published 2026-07-27 with directional route-recovery cues and configurable progress guidance; Android APK and unsigned iOS IPA stable links return 200; iOS sideload/runtime remains unverified |
+| Release state | `v1.3.1+9` prepared 2026-08-15 to restore interrupted media after navigation prompts; `v1.3.0+8` remains the latest published release until the tag workflow completes. Android APK and unsigned iOS IPA stable links currently return 200; iOS sideload/runtime remains unverified |
 | Release workflow | Run `30255797959` passed metadata, Android permanent-signature/identity verification, unsigned iOS build, and publication for `v1.3.0`; `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | `v1.3.0` retains the `v1.2.2` permanent certificate and increases `versionCode` to 8, enabling an in-place update; physical data-preservation verification remains. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation permanently unlocks those two providers on that device. Satellite/arbitrary view-only layers cannot be unlocked. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
@@ -54,7 +54,7 @@ instructions are mandatory for all future agents.
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
 | Open-source project health | Contribution, conduct, support, privacy, and security policies; CODEOWNERS; issue/PR templates; Dependabot; SHA-pinned Actions; and version-pinned PR/release workflows are configured. Private vulnerability reporting, dependency alerts/security updates, secret scanning, and push protection are enabled. Push CI and Pages pass; PR dependency review/provenance remain unexercised and `main` is not protected |
-| Automated validation | On 2026-08-03, hosted CI run `30808751609` passed format/analyze/all tests and Pages run `30808751792` passed for commit `87290ca`; local validation on Flutter 3.44.6/Dart 3.12.2, checksum-verified `actionlint` 1.7.12, GitHub YAML/invariant checks, live security-setting/alert checks, and all local Markdown targets also pass. Published `1.3.0+8` APK identity, public APK/IPA digests, and stable latest URLs remain independently verified |
+| Automated validation | On 2026-08-15, local formatting and `flutter analyze --no-pub` passed, the VS Code Flutter test runner passed all 150 tests (including navigation focus release and overlapping-alert ownership), and the `1.3.1+9` debug APK build/identity check passed. Hosted CI run `30808751609` and Pages run `30808751792` remain the latest passing hosted runs for commit `87290ca`; checksum-verified `actionlint` 1.7.12, GitHub YAML/invariant checks, live security-setting/alert checks, and all local Markdown targets also pass. Published `1.3.0+8` APK identity, public APK/IPA digests, and stable latest URLs remain independently verified |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -69,7 +69,8 @@ Detailed evidence belongs in
 3. Verify background recording/downloads and navigation audio on physical
   Android and iOS devices: off-route slow/fast trend cadence, compass/relative
   heading accuracy, junction/progress cues, outdoor audibility, headphones,
-  missing-language fallback, and locked-screen playback.
+  missing-language fallback, interrupted-music resumption, and locked-screen
+  playback.
 4. Stress-test zoomed-out and long Follow trails routes on a mid-range physical device, including memory, tap latency, and save/reload fidelity.
 5. Add free-space checks, orphan cleanup, and explicit database migrations.
 6. Secure an independent signing-key backup, then verify a data-preserving

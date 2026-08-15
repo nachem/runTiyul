@@ -1,6 +1,6 @@
 # Release Notes Index
 
-Last reviewed: 2026-07-27
+Last reviewed: 2026-08-15
 
 This page is the durable index and policy for RunTiyul release notes. Detailed,
 authored notes live under [`releases/`](releases/) and are also used verbatim as
@@ -30,6 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| [v1.3.1](releases/v1.3.1.md) | 2026-08-15 | Prepared | Releases transient navigation audio focus so interrupted music can resume after a prompt. |
 | [v1.3.0](releases/v1.3.0.md) | 2026-07-27 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.3.0) | Directional off-route recovery cues, informative voice guidance, and configurable distance/time progress updates. |
 | [v1.2.2](releases/v1.2.2.md) | 2026-07-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.2.2) | Permanent Android release signing baseline, CRLF-safe update gates, and installed-version awareness. |
 | [v1.2.1](releases/v1.2.1.md) | 2026-07-22 | Unpublished | Tag workflow stopped at metadata validation because CRLF was not normalized; no artifacts or GitHub Release were published. Superseded by `v1.2.2`. |

@@ -21,7 +21,7 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-08-03:
+As of 2026-08-15:
 
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
@@ -31,7 +31,7 @@ As of 2026-08-03:
   development-only override is configured.
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
-- Format and analyzer pass; 148 automated tests pass.
+- Format and analyzer pass; 150 automated tests pass.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
   Push CI run `30808751609` passed format, analyze, and all tests; Pages run
@@ -41,12 +41,16 @@ As of 2026-08-03:
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.3.0+8` is published. Workflow `30255797959`, public asset hashes and
-  sizes, stable download URLs, and independent APK identity/signature checks
-  passed on 2026-07-27.
+- `v1.3.1+9` is prepared with the navigation media-resumption fix. `v1.3.0+8`
+  remains the latest published release; workflow `30255797959`, public asset
+  hashes and sizes, stable download URLs, and independent APK
+  identity/signature checks passed on 2026-07-27.
 - Monotonic route-progress announcements and directional off-route route-finder
-  alerts are implemented and unit/widget-tested. Their heading quality, audio,
-  and locked-screen behavior remain physical-device unverified.
+  alerts are implemented and unit/widget-tested. Completed prompts explicitly
+  release transient audio focus, iOS notifies interrupted audio apps on session
+  deactivation, and overlapping-alert ownership is tested. Media resumption,
+  heading quality, audio, and locked-screen behavior remain physical-device
+  unverified.
 - iOS, physical-device background tracking, native GPX picking, free-space
   checks, and production provider configuration remain unverified or
   unimplemented.
@@ -278,6 +282,9 @@ resume, use airplane mode, view usage, and delete data.
   required.
 - Overlapping areas make naive recursive directory deletion unsafe.
 - GPS altitude is noisy; summing every positive delta exaggerates elevation.
+- Android `audioplayers` low-latency mode uses SoundPool without a completion
+  callback. A short cue that requests focus must be explicitly stopped after
+  its known duration or other media may remain paused or ducked.
 - A Windows host cannot validate iOS runtime behavior.
 
 ## 10. Definition of an honest completion report

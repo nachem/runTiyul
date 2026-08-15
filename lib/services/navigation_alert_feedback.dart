@@ -27,6 +27,10 @@ class NavigationFeedbackResult {
 
 /// Delivers the optional audio and haptic feedback required by NAV-004.
 class NavigationAlertFeedback {
+  static const _navigationAudioChannel = MethodChannel(
+    'trail_runner/navigation_audio',
+  );
+
   factory NavigationAlertFeedback({
     required AlertHaptic haptic,
     required AlertTonePlayer playTone,
@@ -99,6 +103,9 @@ class NavigationAlertFeedback {
       },
       stop: () async {
         await Future.wait([player.stop(), textToSpeech.stop()]);
+        if (Platform.isIOS) {
+          await _navigationAudioChannel.invokeMethod<void>('release');
+        }
       },
       dispose: () async {
         await textToSpeech.stop();
@@ -143,7 +150,7 @@ class NavigationAlertFeedback {
 
     if (mode.usesVoice && generation == _generation) {
       if (tonePlayed) {
-        await _wait(_toneDuration(alert) + const Duration(milliseconds: 80));
+        await _wait(const Duration(milliseconds: 80));
       }
       if (generation == _generation) {
         final message = guidanceFor(status);
@@ -166,6 +173,9 @@ class NavigationAlertFeedback {
     }
 
     await haptic;
+    if (generation == _generation && (mode.usesTone || mode.usesVoice)) {
+      await _bestEffortAction(_stop);
+    }
     return NavigationFeedbackResult(
       tonePlayed: tonePlayed,
       voiceSpoken: voiceSpoken,
@@ -208,10 +218,15 @@ class NavigationAlertFeedback {
     };
     var played = false;
     for (var index = 0; index < count && generation == _generation; index++) {
-      played =
-          await _bestEffortBool(() => _playTone(status.triggered)) || played;
-      if (index < count - 1) {
-        await _wait(_toneDuration(status.triggered) + gap);
+      final cuePlayed = await _bestEffortBool(
+        () => _playTone(status.triggered),
+      );
+      played = cuePlayed || played;
+      if (cuePlayed && generation == _generation) {
+        await _wait(_toneDuration(status.triggered));
+      }
+      if (index < count - 1 && generation == _generation) {
+        await _wait(gap);
       }
     }
     return played;
