@@ -404,21 +404,23 @@ Latest code validation on 2026-08-15 with Flutter 3.44.6 stable and Dart 3.12.2:
 | VS Code Flutter test runner (full suite) | Passed; 150 tests. |
 | GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
 | GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
-| GitHub Actions `Continuous integration` | Run [`30808751609`](https://github.com/nachem/runTiyul/actions/runs/30808751609) passed setup, dependency install, format, analyze, and all tests for commit `87290ca` on 2026-08-03. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
+| GitHub Actions `Continuous integration` | Run [`31898235414`](https://github.com/nachem/runTiyul/actions/runs/31898235414) passed setup, dependency install, format, analyze, and all 150 tests for commit `8cb3695` on 2026-08-15. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
+| GitHub Actions CodeQL | Run [`31898235009`](https://github.com/nachem/runTiyul/actions/runs/31898235009) passed for commit `8cb3695` on 2026-08-15. |
 | GitHub Actions `Deploy website` | Run [`30808751792`](https://github.com/nachem/runTiyul/actions/runs/30808751792) passed for commit `87290ca` on 2026-08-03. |
 | `flutter build apk --debug --no-pub` | Passed for `1.3.1+9`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, and `versionCode=9`. |
-| GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.0+8` in run `30255797959`; published a 62,085,540-byte APK. |
-| Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.0`, `versionCode=8`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`. |
-| Release workflow/site/repository checks | Run `30255797959` passed metadata, Android, iOS, and publish jobs; signing secrets are build-step scoped. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
+| GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.1+9` in run `31898244766`; published a 62,085,536-byte APK. |
+| Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, `versionCode=9`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`. |
+| Release workflow/site/repository checks | Run `31898244766` passed metadata, Android, iOS, checksums, APK+IPA provenance, and publication; signing secrets are build-step scoped. Independent provenance and stable-link checks passed. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
 
 Release run
-[`30255797959`](https://github.com/nachem/runTiyul/actions/runs/30255797959)
-published `v1.3.0+8` from commit `d58df53`. Both the Android and unsigned iOS
-jobs passed. Independent downloads matched the GitHub API hashes: APK
-`341c038a3514df921fb2b2647101b24cd31b2601166501092e61a21191314496`
-(62,085,540 bytes) and IPA
-`d5fe1f765ee31b2de71027536dfb3acdb04fd7f1f513db0e0a8d0253c0181601`
-(15,857,479 bytes). Both stable latest-download URLs returned 200.
+[`31898244766`](https://github.com/nachem/runTiyul/actions/runs/31898244766)
+published `v1.3.1+9` from commit `8cb3695`. Both the Android and unsigned iOS
+jobs passed. Independent downloads matched `SHA256SUMS.txt`: APK
+`c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`
+(62,085,536 bytes) and IPA
+`5fd37de95951674f6ece16476148469ed67c78ae70b57756c9f7e1cd89562f48`
+(15,932,247 bytes). Both provenance attestations verified and both stable
+latest-download URLs returned 200.
 
 The first `v1.2.2` tag run (`29896550967`) built the signed Android APK and
 unsigned iOS IPA, but its Android post-build gate could not parse the
@@ -555,7 +557,7 @@ Not verified:
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android
-  upgrade from `v1.2.2` to `v1.3.0` on a physical device.
+  upgrade from `v1.2.2` to `v1.3.1` on a physical device.
 7. Protect `main` with the now-verified CI check, verify dependency review on a
-  pull request, exercise checksum/provenance publication on the next release,
-  and decide whether to publish an SBOM/dependency-license inventory.
+  pull request, and decide whether to publish an SBOM/dependency-license
+  inventory.

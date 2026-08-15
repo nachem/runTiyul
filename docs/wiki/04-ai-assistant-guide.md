@@ -34,17 +34,17 @@ As of 2026-08-15:
 - Format and analyzer pass; 150 automated tests pass.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
-  Push CI run `30808751609` passed format, analyze, and all tests; Pages run
-  `30808751792` passed. PR dependency review and release checksums/provenance
-  have not been exercised yet.
+  Push CI run `31898235414` passed format, analyze, and all 150 tests; CodeQL
+  run `31898235009` passed; Pages run `30808751792` passed. `v1.3.1` exercised
+  the release checksums and both provenance attestations. PR dependency review
+  has not been exercised yet.
 - Contribution, conduct, support, privacy, and security policies plus issue/PR
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.3.1+9` is prepared with the navigation media-resumption fix. `v1.3.0+8`
-  remains the latest published release; workflow `30255797959`, public asset
-  hashes and sizes, stable download URLs, and independent APK
-  identity/signature checks passed on 2026-07-27.
+- `v1.3.1+9` is published with the navigation media-resumption fix. Workflow
+  `31898244766`, public asset hashes and sizes, stable download URLs, APK
+  identity/signature, and APK+IPA provenance checks passed on 2026-08-15.
 - Monotonic route-progress announcements and directional off-route route-finder
   alerts are implemented and unit/widget-tested. Completed prompts explicitly
   release transient audio focus, iOS notifies interrupted audio apps on session
