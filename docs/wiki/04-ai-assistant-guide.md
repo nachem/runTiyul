@@ -21,7 +21,7 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-08-19:
+As of 2026-08-20:
 
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
@@ -34,17 +34,18 @@ As of 2026-08-19:
 - Format and analyzer pass; 171 automated tests pass.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
-  Push CI run `31898235414` passed format, analyze, and all 150 tests; CodeQL
-  run `31898235009` passed; Pages run `30808751792` passed. `v1.3.1` exercised
+  Push CI run `32322573390` passed format, analyze, and all tests; CodeQL run
+  `32322572632` passed; Pages run `30808751792` passed. `v1.4.0` exercised
   the release checksums and both provenance attestations. PR dependency review
   has not been exercised yet.
 - Contribution, conduct, support, privacy, and security policies plus issue/PR
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.3.1+9` is published with the navigation media-resumption fix. Workflow
-  `31898244766`, public asset hashes and sizes, stable download URLs, APK
-  identity/signature, and APK+IPA provenance checks passed on 2026-08-15.
+- `v1.4.0+10` is published with forward mapped-way recovery, precise maneuver
+  guidance, route cleanup/snapping, Back history, and recording map tracking.
+  Workflow `32322574702`, public asset hashes and sizes, stable download URLs,
+  APK identity/signature, and APK+IPA provenance checks passed on 2026-08-20.
 - Monotonic route-progress announcements and directional off-route route-finder
   alerts are implemented and unit/widget-tested. `v1.4.0+10` adds strict
   connected mapped-way recovery ahead, exact-angle advance/apex and consecutive

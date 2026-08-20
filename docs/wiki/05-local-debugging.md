@@ -285,6 +285,22 @@ Command validation on 2026-08-19 with Flutter 3.44.6 and Dart 3.12.2:
   exact maneuver timing/angles/sequences, overshoot grace, and recording camera
   settings are analyzer/unit/widget-tested but not physical-device verified.
 
+Hosted release validation on 2026-08-20:
+
+- Release run
+  [`32322574702`](https://github.com/nachem/runTiyul/actions/runs/32322574702)
+  passed metadata, protected Android signing/identity verification, unsigned
+  iOS packaging, checksums, provenance, and publication for `v1.4.0+10`.
+- Independent public checksums passed: APK
+  `b33d2d81a7dd30966052e210dc820fff2314774ff52e29cbc4da6e9d86e40e12`
+  (62,118,520 bytes) and IPA
+  `0fde120ff9bc435dc362eb24d0f8cb2dcc8138466cb3fcafe3ad2478a7ee721c`
+  (15,947,212 bytes).
+- Public APK inspection confirmed package
+  `com.bernoulli.trailrunner.trail_runner`, `1.4.0+10`, label `RunTiyul`, and
+  the permanent release certificate. Both provenance attestations and stable
+  latest-download URLs verified.
+
 Previous published-release validation:
 
 Command validation on 2026-07-27 with Flutter 3.44.6:

@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-08-19<br>
+Snapshot date: 2026-08-20<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -406,7 +406,7 @@ Limitations:
 ## 9. Automated validation
 
 Latest local code validation on 2026-08-19 with Flutter 3.44.6 stable and Dart
-3.12.2; latest hosted validation remains the 2026-08-15 `v1.3.1` runs:
+3.12.2; hosted `v1.4.0` release validation completed on 2026-08-20:
 
 | Command | Result |
 | --- | --- |
@@ -415,22 +415,22 @@ Latest local code validation on 2026-08-19 with Flutter 3.44.6 stable and Dart
 | VS Code Flutter test runner (full suite) | Passed; 171 tests. |
 | GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
 | GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
-| GitHub Actions `Continuous integration` | Run [`31898235414`](https://github.com/nachem/runTiyul/actions/runs/31898235414) passed setup, dependency install, format, analyze, and all 150 tests for commit `8cb3695` on 2026-08-15. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
-| GitHub Actions CodeQL | Run [`31898235009`](https://github.com/nachem/runTiyul/actions/runs/31898235009) passed for commit `8cb3695` on 2026-08-15. |
+| GitHub Actions `Continuous integration` | Run [`32322573390`](https://github.com/nachem/runTiyul/actions/runs/32322573390) passed setup, dependency install, format, analyze, and all tests for release commit `ecdbd0a` on 2026-08-20. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
+| GitHub Actions CodeQL | Run [`32322572632`](https://github.com/nachem/runTiyul/actions/runs/32322572632) passed for release commit `ecdbd0a` on 2026-08-20. |
 | GitHub Actions `Deploy website` | Run [`30808751792`](https://github.com/nachem/runTiyul/actions/runs/30808751792) passed for commit `87290ca` on 2026-08-03. |
 | `flutter build apk --debug --no-pub` | Passed for `1.4.0+10`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.4.0`, `versionCode=10`, and label `RunTiyul`. The 166,344,270-byte local debug APK SHA-256 is `e4a076f89c8b6d221ce947620c58e1ae71d841dd86446f030aa158fdbcb2f4aa`. |
-| GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.1+9` in run `31898244766`; published a 62,085,536-byte APK. |
-| Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, `versionCode=9`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`. |
-| Release workflow/site/repository checks | Run `31898244766` passed metadata, Android, iOS, checksums, APK+IPA provenance, and publication; signing secrets are build-step scoped. Independent provenance and stable-link checks passed. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
+| GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.4.0+10` in run `32322574702`; published a 62,118,520-byte APK. |
+| Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.4.0`, `versionCode=10`, label `RunTiyul`, and pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `b33d2d81a7dd30966052e210dc820fff2314774ff52e29cbc4da6e9d86e40e12`. |
+| Release workflow/site/repository checks | Run `32322574702` passed metadata, Android, iOS, checksums, APK+IPA provenance, and publication; signing secrets are build-step scoped. Independent checksum, identity/certificate, provenance, and stable-link checks passed. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
 
 Release run
-[`31898244766`](https://github.com/nachem/runTiyul/actions/runs/31898244766)
-published `v1.3.1+9` from commit `8cb3695`. Both the Android and unsigned iOS
+[`32322574702`](https://github.com/nachem/runTiyul/actions/runs/32322574702)
+published `v1.4.0+10` from commit `ecdbd0a`. Both the Android and unsigned iOS
 jobs passed. Independent downloads matched `SHA256SUMS.txt`: APK
-`c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`
-(62,085,536 bytes) and IPA
-`5fd37de95951674f6ece16476148469ed67c78ae70b57756c9f7e1cd89562f48`
-(15,932,247 bytes). Both provenance attestations verified and both stable
+`b33d2d81a7dd30966052e210dc820fff2314774ff52e29cbc4da6e9d86e40e12`
+(62,118,520 bytes) and IPA
+`0fde120ff9bc435dc362eb24d0f8cb2dcc8138466cb3fcafe3ad2478a7ee721c`
+(15,947,212 bytes). Both provenance attestations verified and both stable
 latest-download URLs returned 200.
 
 The first `v1.2.2` tag run (`29896550967`) built the signed Android APK and
@@ -581,7 +581,7 @@ Not verified:
 4. Add device free-space checks and orphaned tile reconciliation.
 5. Add database migration tests before changing schema version.
 6. Secure an independent signing backup, then verify a data-preserving Android
-  upgrade from `v1.2.2` to `v1.3.1` on a physical device.
+  upgrade from `v1.2.2` to `v1.4.0` on a physical device.
 7. Protect `main` with the now-verified CI check, verify dependency review on a
   pull request, and decide whether to publish an SBOM/dependency-license
   inventory.

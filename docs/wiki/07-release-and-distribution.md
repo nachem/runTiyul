@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-08-19
+Last reviewed: 2026-08-20
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -13,11 +13,10 @@ hosted run or release.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.1+9` published (62,085,536 bytes); package/version/certificate and stable latest URL independently verified on 2026-08-15 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.1+9` published (15,932,247 bytes); provenance and stable latest URL verified on 2026-08-15. On-device sideload remains unverified |
-| Prepared release | `v1.4.0+10` authored release state | Local formatting/analyzer/all 171 tests, CRLF-aware diff check, debug APK build, and package/version/label inspection passed on 2026-08-19. Hosted signing, iOS packaging, provenance, publication, and public-asset verification are pending the tag workflow. |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.4.0+10` published (62,118,520 bytes); package/version/certificate, provenance, checksum, and stable latest URL independently verified on 2026-08-20 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.4.0+10` published (15,947,212 bytes); checksum, provenance, and stable latest URL verified on 2026-08-20. On-device sideload remains unverified |
 | Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `31898235414` passed format/analyze/all 150 tests with Flutter 3.44.6; dependency review awaits a pull request |
-| Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `31898244766` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.3.1` |
+| Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `32322574702` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.4.0` |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
@@ -25,19 +24,19 @@ hosted run or release.
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
 `...RunTiyul.ipa`. As of the
-[`v1.3.1` release](https://github.com/nachem/runTiyul/releases/tag/v1.3.1)
-(2026-08-15), both return HTTP `200`. Release workflow
-[`31898244766`](https://github.com/nachem/runTiyul/actions/runs/31898244766)
+[`v1.4.0` release](https://github.com/nachem/runTiyul/releases/tag/v1.4.0)
+(2026-08-20), both return HTTP `200`. Release workflow
+[`32322574702`](https://github.com/nachem/runTiyul/actions/runs/32322574702)
 passed its metadata gate, permanent-signature Android identity verification,
 unsigned iOS build, checksums, APK+IPA provenance, and publication jobs.
 Independent downloads match `SHA256SUMS.txt`: APK
-`c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`
-(62,085,536 bytes) and IPA
-`5fd37de95951674f6ece16476148469ed67c78ae70b57756c9f7e1cd89562f48`
-(15,932,247 bytes). Both build-provenance attestations verify against the
+`b33d2d81a7dd30966052e210dc820fff2314774ff52e29cbc4da6e9d86e40e12`
+(62,118,520 bytes) and IPA
+`0fde120ff9bc435dc362eb24d0f8cb2dcc8138466cb3fcafe3ad2478a7ee721c`
+(15,947,212 bytes). Both build-provenance attestations verify against the
 tagged release workflow.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
-`versionName=1.3.1`, `versionCode=9`, and the pinned permanent certificate.
+`versionName=1.4.0`, `versionCode=10`, and the pinned permanent certificate.
 
 ## 2. Website (`site/`)
 
@@ -217,14 +216,14 @@ update in place.
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.3.1` is the
+  enhancement depend on at least one published `v*` release; `v1.4.0` is the
   current latest release.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
-- `v1.2.2` and `v1.3.1` provide permanently signed APKs suitable for an
+- `v1.2.2` through `v1.4.0` provide permanently signed APKs suitable for an
   in-place upgrade test, but data preservation remains physical-device
   unverified.
-- Push CI passed in run `31898235414`; CodeQL passed in run `31898235009`.
-  Pull-request dependency review remains unexercised. `v1.3.1` independently
+- Push CI passed in run `32322573390`; CodeQL passed in run `32322572632`.
+  Pull-request dependency review remains unexercised. `v1.4.0` independently
   verified the published checksum asset and both provenance attestations.
 - `main` is not protected by a branch rule or ruleset. Although GitHub's
   dependency graph can produce an SPDX SBOM, no SBOM or aggregated
