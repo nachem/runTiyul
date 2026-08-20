@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-08-15
+Last reviewed: 2026-08-19
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -15,6 +15,7 @@ hosted run or release.
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
 | Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.3.1+9` published (62,085,536 bytes); package/version/certificate and stable latest URL independently verified on 2026-08-15 |
 | iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.3.1+9` published (15,932,247 bytes); provenance and stable latest URL verified on 2026-08-15. On-device sideload remains unverified |
+| Prepared release | `v1.4.0+10` authored release state | Local formatting/analyzer/all 171 tests, CRLF-aware diff check, debug APK build, and package/version/label inspection passed on 2026-08-19. Hosted signing, iOS packaging, provenance, publication, and public-asset verification are pending the tag workflow. |
 | Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `31898235414` passed format/analyze/all 150 tests with Flutter 3.44.6; dependency review awaits a pull request |
 | Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `31898244766` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.3.1` |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
@@ -59,9 +60,9 @@ The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
   import/route builder, GPS recording, on-route navigation, history/GPX export,
   privacy-first local storage). Copy must not claim unverified capabilities;
   keep it aligned with [implementation status](02-implementation-status.md).
-- The footer links the privacy and security policies. Public copy states that
-  physical-device screen-lock and iOS runtime verification remain pending and
-  does not claim the unimplemented course-up mode.
+- The footer links the privacy and security policies. Public copy must state
+  that physical-device screen-lock, navigation-camera/recovery behavior, and
+  iOS runtime verification remain pending.
 
 Deployed URL (once Pages is enabled): `https://nachem.github.io/runTiyul/`.
 

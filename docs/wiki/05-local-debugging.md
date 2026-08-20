@@ -184,15 +184,24 @@ Physical-device verification must cover:
 4. Silent/Do Not Disturb and low-media-volume behavior without claiming an
   override the OS does not grant.
 5. A selected-route run that triggers sustained off-route and approaching-left,
-  right, and straight junction prompts from simulated or real GPS movement.
+  right, straight, sharp-turn, and intentional U-turn prompts from simulated or
+  real GPS movement. Confirm each maneuver alerts in advance and again at the
+  apex, including a consecutive pair less than 45 m apart.
 6. While off route, move closer and confirm two slow warning cues; then move
-  away and confirm three fast warning cues. Check compass and left/right/behind
-  guidance against the map, including a stationary or unavailable-heading fix.
+  away and confirm three fast cues. When the runner is on a recognized mapped
+  way with a reliable course, confirm the solid recovery path reconnects ahead
+  and never says behind/turn around. Without a safe connected path, confirm the
+  prompt says to remain on a recognized path while searching ahead.
 7. On route, cross a configured distance milestone and a time milestone;
   confirm completed/remaining distance and that no progress cue masks an
   off-route warning.
-8. Screen locked and app backgrounded on Android and iOS.
-9. Missing or disabled English TTS, confirming the matching tone-pattern
+8. Slightly overshoot a turn (less than 25 m), join the correct outgoing trail,
+   and confirm the apex prompt completes without a missed-waypoint warning.
+9. Toggle Follow position and **North up** / **Running direction** while moving.
+   Confirm reliable course changes rotate smoothly, a pan disables Follow only,
+   and orientation remains selected.
+10. Screen locked and app backgrounded on Android and iOS.
+11. Missing or disabled English TTS, confirming the matching tone-pattern
   fallback.
 
 Automated tests validate event routing and phrases but cannot prove audibility,
@@ -260,6 +269,23 @@ Record:
 - Any permission, provider, or platform limitations.
 
 ## 11. Latest local verification
+
+Command validation on 2026-08-19 with Flutter 3.44.6 and Dart 3.12.2:
+
+- Dart formatting passed on every changed Dart source/test file.
+- `flutter analyze --no-pub`: passed with no issues.
+- Full VS Code Flutter test runner: all 171 tests passed.
+- `flutter build apk --debug --no-pub`: passed for `1.4.0+10`; Android SDK
+  inspection reports package `com.bernoulli.trailrunner.trail_runner`,
+  `versionName=1.4.0`, `versionCode=10`, and label `RunTiyul`.
+- Local debug APK: 166,344,270 bytes, SHA-256
+  `e4a076f89c8b6d221ce947620c58e1ae71d841dd86446f030aa158fdbcb2f4aa`.
+- CRLF-aware `git diff --check` passed.
+- The new Back history, route cleanup/snapping, forward mapped-way recovery,
+  exact maneuver timing/angles/sequences, overshoot grace, and recording camera
+  settings are analyzer/unit/widget-tested but not physical-device verified.
+
+Previous published-release validation:
 
 Command validation on 2026-07-27 with Flutter 3.44.6:
 

@@ -37,7 +37,7 @@ recording, and local history must not depend on a network connection.
 - Training plans, coaching, or health recommendations.
 - Live location sharing.
 - Emergency rescue guarantees.
-- Full voice-guided, turn-by-turn navigation.
+- Safety-certified or rescue-grade turn-by-turn navigation guarantees.
 - Automatic route discovery from a commercial route catalog.
 - Offline pathfinding over the complete OpenStreetMap road/trail graph.
 - Smartwatch applications.
@@ -77,6 +77,7 @@ notes.
 | APP-004 | The app shall show OpenStreetMap data attribution on map screens. | Attribution remains visible or is available through the standard map attribution control. |
 | APP-005 | The app shall expose units and key application settings. | Metric units are the version 1 default and are consistently displayed. |
 | APP-006 | The app shall expose its installed version and recognize a successful app upgrade. | About shows package-derived version/build information. The first tracked install is quiet; a later build is announced once and acknowledged locally without a network request. |
+| APP-007 | Back shall return through the in-app screen and primary-destination history before closing the application. | A pushed screen pops first; primary destinations return in visit order; only the root Map destination allows the operating system to close the app. |
 
 ### 4.2 Online and offline map
 
@@ -109,11 +110,14 @@ notes.
 | RTE-007 | The route detail screen shall fit the route on a map and expose a Start activity action. | Starting passes the selected route into recording/navigation. |
 | RTE-008 | Duplicate GPX imports shall not overwrite data silently. | The app asks the user to keep both, replace, or cancel. |
 | RTE-009 | Long routes shall be stored without lossy coordinate rounding that harms navigation. | A saved/imported route reloads with equivalent geometry. |
+| RTE-010 | Route preparation shall remove short return-to-junction geometry artifacts without erasing intentional double-backs. | A loop that returns within 8 m after an excursion no farther than 18 m and no longer than 45 m is collapsed; larger out-and-backs remain and can produce a U-turn instruction. |
+| RTE-011 | Any saved or imported route shall expose a **Snap to trails** action. | The action aligns the complete route only to a connected recognized trail/road graph, preserves route identity/source and matching GPX point metadata, reports unchanged/unavailable/failure states, and never labels a straight off-network bridge as snapped. |
 
 ### 4.4 On-route navigation
 
-Version 1 navigation means following a visible route line, not guaranteed
-turn-by-turn instructions.
+Version 1 navigation includes offline mapped-way recovery and concise maneuver
+prompts. It is guidance rather than a safety, rescue, or guaranteed-routing
+service.
 
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
@@ -121,8 +125,12 @@ turn-by-turn instructions.
 | NAV-002 | The app shall show progress along the selected route and optionally announce it while the runner remains on route. | Progress does not decrease due only to GPS jitter. The runner can disable announcements or schedule completed/remaining guidance by configurable route distance or elapsed-time intervals. |
 | NAV-003 | The app shall detect when the runner is meaningfully off route. | Threshold and persistence avoid alerts from a single inaccurate point. |
 | NAV-004 | Off-route state shall use visual and optional haptic/audio feedback that helps the runner regain the route. | Each alert can be disabled. Persistent off-route guidance repeats at a configurable interval, reports distance plus compass direction and runner-relative direction when heading is available, and uses distinct slow/fast tone cadences to indicate approaching versus moving away. The runner can choose Tone + voice, Voice, Tones, or Haptics only and preview representative route-finder, off-route, progress, and junction alerts before a run. Voice falls back to the corresponding tone pattern when no offline system voice is available and does not claim rescue-grade accuracy. |
-| NAV-005 | The app shall allow north-up and course-up presentation. | The chosen mode is obvious and can be changed during a run. |
+| NAV-005 | The app shall allow north-up and course-up presentation plus optional continuous current-position following. | The recording map exposes persistent **North up** / **Running direction** and Follow-position controls. Course-up uses a quality-filtered moving course, falls back to north-up until one exists, and keeps the selected orientation after map gestures; panning disables only position following. |
 | NAV-006 | Navigation shall operate with downloaded map data and no network. | Route, track, metrics, and covered map tiles remain available in airplane mode. |
+| NAV-007 | Off-route recovery shall prefer a recognized trail/road path that reconnects with the planned route ahead. | Recovery starts only when the runner is on a mapped way, uses a connected graph with no open-terrain bridge, reconnects beyond monotonic progress, starts within 75 degrees of the reliable moving course, and never tells the runner to go behind or return to the deviation point. If no safe graph path exists, the app says to remain on a recognized path while searching ahead. |
+| NAV-008 | Maneuver guidance shall report meaningful signed turn angles, including intentional U-turns. | Geometry bends of at least 30 degrees and mapped junction decisions are classified as straight, bear, turn, sharp turn, or U-turn. Voice and visual guidance include the rounded angle even when the named path does not change. |
+| NAV-009 | Maneuver alerts shall fire in advance and at the turn apex, combining immediate consecutive maneuvers. | Each maneuver may announce once inside the configured advance window and once at/within 8 m of the apex. A following maneuver within 45 m is appended as "then immediately ...". |
+| NAV-010 | Slight turn overshoot shall not produce a false missed-waypoint state. | A maneuver remains eligible through 25 m of overshoot, clamps its displayed distance to zero, and is completed monotonically after the runner passes that grace window; returning GPS jitter does not re-arm it. |
 
 ### 4.5 GPS activity recording
 

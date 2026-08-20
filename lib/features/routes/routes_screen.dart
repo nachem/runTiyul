@@ -701,141 +701,210 @@ class RouteDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(route.name),
-        actions: [
-          IconButton(
-            onPressed: () async {
-              final edited = await Navigator.of(context).push<bool>(
-                MaterialPageRoute<bool>(
-                  builder: (_) =>
-                      ManualRouteEditor(store: store, initialRoute: route),
-                ),
-              );
-              if (edited == true && context.mounted) {
-                Navigator.of(context).pop();
-              }
-            },
-            tooltip: 'Edit waypoints',
-            icon: const Icon(Icons.edit_location_alt_outlined),
-          ),
-          IconButton(
-            onPressed: () async {
-              final controller = TextEditingController(text: route.name);
-              final name = await showDialog<String>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Rename route'),
-                  content: TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Route name'),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
+    return AnimatedBuilder(
+      animation: store,
+      builder: (context, _) {
+        final currentRoute = store.routes
+            .where((candidate) => candidate.id == route.id)
+            .firstOrNull;
+        final displayedRoute = currentRoute ?? route;
+        return Scaffold(
+          appBar: AppBar(
+            title: Text(displayedRoute.name),
+            actions: [
+              IconButton(
+                onPressed: () async {
+                  final edited = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute<bool>(
+                      builder: (_) => ManualRouteEditor(
+                        store: store,
+                        initialRoute: displayedRoute,
+                      ),
                     ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context, controller.text),
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-              );
-              controller.dispose();
-              if (name != null) {
-                await store.renameRoute(route, name);
-                if (context.mounted) Navigator.of(context).pop();
-              }
-            },
-            tooltip: 'Rename route',
-            icon: const Icon(Icons.edit_outlined),
-          ),
-          IconButton(
-            onPressed: () async {
-              await store.duplicateRoute(route);
-              if (context.mounted) Navigator.of(context).pop();
-            },
-            tooltip: 'Duplicate route',
-            icon: const Icon(Icons.copy_outlined),
-          ),
-          IconButton(
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Delete route?'),
-                  content: const Text(
-                    'Saved activities will keep their tracks.',
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel'),
-                    ),
-                    FilledButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete'),
-                    ),
-                  ],
-                ),
-              );
-              if (confirmed == true) {
-                await store.deleteRoute(route);
-                if (context.mounted) Navigator.of(context).pop();
-              }
-            },
-            icon: const Icon(Icons.delete_outline),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        key: const ValueKey('route-detail-safe-area'),
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: TrailMap(
-                store: store,
-                route: route,
-                routes: store.routes,
-                showControls: true,
-                autoFit: true,
+                  );
+                  if (edited == true && context.mounted) {
+                    Navigator.of(context).pop();
+                  }
+                },
+                tooltip: 'Edit waypoints',
+                icon: const Icon(Icons.edit_location_alt_outlined),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          formatDistance(route.distanceMeters),
-                          style: Theme.of(context).textTheme.headlineSmall,
+              IconButton(
+                onPressed: () async {
+                  final controller = TextEditingController(
+                    text: displayedRoute.name,
+                  );
+                  final name = await showDialog<String>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Rename route'),
+                      content: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Route name',
                         ),
-                        Text('${route.points.length} route points'),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () =>
+                              Navigator.pop(context, controller.text),
+                          child: const Text('Save'),
+                        ),
                       ],
                     ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      store.selectRoute(route);
-                      Navigator.of(context).pop();
-                      onStart();
-                    },
-                    icon: const Icon(Icons.directions_run),
-                    label: const Text('Use route'),
-                  ),
-                ],
+                  );
+                  controller.dispose();
+                  if (name != null) {
+                    await store.renameRoute(displayedRoute, name);
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                },
+                tooltip: 'Rename route',
+                icon: const Icon(Icons.edit_outlined),
               ),
+              IconButton(
+                onPressed: () async {
+                  await store.duplicateRoute(displayedRoute);
+                  if (context.mounted) Navigator.of(context).pop();
+                },
+                tooltip: 'Duplicate route',
+                icon: const Icon(Icons.copy_outlined),
+              ),
+              IconButton(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete route?'),
+                      content: const Text(
+                        'Saved activities will keep their tracks.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Delete'),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    await store.deleteRoute(displayedRoute);
+                    if (context.mounted) Navigator.of(context).pop();
+                  }
+                },
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+          body: SafeArea(
+            key: const ValueKey('route-detail-safe-area'),
+            top: false,
+            child: Column(
+              children: [
+                Expanded(
+                  child: TrailMap(
+                    store: store,
+                    route: displayedRoute,
+                    routes: store.routes,
+                    showControls: true,
+                    autoFit: true,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        formatDistance(displayedRoute.distanceMeters),
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
+                      Text('${displayedRoute.points.length} route points'),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SnapToTrailsButton(
+                              store: store,
+                              route: displayedRoute,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () {
+                                store.selectRoute(displayedRoute);
+                                Navigator.of(context).pop();
+                                onStart();
+                              },
+                              icon: const Icon(Icons.directions_run),
+                              label: const Text('Use route'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _SnapToTrailsButton extends StatefulWidget {
+  const _SnapToTrailsButton({required this.store, required this.route});
+
+  final AppStore store;
+  final TrailRoute route;
+
+  @override
+  State<_SnapToTrailsButton> createState() => _SnapToTrailsButtonState();
+}
+
+class _SnapToTrailsButtonState extends State<_SnapToTrailsButton> {
+  var _snapping = false;
+
+  Future<void> _snap() async {
+    setState(() => _snapping = true);
+    final outcome = await widget.store.snapRouteToTrails(widget.route);
+    if (!mounted) return;
+    setState(() => _snapping = false);
+    final message = switch (outcome) {
+      RouteSnapOutcome.updated => 'Route aligned to recognized trails.',
+      RouteSnapOutcome.unchanged => 'Route already follows recognized trails.',
+      RouteSnapOutcome.unavailable =>
+        'Configure a vector map source before snapping routes.',
+      RouteSnapOutcome.failed => 'Route could not be snapped to trails.',
+    };
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: _snapping ? null : _snap,
+      icon: _snapping
+          ? const SizedBox.square(
+              dimension: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.alt_route),
+      label: const Text('Snap to trails'),
     );
   }
 }

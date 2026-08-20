@@ -283,8 +283,8 @@ class RouteTrailBuilder {
       previous = anchor.category;
     }
     if (anchors.length < 2) return route;
-    final routed = router.buildRoute(anchors);
-    return routed.length < 2 ? route : routed;
+    final routed = router.buildConnectedRoute(anchors);
+    return routed == null || routed.length < 2 ? route : routed;
   }
 
   bool _differs(List<LatLng> a, List<LatLng> b) {

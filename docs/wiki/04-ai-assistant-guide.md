@@ -21,7 +21,7 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-08-15:
+As of 2026-08-19:
 
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
@@ -31,7 +31,7 @@ As of 2026-08-15:
   development-only override is configured.
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
-- Format and analyzer pass; 150 automated tests pass.
+- Format and analyzer pass; 171 automated tests pass.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
   Push CI run `31898235414` passed format, analyze, and all 150 tests; CodeQL
@@ -46,11 +46,15 @@ As of 2026-08-15:
   `31898244766`, public asset hashes and sizes, stable download URLs, APK
   identity/signature, and APK+IPA provenance checks passed on 2026-08-15.
 - Monotonic route-progress announcements and directional off-route route-finder
-  alerts are implemented and unit/widget-tested. Completed prompts explicitly
-  release transient audio focus, iOS notifies interrupted audio apps on session
-  deactivation, and overlapping-alert ownership is tested. Media resumption,
-  heading quality, audio, and locked-screen behavior remain physical-device
-  unverified.
+  alerts are implemented and unit/widget-tested. `v1.4.0+10` adds strict
+  connected mapped-way recovery ahead, exact-angle advance/apex and consecutive
+  maneuver prompts, bounded route-artifact cleanup, whole-route **Snap to
+  trails**, primary-destination Back history, and persisted recording Follow
+  position plus north-up/course-up. Completed prompts explicitly release
+  transient audio focus, iOS notifies interrupted audio apps on session
+  deactivation, and overlapping-alert ownership is tested. Recovery geometry,
+  camera behavior, media resumption, heading quality, audio, and locked-screen
+  behavior remain physical-device unverified.
 - iOS, physical-device background tracking, native GPX picking, free-space
   checks, and production provider configuration remain unverified or
   unimplemented.
@@ -142,6 +146,11 @@ Exit criteria:
 ### 4.1 Correctness
 
 - Use pure, testable Dart for geo and metric calculations.
+- Keep off-route recovery on strict connected mapped ways, reconnect beyond
+  monotonic progress, and never convert a nearest-route point behind the runner
+  into a backtracking instruction.
+- Preserve intentional U-turns while cleaning only bounded return-to-junction
+  artifacts; route snapping must not introduce straight off-network bridges.
 - Persist recording/download progress incrementally.
 - Use database transactions for state transitions and related records.
 - Preserve nullable sensor data; do not convert missing elevation to zero.

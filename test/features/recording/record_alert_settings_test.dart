@@ -99,7 +99,7 @@ void main() {
     await tester.pump();
 
     expect(tones, isEmpty);
-    expect(messages, ['In 25 meters, keep left.']);
+    expect(messages, ['In 25 meters, turn left 90 degrees.']);
     expect(
       tester
           .state<FormFieldState<NavFeedbackMode>>(

@@ -1,0 +1,1 @@
+enum MapOrientationMode { northUp, courseUp }

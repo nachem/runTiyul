@@ -2,6 +2,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/geo/distance.dart';
 import '../core/geo/polyline_snap.dart';
+import 'route_maneuver_planner.dart';
 
 /// User-configurable rules for live navigation alerts: when and whether to fire.
 class NavAlertConfig {
@@ -150,6 +151,8 @@ enum NavAlert { none, offRoute, offRouteReminder, junction, progress }
 /// Which way the planned route turns at an upcoming junction.
 enum TurnDirection { straight, left, right }
 
+enum ManeuverPhase { advance, apex }
+
 /// Runner-relative direction of the shortest path back to the route.
 enum RouteRelativeDirection { ahead, left, right, behind }
 
@@ -165,11 +168,19 @@ class NavStatus {
     this.bearingToRouteDegrees,
     this.routeRelativeDirection,
     this.offRouteTrend,
+    this.forwardRecoveryPath = const [],
+    this.forwardRecoveryDistanceMeters,
+    this.forwardRecoveryBearingDegrees,
+    this.forwardReconnectPoint,
     this.routeCompletedMeters,
     this.routeRemainingMeters,
     this.junctionAhead,
     this.junctionDistanceMeters,
     this.junctionTurn,
+    this.junctionTurnDegrees,
+    this.maneuverPhase,
+    this.followingTurnDegrees,
+    this.followingTurnDistanceMeters,
     this.triggered = NavAlert.none,
   });
 
@@ -181,6 +192,14 @@ class NavStatus {
   final double? bearingToRouteDegrees;
   final RouteRelativeDirection? routeRelativeDirection;
   final OffRouteTrend? offRouteTrend;
+
+  /// Strict mapped-way recovery that reconnects ahead without backtracking.
+  final List<LatLng> forwardRecoveryPath;
+  final double? forwardRecoveryDistanceMeters;
+  final double? forwardRecoveryBearingDegrees;
+  final LatLng? forwardReconnectPoint;
+
+  bool get hasForwardRecovery => forwardRecoveryPath.length >= 2;
 
   /// Monotonic progress along the planned route, not raw activity distance.
   final double? routeCompletedMeters;
@@ -195,9 +214,46 @@ class NavStatus {
   /// Which way the route turns at [junctionAhead].
   final TurnDirection? junctionTurn;
 
+  /// Signed exact heading change: negative is left, positive is right.
+  final double? junctionTurnDegrees;
+  final ManeuverPhase? maneuverPhase;
+
+  /// A second maneuver close enough to announce with the first.
+  final double? followingTurnDegrees;
+  final double? followingTurnDistanceMeters;
+
   final NavAlert triggered;
 
   static const idle = NavStatus(offRoute: false);
+
+  NavStatus withForwardRecovery({
+    required List<LatLng> path,
+    required double distanceMeters,
+    required double bearingDegrees,
+    required LatLng reconnectPoint,
+    NavAlert? triggered,
+  }) => NavStatus(
+    offRoute: offRoute,
+    distanceToRouteMeters: distanceToRouteMeters,
+    nearestRoutePoint: nearestRoutePoint,
+    bearingToRouteDegrees: bearingToRouteDegrees,
+    routeRelativeDirection: routeRelativeDirection,
+    offRouteTrend: offRouteTrend,
+    forwardRecoveryPath: path,
+    forwardRecoveryDistanceMeters: distanceMeters,
+    forwardRecoveryBearingDegrees: bearingDegrees,
+    forwardReconnectPoint: reconnectPoint,
+    routeCompletedMeters: routeCompletedMeters,
+    routeRemainingMeters: routeRemainingMeters,
+    junctionAhead: junctionAhead,
+    junctionDistanceMeters: junctionDistanceMeters,
+    junctionTurn: junctionTurn,
+    junctionTurnDegrees: junctionTurnDegrees,
+    maneuverPhase: maneuverPhase,
+    followingTurnDegrees: followingTurnDegrees,
+    followingTurnDistanceMeters: followingTurnDistanceMeters,
+    triggered: triggered ?? this.triggered,
+  );
 }
 
 /// Watches live position against a route and nearby junctions, emitting alert
@@ -207,39 +263,46 @@ class NavigationMonitor {
   NavigationMonitor({
     this.config = const NavAlertConfig(),
     this.distance = const GeoDistance(),
+    this.maneuverPlanner = const RouteManeuverPlanner(),
   });
 
   NavAlertConfig config;
   final GeoDistance distance;
+  final RouteManeuverPlanner maneuverPlanner;
 
-  /// Max distance a junction may sit from the route to count as on-route.
-  static const double _junctionOnRouteToleranceMeters = 25;
-
-  /// How far before/after a junction to sample the route heading for a turn.
-  static const double _turnLookaheadMeters = 15;
-
-  /// Turns smaller than this are reported as "continue straight".
-  static const double _straightToleranceDegrees = 20;
   static const double _trendToleranceMeters = 5;
+  static const double _maneuverApexToleranceMeters = 8;
+  static const double _maneuverOvershootToleranceMeters = 25;
+  static const double _combinedManeuverDistanceMeters = 45;
 
   int _offRouteStreak = 0;
   bool _offRouteActive = false;
   DateTime? _lastOffRouteCueAt;
   double? _distanceAtLastOffRouteCue;
-  LatLng? _lastJunction;
   double _maxRouteProgressMeters = 0;
   double? _nextProgressMeters;
   Duration? _nextProgressElapsed;
+  List<LatLng>? _maneuverRoute;
+  List<LatLng>? _maneuverJunctions;
+  List<RouteManeuver> _maneuvers = const [];
+  int _maneuverIndex = 0;
+  bool _advanceAnnounced = false;
+  bool _apexAnnounced = false;
 
   void reset() {
     _offRouteStreak = 0;
     _offRouteActive = false;
     _lastOffRouteCueAt = null;
     _distanceAtLastOffRouteCue = null;
-    _lastJunction = null;
     _maxRouteProgressMeters = 0;
     _nextProgressMeters = null;
     _nextProgressElapsed = null;
+    _maneuverRoute = null;
+    _maneuverJunctions = null;
+    _maneuvers = const [];
+    _maneuverIndex = 0;
+    _advanceAnnounced = false;
+    _apexAnnounced = false;
   }
 
   NavStatus update(
@@ -256,9 +319,13 @@ class NavigationMonitor {
 
     PolylineProjection? userProjection;
     double? distanceToRoute;
+    double? userAlong;
     if (route.length >= 2) {
       userProjection = nearestOnPolyline(position, route);
       distanceToRoute = userProjection?.distanceMeters;
+      if (userProjection != null) {
+        userAlong = maneuverPlanner.alongRoute(route, userProjection);
+      }
     }
 
     if (config.offRouteEnabled && distanceToRoute != null) {
@@ -298,7 +365,7 @@ class NavigationMonitor {
     double? routeCompleted;
     double? routeRemaining;
     if (route.length >= 2 && userProjection != null) {
-      final projectedProgress = _alongRoute(route, userProjection);
+      final projectedProgress = userAlong!;
       if (projectedProgress > _maxRouteProgressMeters) {
         _maxRouteProgressMeters = projectedProgress;
       }
@@ -336,45 +403,52 @@ class NavigationMonitor {
     LatLng? junctionAhead;
     double? junctionDistance;
     TurnDirection? junctionTurn;
+    double? junctionTurnDegrees;
+    ManeuverPhase? maneuverPhase;
+    double? followingTurnDegrees;
+    double? followingTurnDistance;
     if (config.junctionEnabled &&
-        junctions.isNotEmpty &&
         route.length >= 2 &&
-        userProjection != null) {
-      final userAlong = _alongRoute(route, userProjection);
-      LatLng? nearest;
-      var nearestAhead = double.infinity;
-      double? nearestAlong;
-      for (final junction in junctions) {
-        final projection = nearestOnPolyline(junction, route);
-        if (projection == null) continue;
-        // Only junctions the route actually passes through are decision points.
-        if (projection.distanceMeters > _junctionOnRouteToleranceMeters) {
-          continue;
+        userAlong != null &&
+        !_offRouteActive) {
+      _ensureManeuvers(route, junctions);
+      _skipCompletedManeuvers(userAlong);
+      if (_maneuverIndex < _maneuvers.length) {
+        final maneuver = _maneuvers[_maneuverIndex];
+        final ahead = maneuver.alongRouteMeters - userAlong;
+        if (ahead <= config.junctionMeters &&
+            ahead >= -_maneuverOvershootToleranceMeters) {
+          junctionAhead = maneuver.point;
+          junctionDistance = ahead.clamp(0, double.infinity);
+          junctionTurnDegrees = maneuver.turnDegrees;
+          junctionTurn = _turnDirection(maneuver.turnDegrees);
+          maneuverPhase = ahead <= _maneuverApexToleranceMeters
+              ? ManeuverPhase.apex
+              : ManeuverPhase.advance;
+
+          if (_maneuverIndex + 1 < _maneuvers.length) {
+            final following = _maneuvers[_maneuverIndex + 1];
+            final separation =
+                following.alongRouteMeters - maneuver.alongRouteMeters;
+            if (separation <= _combinedManeuverDistanceMeters) {
+              followingTurnDegrees = following.turnDegrees;
+              followingTurnDistance = separation;
+            }
+          }
+
+          if (triggered == NavAlert.none) {
+            if (!_apexAnnounced && ahead <= _maneuverApexToleranceMeters) {
+              triggered = NavAlert.junction;
+              maneuverPhase = ManeuverPhase.apex;
+              _apexAnnounced = true;
+            } else if (!_advanceAnnounced &&
+                ahead > _maneuverApexToleranceMeters) {
+              triggered = NavAlert.junction;
+              maneuverPhase = ManeuverPhase.advance;
+              _advanceAnnounced = true;
+            }
+          }
         }
-        final along = _alongRoute(route, projection);
-        final ahead = along - userAlong;
-        // Skip junctions already passed or still beyond the advance window.
-        if (ahead <= 0 || ahead > config.junctionMeters) continue;
-        if (ahead < nearestAhead) {
-          nearestAhead = ahead;
-          nearest = projection.point;
-          nearestAlong = along;
-        }
-      }
-      if (nearest != null && nearestAlong != null) {
-        junctionAhead = nearest;
-        junctionDistance = nearestAhead;
-        junctionTurn = _turnAt(route, nearestAlong);
-        final isNew =
-            _lastJunction == null ||
-            distance.metersBetween(_lastJunction!, nearest) >
-                _junctionOnRouteToleranceMeters;
-        if (isNew && triggered == NavAlert.none) {
-          triggered = NavAlert.junction;
-        }
-        _lastJunction = nearest;
-      } else {
-        _lastJunction = null;
       }
     }
 
@@ -401,6 +475,10 @@ class NavigationMonitor {
       junctionAhead: junctionAhead,
       junctionDistanceMeters: junctionDistance,
       junctionTurn: junctionTurn,
+      junctionTurnDegrees: junctionTurnDegrees,
+      maneuverPhase: maneuverPhase,
+      followingTurnDegrees: followingTurnDegrees,
+      followingTurnDistanceMeters: followingTurnDistance,
       triggered: triggered,
     );
   }
@@ -423,53 +501,39 @@ class NavigationMonitor {
         : RouteRelativeDirection.left;
   }
 
-  /// Distance from the route start to [projection], measured along the route.
-  double _alongRoute(List<LatLng> route, PolylineProjection projection) {
-    var meters = 0.0;
-    for (var i = 0; i < projection.segmentIndex; i++) {
-      meters += distance.metersBetween(route[i], route[i + 1]);
+  void _ensureManeuvers(List<LatLng> route, List<LatLng> junctions) {
+    if (identical(route, _maneuverRoute) &&
+        identical(junctions, _maneuverJunctions)) {
+      return;
     }
-    final start = route[projection.segmentIndex];
-    final end = route[projection.segmentIndex + 1];
-    return meters + distance.metersBetween(start, end) * projection.t;
+    _maneuverRoute = route;
+    _maneuverJunctions = junctions;
+    _maneuvers = maneuverPlanner.plan(route, junctions: junctions);
+    _maneuverIndex = _maneuvers.indexWhere(
+      (maneuver) =>
+          maneuver.alongRouteMeters >=
+          _maxRouteProgressMeters - _maneuverOvershootToleranceMeters,
+    );
+    if (_maneuverIndex < 0) _maneuverIndex = _maneuvers.length;
+    _advanceAnnounced = false;
+    _apexAnnounced = false;
   }
 
-  /// The point [meters] along the route from its start, clamped to the ends.
-  LatLng _pointAlong(List<LatLng> route, double meters) {
-    if (meters <= 0) return route.first;
-    var remaining = meters;
-    for (var i = 0; i < route.length - 1; i++) {
-      final segment = distance.metersBetween(route[i], route[i + 1]);
-      if (segment <= 0) continue;
-      if (remaining <= segment) {
-        final t = remaining / segment;
-        return LatLng(
-          route[i].latitude + (route[i + 1].latitude - route[i].latitude) * t,
-          route[i].longitude +
-              (route[i + 1].longitude - route[i].longitude) * t,
-        );
-      }
-      remaining -= segment;
+  void _skipCompletedManeuvers(double userAlong) {
+    while (_maneuverIndex < _maneuvers.length) {
+      final ahead = _maneuvers[_maneuverIndex].alongRouteMeters - userAlong;
+      final completedAfterApex =
+          _apexAnnounced && ahead < -_maneuverApexToleranceMeters;
+      final skippedBeyondTolerance = ahead < -_maneuverOvershootToleranceMeters;
+      if (!completedAfterApex && !skippedBeyondTolerance) return;
+      _maneuverIndex++;
+      _advanceAnnounced = false;
+      _apexAnnounced = false;
     }
-    return route.last;
   }
 
-  /// Classifies how the route turns at the junction [alongMeters] into the
-  /// route by comparing the heading just before and just after it.
-  TurnDirection _turnAt(List<LatLng> route, double alongMeters) {
-    final before = _pointAlong(route, alongMeters - _turnLookaheadMeters);
-    final at = _pointAlong(route, alongMeters);
-    final after = _pointAlong(route, alongMeters + _turnLookaheadMeters);
-    final incoming = distance.bearingDegrees(before, at);
-    final outgoing = distance.bearingDegrees(at, after);
-    var delta = outgoing - incoming;
-    while (delta > 180) {
-      delta -= 360;
-    }
-    while (delta < -180) {
-      delta += 360;
-    }
-    if (delta.abs() <= _straightToleranceDegrees) return TurnDirection.straight;
-    return delta > 0 ? TurnDirection.right : TurnDirection.left;
+  TurnDirection _turnDirection(double degrees) {
+    if (degrees.abs() <= 15) return TurnDirection.straight;
+    return degrees < 0 ? TurnDirection.left : TurnDirection.right;
   }
 }

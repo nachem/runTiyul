@@ -257,22 +257,38 @@ from releasing focus owned by its replacement.
 
 `NavStatus` carries the nearest route point, distance, compass bearing,
 runner-relative direction when a usable heading exists, distance trend since
-the previous reminder, and monotonic completed/remaining route distance.
-`NavigationMonitor` owns configurable reminder and progress milestones so GPS
-jitter, widget rebuilds, and audio completion cannot re-arm them accidentally.
-Off-route and junction events take priority over progress on the same GPS
-update. Runner-relative guidance uses course over ground only while moving;
-when that is unavailable, guidance remains compass-based rather than guessing
-which way a stationary runner faces.
+the previous reminder, monotonic completed/remaining route distance, exact
+maneuver geometry, and an optional strict forward-recovery path.
+`RouteManeuverPlanner` computes signed turn angles from geometry and mapped
+junctions. `NavigationMonitor` owns configurable reminder/progress milestones,
+advance/apex maneuver phases, consecutive-turn grouping, and overshoot grace so
+GPS jitter, widget rebuilds, and audio completion cannot re-arm them
+accidentally. Off-route and maneuver events take priority over progress on the
+same GPS update.
+
+`ForwardRouteRecovery` accepts only a reliable moving course and a locally
+loaded recognized trail/road network. It snaps the runner to that graph, searches
+for a connected route contact beyond monotonic progress, rejects initial paths
+outside the forward cone, rejects disconnected/off-terrain bridges, and trims
+the result at the first ahead contact. A failed search is cached briefly rather
+than repeated at GPS frequency. No user-facing prompt may translate a
+nearest-route projection behind the runner into a backtracking instruction.
 
 The two bundled earcons are immutable CC0 OGG assets with source provenance and
 hashes beside the files. System TTS uses installed platform voices rather than a
 network service, preserving offline behavior and location privacy. Warning-tone
 cadence communicates route recovery without speech: slow pairs mean approaching
 the route and fast triples mean moving away. A single rising cue identifies a
-junction; a relaxed pair identifies progress. Spoken prompts add nearest-route
-direction and configurable completed/remaining progress. These prompts are not
-full turn-by-turn navigation.
+maneuver; a relaxed pair identifies progress. Spoken/visual maneuver prompts
+include rounded angles, intentional U-turns, advance/apex timing, and an
+immediate following instruction. Off-route speech either follows the rendered
+mapped recovery forward or tells the runner to remain on a recognized path
+while searching ahead; it never instructs a return to the deviation point.
+
+`TrailMap` alone owns recording camera movement. It atomically applies current
+position and map rotation from a quality-filtered course, persists Follow
+position and north-up/course-up choices through `AppStore`, and treats a pan as
+an explicit request to stop position following without changing orientation.
 
 ## 8. Metric calculation boundaries
 
@@ -338,6 +354,13 @@ Persisted route geometry remains lossless for navigation and export; map layers
 simplify a separate rendering list at approximately one screen pixel for the
 current zoom. This keeps `RTE-009` storage fidelity separate from map frame
 cost.
+
+`RouteGeometryCleaner` runs before manual/imported geometry is persisted or
+used for navigation. It removes only tightly bounded return-to-junction spikes;
+larger double-backs remain as intentional U-turn candidates. Whole-route
+**Snap to trails** uses `RouteTrailBuilder` and `TrailRouter` strict connected
+legs, never the permissive straight fallback. Route identity/source are stable,
+and optional GPX metadata is retained for points that remain within one meter.
 
 ### 9.2 Download planning
 

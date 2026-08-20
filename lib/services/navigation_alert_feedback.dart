@@ -234,31 +234,23 @@ class NavigationAlertFeedback {
 
   static String _offRouteGuidance(NavStatus status) {
     final distance = status.distanceToRouteMeters;
-    final relative = switch (status.routeRelativeDirection) {
-      RouteRelativeDirection.ahead => 'ahead',
-      RouteRelativeDirection.left => 'to your left',
-      RouteRelativeDirection.right => 'to your right',
-      RouteRelativeDirection.behind => 'behind you',
-      null => null,
-    };
-    final compass = status.bearingToRouteDegrees == null
+    final recoveryCompass = status.forwardRecoveryBearingDegrees == null
         ? null
-        : _compassDirection(status.bearingToRouteDegrees!);
-    final target = [?compass, ?relative].join(', ');
+        : _compassDirection(status.forwardRecoveryBearingDegrees!);
     final lead = distance == null
         ? 'Off route'
         : '${_spokenDistance(distance)} meters off route';
-    final trend = switch (status.offRouteTrend) {
-      OffRouteTrend.approaching => 'You are getting closer.',
-      OffRouteTrend.movingAway => 'You are moving away.',
-      OffRouteTrend.steady => 'Distance is unchanged.',
-      null => '',
-    };
+    if (!status.hasForwardRecovery) {
+      return '$lead. Keep to a recognized trail or path. '
+          'Finding a forward connection ahead.';
+    }
+    final recoveryDistance = status.forwardRecoveryDistanceMeters;
+    final direction = recoveryCompass ?? 'forward';
     return [
       '$lead.',
-      if (target.isNotEmpty)
-        'Go $target${distance == null ? '' : ' for ${_spokenDistance(distance)} meters'}.',
-      if (trend.isNotEmpty) trend,
+      'Follow the marked path $direction.',
+      if (recoveryDistance != null)
+        'Rejoin the planned route in ${_spokenDistance(recoveryDistance)} meters.',
     ].join(' ');
   }
 
@@ -292,17 +284,45 @@ class NavigationAlertFeedback {
 
   static String _junctionGuidance(NavStatus status) {
     final distance = status.junctionDistanceMeters;
-    final lead = distance == null
-        ? 'Junction ahead'
-        : 'In ${_spokenDistance(distance)} meters';
-    final instruction = switch (status.junctionTurn) {
-      TurnDirection.left => 'keep left',
-      TurnDirection.right => 'keep right',
-      TurnDirection.straight => 'continue straight',
-      null => 'check the map',
-    };
-    return '$lead, $instruction.';
+    final instruction = maneuverInstruction(
+      status.junctionTurnDegrees,
+      fallback: status.junctionTurn,
+    );
+    final lead = status.maneuverPhase == ManeuverPhase.apex
+        ? '${_capitalize(instruction)} now'
+        : distance == null
+        ? 'Junction ahead, $instruction'
+        : 'In ${_spokenDistance(distance)} meters, $instruction';
+    final following = status.followingTurnDegrees == null
+        ? ''
+        : ', then immediately ${maneuverInstruction(status.followingTurnDegrees)}';
+    return '$lead$following.';
   }
+
+  static String maneuverInstruction(
+    double? turnDegrees, {
+    TurnDirection? fallback,
+  }) {
+    if (turnDegrees == null || !turnDegrees.isFinite) {
+      return switch (fallback) {
+        TurnDirection.left => 'keep left',
+        TurnDirection.right => 'keep right',
+        TurnDirection.straight => 'continue straight',
+        null => 'check the map',
+      };
+    }
+    final magnitude = turnDegrees.abs();
+    final rounded = magnitude.round();
+    if (magnitude <= 15) return 'continue straight';
+    if (magnitude >= 150) return 'make a $rounded degree U-turn';
+    final side = turnDegrees < 0 ? 'left' : 'right';
+    if (magnitude <= 55) return 'bear $side $rounded degrees';
+    if (magnitude <= 110) return 'turn $side $rounded degrees';
+    return 'make a sharp $side turn, $rounded degrees';
+  }
+
+  static String _capitalize(String value) =>
+      value.isEmpty ? value : '${value[0].toUpperCase()}${value.substring(1)}';
 
   static int _spokenDistance(double meters) {
     final rounded = (meters / 5).round() * 5;

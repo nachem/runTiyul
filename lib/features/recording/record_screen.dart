@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/app_store.dart';
 import '../../core/units/formatters.dart';
 import '../../models/run_activity.dart';
+import '../../services/navigation_alert_feedback.dart';
 import '../../services/navigation_monitor.dart';
 import '../map/trail_map.dart';
 
@@ -47,6 +50,13 @@ class _ReadyToRecord extends StatelessWidget {
             route: store.selectedRoute,
             routes: store.routes,
             showControls: true,
+            followCurrentLocation: store.recordingMapFollow,
+            orientationMode: store.recordingMapOrientation,
+            courseDegrees: store.currentCourseDegrees,
+            onFollowCurrentLocationChanged: (value) =>
+                unawaited(store.setRecordingMapFollow(value)),
+            onOrientationModeChanged: (mode) =>
+                unawaited(store.setRecordingMapOrientation(mode)),
           ),
         ),
         Padding(
@@ -111,7 +121,15 @@ class _ActiveRecording extends StatelessWidget {
             route: route,
             routes: store.routes,
             track: activity.samples.map((sample) => sample.latLng).toList(),
+            recoveryPath: store.navStatus.forwardRecoveryPath,
             showControls: true,
+            followCurrentLocation: store.recordingMapFollow,
+            orientationMode: store.recordingMapOrientation,
+            courseDegrees: store.currentCourseDegrees,
+            onFollowCurrentLocationChanged: (value) =>
+                unawaited(store.setRecordingMapFollow(value)),
+            onOrientationModeChanged: (mode) =>
+                unawaited(store.setRecordingMapOrientation(mode)),
           ),
         ),
         if (store.navStatus.offRoute || store.navStatus.junctionAhead != null)
@@ -232,22 +250,23 @@ class _NavBanner extends StatelessWidget {
     final IconData icon;
     String text;
     if (offRoute) {
-      icon = Icons.wrong_location;
-      final routeDirection = switch (status.routeRelativeDirection) {
-        RouteRelativeDirection.ahead => 'ahead',
-        RouteRelativeDirection.left => 'left',
-        RouteRelativeDirection.right => 'right',
-        RouteRelativeDirection.behind => 'behind',
-        null => null,
-      };
-      final compass = status.bearingToRouteDegrees == null
-          ? null
-          : _compassLabel(status.bearingToRouteDegrees!);
-      final target = [?compass, ?routeDirection].join(', ');
-      text = distance != null
-          ? 'Off route \u2022 ${distance.round()} m away'
-          : 'Off route';
-      if (target.isNotEmpty) text = '$text \u2022 route $target';
+      icon = status.hasForwardRecovery ? Icons.alt_route : Icons.wrong_location;
+      final planDistance = distance == null
+          ? 'Off route'
+          : 'Off route \u2022 ${distance.round()} m from plan';
+      if (status.hasForwardRecovery) {
+        final bearing = status.forwardRecoveryBearingDegrees;
+        final direction = bearing == null ? 'forward' : _compassLabel(bearing);
+        final recoveryDistance = status.forwardRecoveryDistanceMeters;
+        text = '$planDistance \u2022 follow mapped path $direction';
+        if (recoveryDistance != null) {
+          text = '$text \u2022 ${recoveryDistance.round()} m to rejoin';
+        }
+      } else {
+        text =
+            '$planDistance \u2022 stay on a recognized path '
+            '\u2022 finding a forward connection';
+      }
     } else {
       final turn = status.junctionTurn;
       icon = switch (turn) {
@@ -257,16 +276,20 @@ class _NavBanner extends StatelessWidget {
         null => Icons.fork_right,
       };
       final junctionDistance = status.junctionDistanceMeters;
-      final lead = junctionDistance != null
+      final lead = status.maneuverPhase == ManeuverPhase.apex
+          ? 'Now'
+          : junctionDistance != null
           ? 'Junction in ${junctionDistance.round()} m'
           : 'Junction ahead';
-      final guidance = switch (turn) {
-        TurnDirection.left => 'keep left',
-        TurnDirection.right => 'keep right',
-        TurnDirection.straight => 'continue straight',
-        null => null,
-      };
-      text = guidance != null ? '$lead \u2022 $guidance' : lead;
+      final guidance = NavigationAlertFeedback.maneuverInstruction(
+        status.junctionTurnDegrees,
+        fallback: turn,
+      );
+      final following = status.followingTurnDegrees == null
+          ? ''
+          : ' \u2022 then immediately '
+                '${NavigationAlertFeedback.maneuverInstruction(status.followingTurnDegrees)}';
+      text = '$lead \u2022 $guidance$following';
     }
     return Material(
       color: color.withValues(alpha: 0.15),

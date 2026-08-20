@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-08-15<br>
+Snapshot date: 2026-08-19<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -22,8 +22,9 @@ RunTiyul now provides a local-first mobile MVP with:
 The MVP is not production-ready. A production map provider that explicitly
 permits offline downloads has not been selected. iOS and physical-device
 background recording have not been verified. Monotonic route-progress guidance
-and route-finding off-route guidance are implemented; visual progress percentage
-and course-up are not. Tone, voice, heading quality, and locked-screen behavior
+and forward-only mapped-way recovery are implemented; visual progress percentage
+is not. Recording-map position following and north-up/course-up are implemented,
+but camera behavior, tone, voice, heading quality, and locked-screen behavior
 have not been verified on a physical device.
 
 A long-term offline-map architecture is documented in
@@ -49,7 +50,7 @@ hosting remain proposals only.
 | --- | --- | --- |
 | Flutter Android project | Implemented and emulator verified | Debug APK built and launched on Android 14 API 34. |
 | Flutter iOS project | Configured, not runtime verified | Location descriptions and background location mode exist; no macOS/Xcode validation was available. |
-| Material application shell | Implemented | Five primary destinations use Material 3 `NavigationBar`. |
+| Material application shell (`APP-001`, `APP-007`) | Implemented; unit/widget-tested | Five primary destinations use Material 3 `NavigationBar`. `PrimaryDestinationHistory` records destination transitions; system Back returns through pushed screens and destination history, while only root Map allows app exit. |
 | Installed-version awareness (`APP-006`) | Implemented; analyzer/unit/widget-tested | `package_info_plus` supplies package-derived version/build metadata. About exposes the installed version, and `AppStore` persists `last_acknowledged_app_version`: a first tracked install is quiet, while a later build produces one local update dialog and is acknowledged after dismissal. No network request is involved. A real two-APK upgrade remains device-unverified. |
 | Online map display | Implemented; base-layer switch analyzer/test only | `flutter_map` tile layer, pan/zoom, provider configuration, and source-accurate attribution: a custom provider is no longer credited to OpenStreetMap, and offline previews credit each area's persisted provider. The base-layer picker offers configured **Streets**, **CyclOSM** (cycle/topographic raster with provider-baked contours/hillshade), and online-only **Esri World Imagery** satellite/orthophoto. The choice persists in `app_settings`. Viewing CyclOSM fetches only CyclOSM raster tiles, never separate elevation/Terrarium data; satellite remains view-only. |
 | Map camera controls | Implemented; primary map emulator verified, other surfaces analyzer/test only | Zoom in/out, fit content, fresh-GPS recenter, and a show/hide toggle for the saved trail overlays now appear on every map surface (primary, route detail, manual editor, activity detail, and recording). Route detail and manual editor bodies reserve the device bottom safe area, so their action panels are not covered by edge-to-edge system navigation. The primary, route-detail, and activity-detail maps auto-fit their content when opened. A map opened without primary content or an explicit center (for example the primary Explore view or a free-run recording) instead opens centered on the runner's current location at a neighborhood zoom (`z15`), fetching a fix if none is cached and falling back to a wide region only when no location is available. |
@@ -59,9 +60,12 @@ hosting remain proposals only.
 | GPX import | Implemented, parser unit-tested | Uses the platform `file_selector`; the native picker was not exercised in the emulator verification. |
 | Manual route creation | Implemented; move/delete + save-fix + edit + follow-trails analyzer/test only | Map taps add ordered waypoints; undo, name, save, and dashed straight-line display work. A new route opens centered on the runner's current location at a closer zoom. While editing, the map no longer auto-refits when points are added or moved, so the zoom the runner set is kept. The name field is pre-filled with "Route N" and required in the editor: Save is disabled and an inline "Enter a route name" prompt shows while the field is empty (the store-level save still auto-names an empty name as a safety net). The editor closes only after a successful save, so a drawn route always lands in the list. Long-pressing selects the nearest waypoint (highlighted) to move (tap to reposition) or delete. An existing route can be reopened for editing from its detail screen (Edit waypoints), loading its points to add/move/delete and saving in place. A **Follow trails** mode (toggled beside Checkpoints) loads the real trail network for the visible area and snaps each tap onto a trail *line*, then builds the route *along* real trails between anchors — the same trail's own geometry when two anchors share a trail, or a shortest path through junctions across connected trails; trail data auto-downloads for the viewed area (with a Reload action) and anchors can be undone or deleted. Switching between Checkpoints and Follow trails keeps the points already placed — anchors become free waypoints and free waypoints are snapped back onto the network — so toggling the mode changes only how the next point is added rather than resetting the route. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
+| Route cleanup and whole-route snapping (`RTE-010`, `RTE-011`) | Implemented; analyzer/unit/widget-tested, real GPX/device use unverified | `RouteGeometryCleaner` removes only bounded mini out-and-back artifacts (8 m return, 18 m excursion, 45 m path) before save/navigation while preserving larger intentional double-backs. Every manual or GPX route detail exposes **Snap to trails**; automatic import/save snapping honors the existing preference. `RouteTrailBuilder` requires a connected trail/road graph end-to-end instead of inserting a straight off-network bridge. The persisted result keeps route id/source and matching optional GPX point metadata, redraws immediately, and reports updated/unchanged/unavailable/failure outcomes. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit-tested, physical-device stress test pending | `RTE-003` Follow trails no longer derives its workload from a zoomed-out viewport: the first tap loads a bounded 3x3 z14 neighborhood around the tapped point, subsequent nearby areas merge into the graph, and explicit viewport reloads cap at 24 tiles centered on the screen instead of truncating from the northwest corner. A distant tap whose bounded neighborhood cannot overlap the preceding point is rejected immediately with an add-a-closer-point message. A closer tap is committed only when a connected, reasonable graph path exists, so Follow trails never silently inserts a straight waypoint leg. Existing anchors keep their stable graph indices; only the newest leg is routed, graph construction is lazy, and cross-trail shortest paths use a binary-heap frontier. Under `RTE-009`, saved/navigation geometry remains lossless while `TrailMap` reduces only its rendered point list at approximately one screen pixel for the current zoom. Very long routes still require profiling on a mid-range physical device. |
 | Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Completed cues explicitly release transient audio focus; iOS deactivates its shared session with `notifyOthersOnDeactivation`, and a generation guard prevents an older cue from releasing a newer alert's audio. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior and recovery, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
+| Forward recovery and maneuver guidance (`NAV-007`-`NAV-010`) | Implemented; analyzer/unit/widget-tested, live trail use unverified | `ForwardRouteRecovery` snaps the off-route runner to the recognized trail/road graph, searches only beyond monotonic route progress, requires connected graph legs, trims at the first ahead route contact, rejects initial directions outside a 75-degree forward cone, and never speaks nearest-route "behind" guidance. Failed searches are debounced for five seconds; the mapped recovery renders as a distinct solid path. `RouteManeuverPlanner` detects mapped junctions and geometry bends, reports signed rounded angles (bear/turn/sharp/U-turn), announces inside the advance window and again within 8 m of the apex, combines a following maneuver within 45 m, and tolerates up to 25 m overshoot without a missed-waypoint prompt or re-arm from GPS jitter. |
+| Recording map tracking (`NAV-005`) | Implemented; analyzer/unit/widget-tested, physical-device motion unverified | Recording exposes persisted Follow position and **North up** / **Running direction** controls. Course-up uses the same quality-filtered moving course as navigation (speed/heading accuracy, then movement-bearing fallback), updates center and rotation atomically, falls back north until a course exists, keeps orientation selected after gestures, and disables only Follow position when the runner pans. |
 | GPS activity tracking | Implemented and emulator verified | Start, permission request, pause, resume, finish, discard, timer, and persisted samples. |
 | Live metrics | Implemented | Elapsed time, distance, average pace, and smoothed-threshold elevation gain are shown. Moving time is not calculated separately. |
 | Background recording | Configured, not physical-device verified | Geolocator foreground notification/background settings and platform permissions exist. |
@@ -115,8 +119,11 @@ lib/
 |   |-- location_service.dart       Permission and position stream adapter
 |   |-- map_provider.dart           Compile-time provider configuration
 |   |-- map_render_theme.dart       Trail-emphasis + peak-label render theme
+|   |-- forward_route_recovery.dart Strict mapped-way reconnection ahead
 |   |-- navigation_alert_feedback.dart  Haptic, CC0 tone, system-TTS, and fallback adapter
 |   |-- navigation_monitor.dart     Off-route, progress, and junction alert logic
+|   |-- route_geometry_cleaner.dart Mini out-and-back artifact cleanup
+|   |-- route_maneuver_planner.dart Exact-angle and consecutive maneuver planning
 |   |-- terrain_contour_service.dart  Terrarium decode + contour/hillshade renderer
 |   |-- route_snapper.dart          Snaps a route onto nearby trails (hysteresis)
 |   |-- route_trail_builder.dart    Route/viewport trail-network builder
@@ -219,13 +226,14 @@ Implemented:
 - Straight-line route geometry with calculated geodesic distance.
 - Route library, detail map, selection, rename, duplicate, and confirmed
   deletion.
+- Conservative route-artifact cleanup and explicit whole-route snapping for
+  both manual and GPX routes.
 - All saved routes render on the primary map when fully or partially in view.
 - Tapping a route selects it and switches to the primary map with all controls.
 
 Limitations:
 
 - Duplicate imports do not yet offer replace/cancel choices.
-- Manual routing does not snap to paths or trails.
 - GPX native picker integration was not emulator-tested.
 
 ## 6. Recording and activities
@@ -268,7 +276,9 @@ Limitations:
   sequential fixes to verify distance changes live.
 - Moving time is not distinct from elapsed time.
 - Current pace uses the full activity average, not a rolling window.
-- Visual route-progress percentage and course-up mode are absent.
+- Visual route-progress percentage is absent.
+- Recording Follow position, north-up/course-up rotation, forward recovery,
+  exact-angle prompts, and overshoot behavior are not physical-device verified.
 - Alert tones, system voice availability, outdoor audibility, headphone routing,
   interrupted-music resumption, and background/locked-screen playback have not
   been exercised on a physical Android or iOS device.
@@ -395,19 +405,20 @@ Limitations:
 
 ## 9. Automated validation
 
-Latest code validation on 2026-08-15 with Flutter 3.44.6 stable and Dart 3.12.2:
+Latest local code validation on 2026-08-19 with Flutter 3.44.6 stable and Dart
+3.12.2; latest hosted validation remains the 2026-08-15 `v1.3.1` runs:
 
 | Command | Result |
 | --- | --- |
-| `dart format --output=none --set-exit-if-changed lib test` | Passed; 82 files checked with zero changes. |
+| Dart formatter on changed Dart source/test files | Passed. |
 | `flutter analyze --no-pub` | Passed; no issues found. |
-| VS Code Flutter test runner (full suite) | Passed; 150 tests. |
+| VS Code Flutter test runner (full suite) | Passed; 171 tests. |
 | GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
 | GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
 | GitHub Actions `Continuous integration` | Run [`31898235414`](https://github.com/nachem/runTiyul/actions/runs/31898235414) passed setup, dependency install, format, analyze, and all 150 tests for commit `8cb3695` on 2026-08-15. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
 | GitHub Actions CodeQL | Run [`31898235009`](https://github.com/nachem/runTiyul/actions/runs/31898235009) passed for commit `8cb3695` on 2026-08-15. |
 | GitHub Actions `Deploy website` | Run [`30808751792`](https://github.com/nachem/runTiyul/actions/runs/30808751792) passed for commit `87290ca` on 2026-08-03. |
-| `flutter build apk --debug --no-pub` | Passed for `1.3.1+9`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, and `versionCode=9`. |
+| `flutter build apk --debug --no-pub` | Passed for `1.4.0+10`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.4.0`, `versionCode=10`, and label `RunTiyul`. The 166,344,270-byte local debug APK SHA-256 is `e4a076f89c8b6d221ce947620c58e1ae71d841dd86446f030aa158fdbcb2f4aa`. |
 | GitHub Actions `flutter build apk --release` with protected signing | Passed for `1.3.1+9` in run `31898244766`; published a 62,085,536-byte APK. |
 | Public Android SDK `apksigner verify --print-certs` and `aapt dump badging` | Passed; package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.3.1`, `versionCode=9`, pinned certificate SHA-256 `d9f8b0d77eddcddd436d945eec37d66513f9a8f1488b5807b5bf50acf32139e5`. APK SHA-256 is `c2b8663d170fde0ec5ee9408da50d292a98d2eae6b2901305b800d7ac072b479`. |
 | Release workflow/site/repository checks | Run `31898244766` passed metadata, Android, iOS, checksums, APK+IPA provenance, and publication; signing secrets are build-step scoped. Independent provenance and stable-link checks passed. Local wiki links and the CRLF-aware `git diff --check` passed. The current `actionlint` result is recorded above. |
@@ -442,6 +453,19 @@ build; track a plugin release that adopts Flutter's Built-in Kotlin migration.
 
 Automated coverage includes:
 
+- Primary-destination Back history and root-only app-exit state.
+- Persisted recording Follow position and north-up/course-up controls, course
+  rotation normalization, recording-map wiring, and precise recovery/maneuver
+  banners.
+- Bounded mini out-and-back cleanup that preserves intentional double-backs;
+  whole-route manual/GPX snapping outcomes and GPX metadata preservation.
+- Strict forward recovery on connected mapped ways, first-ahead-contact
+  trimming, forward-cone enforcement, and rejection of backtracking,
+  disconnected, and open-terrain routes.
+- Exact signed 45/90/180-degree maneuver classification, intentional U-turns,
+  advance/apex alert phases, 25 m overshoot grace, and consecutive instructions.
+- Forward-only voice wording that never exposes a nearest-route "behind"
+  direction as recovery guidance.
 - Bounded point-local and centered capped viewport trail tile selection.
 - Strict connected trail routing, distant-leg rejection, lazy graph creation,
   and zoom-aware rendering-only polyline simplification.

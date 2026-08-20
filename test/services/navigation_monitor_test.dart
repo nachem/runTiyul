@@ -184,7 +184,7 @@ void main() {
     expect(status.triggered, NavAlert.junction);
   });
 
-  test('junction fires once when approaching and re-arms after leaving', () {
+  test('junction alerts in advance and again through a small overshoot', () {
     final monitor = NavigationMonitor(
       config: const NavAlertConfig(offRouteEnabled: false, junctionMeters: 25),
     );
@@ -199,21 +199,31 @@ void main() {
       junctions: const [junction],
     );
     expect(first.triggered, NavAlert.junction);
+    expect(first.maneuverPhase, ManeuverPhase.advance);
     expect(first.junctionAhead, isNotNull);
 
     expect(
       monitor.update(near, route: line, junctions: const [junction]).triggered,
       NavAlert.none,
     );
-    expect(
-      monitor
-          .update(past, route: line, junctions: const [junction])
-          .junctionAhead,
-      isNull,
+    final overshot = monitor.update(
+      past,
+      route: line,
+      junctions: const [junction],
     );
+    expect(overshot.triggered, NavAlert.junction);
+    expect(overshot.maneuverPhase, ManeuverPhase.apex);
+    expect(overshot.junctionDistanceMeters, 0);
+
+    final cleared = monitor.update(
+      const LatLng(0, 0.0053),
+      route: line,
+      junctions: const [junction],
+    );
+    expect(cleared.junctionAhead, isNull);
     expect(
       monitor.update(near, route: line, junctions: const [junction]).triggered,
-      NavAlert.junction,
+      NavAlert.none,
     );
   });
 
@@ -234,6 +244,7 @@ void main() {
     expect(status.junctionAhead, isNotNull);
     expect(status.junctionDistanceMeters, closeTo(167, 12));
     expect(status.junctionTurn, TurnDirection.left);
+    expect(status.junctionTurnDegrees, closeTo(-90, 1));
   });
 
   test('junction reports a right turn on a right-bending route', () {
@@ -278,6 +289,29 @@ void main() {
     );
     expect(status.junctionAhead, isNull);
     expect(status.triggered, NavAlert.none);
+  });
+
+  test('nearby maneuvers are exposed as one consecutive instruction', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(offRouteEnabled: false, junctionMeters: 100),
+    );
+    const routeWithQuickTurn = [
+      LatLng(0, 0),
+      LatLng(0, 0.001),
+      LatLng(0, 0.0013),
+      LatLng(-0.001, 0.0013),
+    ];
+
+    final status = monitor.update(
+      const LatLng(0, 0.0005),
+      route: routeWithQuickTurn,
+      junctions: const [LatLng(0, 0.001), LatLng(0, 0.0013)],
+    );
+
+    expect(status.triggered, NavAlert.junction);
+    expect(status.junctionTurn, TurnDirection.straight);
+    expect(status.followingTurnDegrees, closeTo(90, 1));
+    expect(status.followingTurnDistanceMeters, closeTo(33, 3));
   });
 
   test('junction disabled never fires', () {

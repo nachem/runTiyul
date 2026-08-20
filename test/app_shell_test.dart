@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trail_runner/app/app.dart';
 import 'package:trail_runner/features/map/trail_map.dart';
+import 'package:trail_runner/models/map_tracking.dart';
 import 'package:trail_runner/services/map_provider.dart';
 import 'package:trail_runner/services/tile_store.dart';
 
@@ -36,6 +37,25 @@ void main() {
 
     await tester.tap(find.text('Offline'));
     expect(selected, 4);
+  });
+
+  test('Back walks primary destinations before allowing app exit', () {
+    final destinations = PrimaryDestinationHistory(1);
+
+    expect(destinations.currentIndex, 1);
+    expect(destinations.canExit, isFalse);
+    expect(destinations.goBack(), isTrue);
+    expect(destinations.currentIndex, 0);
+    expect(destinations.canExit, isTrue);
+
+    expect(destinations.select(3), isTrue);
+    expect(destinations.select(4), isTrue);
+    expect(destinations.goBack(), isTrue);
+    expect(destinations.currentIndex, 3);
+    expect(destinations.goBack(), isTrue);
+    expect(destinations.currentIndex, 0);
+    expect(destinations.goBack(), isFalse);
+    expect(destinations.canExit, isTrue);
   });
 
   testWidgets('map controls expose source, zoom, fit, and location actions', (
@@ -159,5 +179,55 @@ void main() {
     await tester.tap(find.text('Satellite'));
     await tester.pumpAndSettle();
     expect(selectedLayer, 'esri-world-imagery');
+  });
+
+  testWidgets('recording map controls expose follow and orientation modes', (
+    tester,
+  ) async {
+    bool? following;
+    MapOrientationMode? selectedOrientation;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topRight,
+            child: TrailMapControls(
+              mode: MapTileMode.auto,
+              layers: const [],
+              activeLayerId: '',
+              onLayerSelected: (_) {},
+              offlineAvailable: false,
+              trailsVisible: true,
+              onToggleTrails: () {},
+              onModeSelected: (_) {},
+              onZoomIn: () {},
+              onZoomOut: () {},
+              onFitContent: () {},
+              onCurrentLocation: () {},
+              followingCurrentLocation: true,
+              orientationMode: MapOrientationMode.courseUp,
+              onFollowCurrentLocationChanged: (value) => following = value,
+              onOrientationModeChanged: (mode) => selectedOrientation = mode,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Stop following current position'));
+    expect(following, isFalse);
+
+    await tester.tap(find.byTooltip('Map orientation: Running direction'));
+    await tester.pumpAndSettle();
+    expect(find.text('North up'), findsOneWidget);
+    await tester.tap(find.text('North up'));
+    expect(selectedOrientation, MapOrientationMode.northUp);
+  });
+
+  test('course-up rotation keeps movement direction at the top', () {
+    expect(mapRotationForCourse(null), 0);
+    expect(mapRotationForCourse(0), 0);
+    expect(mapRotationForCourse(90), 270);
+    expect(mapRotationForCourse(450), 270);
   });
 }

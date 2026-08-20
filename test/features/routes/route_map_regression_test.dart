@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:trail_runner/app/app_store.dart';
 import 'package:trail_runner/data/app_database.dart';
@@ -11,8 +12,10 @@ import 'package:trail_runner/features/map/trail_map.dart';
 import 'package:trail_runner/features/recording/record_screen.dart';
 import 'package:trail_runner/features/routes/routes_screen.dart';
 import 'package:trail_runner/models/run_activity.dart';
+import 'package:trail_runner/models/map_tracking.dart';
 import 'package:trail_runner/models/trail_route.dart';
 import 'package:trail_runner/services/map_provider.dart';
+import 'package:trail_runner/services/navigation_monitor.dart';
 import 'package:trail_runner/services/tile_store.dart';
 
 const _provider = MapProviderConfig(
@@ -145,6 +148,76 @@ void main() {
     final map = tester.widget<TrailMap>(find.byType(TrailMap));
     expect(map.route?.id, active.id);
     expect(map.routes.map((route) => route.id), ['active', 'saved']);
+    expect(map.followCurrentLocation, isTrue);
+    expect(map.orientationMode, MapOrientationMode.courseUp);
+  });
+
+  testWidgets('recording banner shows precise apex and consecutive turn', (
+    tester,
+  ) async {
+    store.activeActivity = RunActivity(
+      id: 'activity',
+      status: ActivityStatus.recording,
+      startedAt: DateTime.utc(2026, 8, 19),
+      elapsed: Duration.zero,
+      distanceMeters: 0,
+      elevationGainMeters: 0,
+      samples: const [],
+    );
+    store.navStatus = const NavStatus(
+      offRoute: false,
+      junctionAhead: LatLng(31.77, 35.21),
+      junctionDistanceMeters: 0,
+      junctionTurn: TurnDirection.right,
+      junctionTurnDegrees: 90,
+      maneuverPhase: ManeuverPhase.apex,
+      followingTurnDegrees: -45,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: RecordScreen(store: store)));
+
+    expect(
+      find.text(
+        'Now \u2022 turn right 90 degrees '
+        '\u2022 then immediately bear left 45 degrees',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('recording renders and describes only forward recovery', (
+    tester,
+  ) async {
+    store.activeActivity = RunActivity(
+      id: 'activity',
+      status: ActivityStatus.recording,
+      startedAt: DateTime.utc(2026, 8, 19),
+      elapsed: Duration.zero,
+      distanceMeters: 0,
+      elevationGainMeters: 0,
+      samples: const [],
+    );
+    store.navStatus = const NavStatus(
+      offRoute: true,
+      distanceToRouteMeters: 80,
+      routeRelativeDirection: RouteRelativeDirection.behind,
+      forwardRecoveryPath: [LatLng(31.77, 35.21), LatLng(31.77, 35.212)],
+      forwardRecoveryDistanceMeters: 230,
+      forwardRecoveryBearingDegrees: 90,
+    );
+
+    await tester.pumpWidget(MaterialApp(home: RecordScreen(store: store)));
+
+    final map = tester.widget<TrailMap>(find.byType(TrailMap));
+    expect(map.recoveryPath, hasLength(2));
+    expect(
+      find.text(
+        'Off route \u2022 80 m from plan \u2022 follow mapped path E '
+        '\u2022 230 m to rejoin',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('behind'), findsNothing);
   });
 
   testWidgets('route view and editor reserve the bottom safe area', (
@@ -162,6 +235,7 @@ void main() {
       find.byKey(const ValueKey('route-detail-safe-area')),
       findsOneWidget,
     );
+    expect(find.text('Snap to trails'), findsOneWidget);
 
     await tester.pumpWidget(
       MaterialApp(

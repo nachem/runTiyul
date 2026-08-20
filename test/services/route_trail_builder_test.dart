@@ -157,4 +157,17 @@ void main() {
     expect(refined.last.longitude, closeTo(0.004, 1e-6));
     expect(refined.any((p) => (p.longitude - 0.002).abs() < 1e-6), isTrue);
   });
+
+  test('refineOntoNetwork never bridges disconnected ways off trail', () {
+    final network = TrailNetwork(const [
+      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+      TrailPolyline(
+        points: [LatLng(0.002, 0.003), LatLng(0.002, 0.005)],
+        kind: 'path',
+      ),
+    ]);
+    const original = [LatLng(0, 0.001), LatLng(0.002, 0.004)];
+
+    expect(RouteTrailBuilder().refineOntoNetwork(original, network), original);
+  });
 }

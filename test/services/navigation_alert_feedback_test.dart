@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:trail_runner/services/navigation_alert_feedback.dart';
 import 'package:trail_runner/services/navigation_monitor.dart';
 
@@ -19,6 +20,8 @@ void main() {
     offRoute: false,
     junctionDistanceMeters: 27,
     junctionTurn: TurnDirection.left,
+    junctionTurnDegrees: -90,
+    maneuverPhase: ManeuverPhase.advance,
     triggered: NavAlert.junction,
   );
 
@@ -46,7 +49,10 @@ void main() {
       );
 
       expect(hapticCount, 1);
-      expect(events, ['tone:junction', 'voice:In 25 meters, keep left.']);
+      expect(events, [
+        'tone:junction',
+        'voice:In 25 meters, turn left 90 degrees.',
+      ]);
       expect(result.tonePlayed, isTrue);
       expect(result.voiceSpoken, isTrue);
       expect(result.usedToneFallback, isFalse);
@@ -148,11 +154,30 @@ void main() {
   test('guidance is concise and includes junction direction', () {
     expect(
       NavigationAlertFeedback.guidanceFor(offRoute),
-      '40 meters off route. Go east, to your right for 40 meters.',
+      '40 meters off route. Keep to a recognized trail or path. '
+      'Finding a forward connection ahead.',
     );
     expect(
       NavigationAlertFeedback.guidanceFor(junction),
-      'In 25 meters, keep left.',
+      'In 25 meters, turn left 90 degrees.',
+    );
+  });
+
+  test('guidance announces apex, intentional U-turn, and next maneuver', () {
+    const status = NavStatus(
+      offRoute: false,
+      junctionDistanceMeters: 0,
+      junctionTurn: TurnDirection.right,
+      junctionTurnDegrees: 180,
+      maneuverPhase: ManeuverPhase.apex,
+      followingTurnDegrees: 45,
+      followingTurnDistanceMeters: 30,
+      triggered: NavAlert.junction,
+    );
+
+    expect(
+      NavigationAlertFeedback.guidanceFor(status),
+      'Make a 180 degree U-turn now, then immediately bear right 45 degrees.',
     );
   });
 
@@ -179,8 +204,30 @@ void main() {
     expect(tones, [NavAlert.offRouteReminder, NavAlert.offRouteReminder]);
     expect(
       NavigationAlertFeedback.guidanceFor(improving),
-      '80 meters off route. You are getting closer.',
+      '80 meters off route. Keep to a recognized trail or path. '
+      'Finding a forward connection ahead.',
     );
+  });
+
+  test('forward recovery guidance never directs the runner backward', () {
+    const recovering = NavStatus(
+      offRoute: true,
+      distanceToRouteMeters: 80,
+      routeRelativeDirection: RouteRelativeDirection.behind,
+      forwardRecoveryPath: [LatLng(0.001, 0), LatLng(0.001, 0.002)],
+      forwardRecoveryDistanceMeters: 230,
+      forwardRecoveryBearingDegrees: 90,
+      triggered: NavAlert.offRouteReminder,
+    );
+
+    final guidance = NavigationAlertFeedback.guidanceFor(recovering)!;
+    expect(
+      guidance,
+      '80 meters off route. Follow the marked path east. '
+      'Rejoin the planned route in 230 meters.',
+    );
+    expect(guidance, isNot(contains('behind')));
+    expect(guidance, isNot(contains('turn around')));
   });
 
   test(

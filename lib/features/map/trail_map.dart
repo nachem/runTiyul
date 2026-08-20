@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../../app/app_store.dart';
 import '../../core/geo/geo_bounds.dart';
 import '../../core/geo/polyline_simplifier.dart';
+import '../../models/map_tracking.dart';
 import '../../models/offline_area.dart';
 import '../../models/trail_route.dart';
 import '../../services/map_provider.dart';
@@ -19,6 +20,7 @@ class TrailMap extends StatefulWidget {
     this.route,
     this.routes = const [],
     this.track = const [],
+    this.recoveryPath = const [],
     this.waypoints = const [],
     this.selection,
     this.selectionStart,
@@ -36,12 +38,18 @@ class TrailMap extends StatefulWidget {
     this.constrainOfflineZoom = true,
     this.autoFit = false,
     this.refitOnContentChange = true,
+    this.followCurrentLocation,
+    this.orientationMode,
+    this.courseDegrees,
+    this.onFollowCurrentLocationChanged,
+    this.onOrientationModeChanged,
   });
 
   final AppStore store;
   final TrailRoute? route;
   final List<TrailRoute> routes;
   final List<LatLng> track;
+  final List<LatLng> recoveryPath;
   final List<LatLng> waypoints;
   final GeoBounds? selection;
 
@@ -86,6 +94,13 @@ class TrailMap extends StatefulWidget {
   /// does not reset the user's zoom.
   final bool refitOnContentChange;
 
+  /// Recording-only camera tracking. Null hides the tracking controls.
+  final bool? followCurrentLocation;
+  final MapOrientationMode? orientationMode;
+  final double? courseDegrees;
+  final ValueChanged<bool>? onFollowCurrentLocationChanged;
+  final ValueChanged<MapOrientationMode>? onOrientationModeChanged;
+
   @override
   State<TrailMap> createState() => _TrailMapState();
 }
@@ -97,6 +112,10 @@ class _TrailMapState extends State<TrailMap> {
   late double _renderZoom;
   late bool _offlineCoverageAvailable;
   late String _lastAutoFitSignature;
+  LatLng? _lastTrackingLocation;
+  double? _lastTrackingCourse;
+  bool? _lastFollowCurrentLocation;
+  MapOrientationMode? _lastOrientationMode;
 
   /// Neighborhood-level zoom used when the map opens centered on the runner's
   /// current position.
@@ -148,6 +167,12 @@ class _TrailMapState extends State<TrailMap> {
     _renderZoom = _cameraZoom;
     _offlineCoverageAvailable = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
     _lastAutoFitSignature = _contentSignature;
+    _rememberTrackingState();
+    if (_hasTrackingControls) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncTrackingCamera();
+      });
+    }
     if (widget.autoFit && _hasPrimaryContent) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _fitContent(includeLocation: false);
@@ -166,7 +191,51 @@ class _TrailMapState extends State<TrailMap> {
   void didUpdateWidget(covariant TrailMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     _offlineCoverageAvailable = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
+    if (_trackingStateChanged) {
+      _rememberTrackingState();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncTrackingCamera();
+      });
+    }
     _maybeAutoFit();
+  }
+
+  bool get _hasTrackingControls =>
+      widget.followCurrentLocation != null &&
+      widget.orientationMode != null &&
+      widget.onFollowCurrentLocationChanged != null &&
+      widget.onOrientationModeChanged != null;
+
+  bool get _trackingStateChanged =>
+      _hasTrackingControls &&
+      (_lastTrackingLocation != widget.store.currentLocation ||
+          _lastTrackingCourse != widget.courseDegrees ||
+          _lastFollowCurrentLocation != widget.followCurrentLocation ||
+          _lastOrientationMode != widget.orientationMode);
+
+  void _rememberTrackingState() {
+    _lastTrackingLocation = widget.store.currentLocation;
+    _lastTrackingCourse = widget.courseDegrees;
+    _lastFollowCurrentLocation = widget.followCurrentLocation;
+    _lastOrientationMode = widget.orientationMode;
+  }
+
+  void _syncTrackingCamera() {
+    if (!_hasTrackingControls) return;
+    final camera = _controller.camera;
+    final location = widget.store.currentLocation;
+    final center = widget.followCurrentLocation == true && location != null
+        ? location
+        : camera.center;
+    final rotation = widget.orientationMode == MapOrientationMode.courseUp
+        ? mapRotationForCourse(widget.courseDegrees)
+        : 0.0;
+    _controller.moveAndRotate(
+      center,
+      camera.zoom,
+      rotation,
+      id: 'recording-tracking',
+    );
   }
 
   bool get _hasPrimaryContent =>
@@ -289,7 +358,17 @@ class _TrailMapState extends State<TrailMap> {
   }
 
   void _updateCamera(MapCamera camera, bool hasGesture) {
-    if (hasGesture) _userInteracted = true;
+    if (hasGesture) {
+      _userInteracted = true;
+      if (widget.followCurrentLocation == true) {
+        widget.onFollowCurrentLocationChanged?.call(false);
+      }
+      if (_hasTrackingControls) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _syncTrackingCamera();
+        });
+      }
+    }
     final zoomChanged = (_cameraZoom - camera.zoom).abs() > 0.001;
     _cameraCenter = camera.center;
     _cameraZoom = camera.zoom;
@@ -614,6 +693,21 @@ class _TrailMapState extends State<TrailMap> {
                   ),
                 ],
               ),
+            if (widget.recoveryPath.length > 1)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points: renderPoints(widget.recoveryPath),
+                    color: Colors.white,
+                    strokeWidth: 9,
+                  ),
+                  Polyline(
+                    points: renderPoints(widget.recoveryPath),
+                    color: Colors.teal.shade600,
+                    strokeWidth: 6,
+                  ),
+                ],
+              ),
             if (widget.track.length > 1)
               PolylineLayer(
                 polylines: [
@@ -714,6 +808,11 @@ class _TrailMapState extends State<TrailMap> {
               onZoomOut: _cameraZoom <= 1 ? null : () => _zoomBy(-1),
               onFitContent: _fitContent,
               onCurrentLocation: _centerOnCurrentLocation,
+              followingCurrentLocation: widget.followCurrentLocation,
+              orientationMode: widget.orientationMode,
+              onFollowCurrentLocationChanged:
+                  widget.onFollowCurrentLocationChanged,
+              onOrientationModeChanged: widget.onOrientationModeChanged,
             ),
           ),
       ],
@@ -742,6 +841,10 @@ class TrailMapControls extends StatelessWidget {
     required this.onZoomOut,
     required this.onFitContent,
     required this.onCurrentLocation,
+    this.followingCurrentLocation,
+    this.orientationMode,
+    this.onFollowCurrentLocationChanged,
+    this.onOrientationModeChanged,
   });
 
   final MapTileMode mode;
@@ -756,6 +859,10 @@ class TrailMapControls extends StatelessWidget {
   final VoidCallback? onZoomOut;
   final VoidCallback onFitContent;
   final VoidCallback onCurrentLocation;
+  final bool? followingCurrentLocation;
+  final MapOrientationMode? orientationMode;
+  final ValueChanged<bool>? onFollowCurrentLocationChanged;
+  final ValueChanged<MapOrientationMode>? onOrientationModeChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -889,10 +996,61 @@ class TrailMapControls extends StatelessWidget {
             tooltip: 'Center on current location',
             icon: const Icon(Icons.my_location),
           ),
+          if (followingCurrentLocation != null &&
+              onFollowCurrentLocationChanged != null) ...[
+            const Divider(height: 1),
+            IconButton(
+              onPressed: () =>
+                  onFollowCurrentLocationChanged!(!followingCurrentLocation!),
+              isSelected: followingCurrentLocation,
+              tooltip: followingCurrentLocation!
+                  ? 'Stop following current position'
+                  : 'Follow current position',
+              selectedIcon: const Icon(Icons.gps_fixed),
+              icon: const Icon(Icons.location_searching),
+            ),
+          ],
+          if (orientationMode != null && onOrientationModeChanged != null)
+            PopupMenuButton<MapOrientationMode>(
+              initialValue: orientationMode,
+              tooltip: 'Map orientation: ${orientationMode!.label}',
+              onSelected: onOrientationModeChanged,
+              itemBuilder: (context) => [
+                for (final mode in MapOrientationMode.values)
+                  PopupMenuItem(
+                    value: mode,
+                    child: ListTile(
+                      leading: Icon(mode.icon),
+                      title: Text(mode.label),
+                    ),
+                  ),
+              ],
+              icon: Icon(orientationMode!.icon),
+            ),
         ],
       ),
     );
   }
+}
+
+@visibleForTesting
+double mapRotationForCourse(double? courseDegrees) {
+  if (courseDegrees == null || !courseDegrees.isFinite) return 0;
+  final normalizedCourse = courseDegrees % 360;
+  final rotation = (360 - normalizedCourse) % 360;
+  return rotation == 360 ? 0 : rotation;
+}
+
+extension on MapOrientationMode {
+  String get label => switch (this) {
+    MapOrientationMode.northUp => 'North up',
+    MapOrientationMode.courseUp => 'Running direction',
+  };
+
+  IconData get icon => switch (this) {
+    MapOrientationMode.northUp => Icons.explore_outlined,
+    MapOrientationMode.courseUp => Icons.navigation_outlined,
+  };
 }
 
 /// The zoom clamp used when auto-fitting the camera so it never lands where no

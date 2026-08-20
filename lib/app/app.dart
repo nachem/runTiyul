@@ -54,9 +54,42 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
+class PrimaryDestinationHistory {
+  PrimaryDestinationHistory(int initialIndex)
+    : _currentIndex = initialIndex,
+      _history = initialIndex == 0 ? <int>[] : <int>[0];
+
+  int _currentIndex;
+  final List<int> _history;
+
+  int get currentIndex => _currentIndex;
+  bool get canExit => _history.isEmpty;
+
+  bool select(int index) {
+    if (index == _currentIndex) return false;
+    _history.add(_currentIndex);
+    _currentIndex = index;
+    return true;
+  }
+
+  bool goBack() {
+    if (_history.isEmpty) return false;
+    _currentIndex = _history.removeLast();
+    return true;
+  }
+}
+
 class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
-  late var _index = widget.initialIndex;
+  late final _destinations = PrimaryDestinationHistory(widget.initialIndex);
   var _versionDialogScheduled = false;
+
+  void _selectDestination(int index) {
+    if (_destinations.select(index)) setState(() {});
+  }
+
+  void _handleBack() {
+    if (_destinations.goBack()) setState(() {});
+  }
 
   @override
   void initState() {
@@ -107,8 +140,8 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           MapScreen(store: widget.store),
           RoutesScreen(
             store: widget.store,
-            onShowMap: () => setState(() => _index = 0),
-            onStart: () => setState(() => _index = 2),
+            onShowMap: () => _selectDestination(0),
+            onStart: () => _selectDestination(2),
           ),
           RecordScreen(store: widget.store),
           ActivitiesScreen(store: widget.store),
@@ -117,35 +150,41 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
             onPreview: (area) {
               widget.store.focusOfflineArea(area);
               unawaited(widget.store.setMapTileMode(MapTileMode.offline));
-              setState(() => _index = 0);
+              _selectDestination(0);
             },
           ),
         ];
-        return Scaffold(
-          body: SafeArea(
-            child: Column(
-              children: [
-                if (widget.store.errorMessage != null)
-                  MaterialBanner(
-                    content: Text(widget.store.errorMessage!),
-                    actions: [
-                      TextButton(
-                        onPressed: widget.store.clearError,
-                        child: const Text('Dismiss'),
-                      ),
-                    ],
+        return PopScope<void>(
+          canPop: _destinations.canExit,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _handleBack();
+          },
+          child: Scaffold(
+            body: SafeArea(
+              child: Column(
+                children: [
+                  if (widget.store.errorMessage != null)
+                    MaterialBanner(
+                      content: Text(widget.store.errorMessage!),
+                      actions: [
+                        TextButton(
+                          onPressed: widget.store.clearError,
+                          child: const Text('Dismiss'),
+                        ),
+                      ],
+                    ),
+                  Expanded(
+                    child: widget.store.loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : pages[_destinations.currentIndex],
                   ),
-                Expanded(
-                  child: widget.store.loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : pages[_index],
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          bottomNavigationBar: TrailNavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (value) => setState(() => _index = value),
+            bottomNavigationBar: TrailNavigationBar(
+              selectedIndex: _destinations.currentIndex,
+              onDestinationSelected: _selectDestination,
+            ),
           ),
         );
       },

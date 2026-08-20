@@ -13,28 +13,36 @@ import '../core/geo/tile_math.dart';
 import '../core/ids.dart';
 import '../data/app_database.dart';
 import '../data/app_repository.dart';
+import '../models/map_tracking.dart';
 import '../models/offline_area.dart';
 import '../models/run_activity.dart';
 import '../models/trail_route.dart';
 import '../services/app_version_service.dart';
 import '../services/download_foreground_service.dart';
+import '../services/forward_route_recovery.dart';
 import '../services/gpx_service.dart';
 import '../services/location_service.dart';
 import '../services/map_provider.dart';
 import '../services/navigation_alert_feedback.dart';
 import '../services/navigation_monitor.dart';
 import '../services/offline_download_service.dart';
+import '../services/route_geometry_cleaner.dart';
 import '../services/route_trail_builder.dart';
 import '../services/tile_store.dart';
 import '../services/trail_extractor.dart';
+import '../services/trail_network.dart';
 import '../services/vector_area_conversion_service.dart';
 import '../services/vector_terrain_baker.dart';
+
+enum RouteSnapOutcome { updated, unchanged, unavailable, failed }
 
 class AppStore extends ChangeNotifier {
   static const _mapTileModeSetting = 'map_tile_mode';
   static const _activeMapLayerSetting = 'active_map_layer';
   static const _vectorSourceSetting = 'vector_source_url';
   static const _snapRoutesSetting = 'snap_routes_to_trails';
+  static const _recordingMapFollowSetting = 'recording_map_follow';
+  static const _recordingMapOrientationSetting = 'recording_map_orientation';
   static const _navAlertConfigSetting = 'nav_alert_config';
   static const _offlineAreaOrderSetting = 'offline_area_order';
   static const _legacyTerrainCleanupSetting = 'legacy_terrain_cleanup_v1';
@@ -72,6 +80,10 @@ class AppStore extends ChangeNotifier {
   final GpxService _gpxService = const GpxService();
   final LocationService _locationService = const LocationService();
   final GeoDistance _distance = const GeoDistance();
+  final RouteGeometryCleaner _routeGeometryCleaner =
+      const RouteGeometryCleaner();
+  final ForwardRouteRecovery _forwardRouteRecovery =
+      const ForwardRouteRecovery();
   final NavigationMonitor _navMonitor = NavigationMonitor();
 
   List<TrailRoute> routes = [];
@@ -81,6 +93,8 @@ class AppStore extends ChangeNotifier {
   String activeMapLayerId = '';
   String vectorSourceUrl = '';
   bool snapRoutesToTrails = true;
+  bool recordingMapFollow = true;
+  MapOrientationMode recordingMapOrientation = MapOrientationMode.courseUp;
   bool publicRasterDevDownloadsUnlocked = false;
   String? previousAppVersion;
 
@@ -93,6 +107,7 @@ class AppStore extends ChangeNotifier {
   OfflineArea? focusedOfflineArea;
   RunActivity? activeActivity;
   LatLng? currentLocation;
+  double? currentCourseDegrees;
   bool loading = true;
   String? errorMessage;
 
@@ -178,6 +193,9 @@ class AppStore extends ChangeNotifier {
   Timer? _elapsedTimer;
   List<LatLng> _navRoute = const [];
   List<LatLng> _navJunctions = const [];
+  TrailNetwork _navTrailNetwork = const TrailNetwork([]);
+  ForwardRouteRecoveryResult? _activeForwardRecovery;
+  DateTime? _lastForwardRecoveryAttemptAt;
 
   static Future<AppStore> create() async {
     final repository = AppRepository(AppDatabase());
@@ -235,6 +253,7 @@ class AppStore extends ChangeNotifier {
     VectorAreaConversionService? vectorConverter,
     DownloadForegroundService? backgroundDownloads,
     NavigationAlertFeedback? navigationAlertFeedback,
+    RouteTrailBuilder? routeTrailBuilder,
     bool publicRasterDevUnlockCompiled = false,
   }) async {
     final store = AppStore._(
@@ -256,11 +275,13 @@ class AppStore extends ChangeNotifier {
             store: tileStore,
             config: mapProvider,
           ),
-      routeTrailBuilder: RouteTrailBuilder(
-        extractor: const TrailExtractor(
-          trailClasses: TrailExtractor.trailAndRoadClasses,
-        ),
-      ),
+      routeTrailBuilder:
+          routeTrailBuilder ??
+          RouteTrailBuilder(
+            extractor: const TrailExtractor(
+              trailClasses: TrailExtractor.trailAndRoadClasses,
+            ),
+          ),
       backgroundDownloads: backgroundDownloads ?? DownloadForegroundService(),
       navigationAlertFeedback:
           navigationAlertFeedback ?? NavigationAlertFeedback.silent(),
@@ -301,6 +322,19 @@ class AppStore extends ChangeNotifier {
           : mapProvider.vectorSourceUrl;
       final savedSnap = await repository.loadSetting(_snapRoutesSetting);
       snapRoutesToTrails = savedSnap == null ? true : savedSnap == 'true';
+      final savedRecordingMapFollow = await repository.loadSetting(
+        _recordingMapFollowSetting,
+      );
+      recordingMapFollow = savedRecordingMapFollow == null
+          ? true
+          : savedRecordingMapFollow == 'true';
+      final savedRecordingMapOrientation = await repository.loadSetting(
+        _recordingMapOrientationSetting,
+      );
+      recordingMapOrientation = MapOrientationMode.values.firstWhere(
+        (mode) => mode.name == savedRecordingMapOrientation,
+        orElse: () => MapOrientationMode.courseUp,
+      );
       final savedPublicRasterUnlock = await repository.loadSetting(
         _publicRasterDevUnlockSetting,
       );
@@ -395,11 +429,25 @@ class AppStore extends ChangeNotifier {
           points: route.points,
         );
       }
+      final importedGeometry = route.points
+          .map((point) => point.latLng)
+          .toList(growable: false);
+      final cleanedGeometry = _routeGeometryCleaner.clean(importedGeometry);
+      if (_geometryDiffers(importedGeometry, cleanedGeometry)) {
+        route = _withGeometry(
+          route,
+          cleanedGeometry,
+          updatedAt: route.updatedAt,
+        );
+      }
       await repository.saveRoute(route);
       routes = [route, ...routes];
       selectedRoute = route;
       errorMessage = null;
       notifyListeners();
+      if (snapRoutesToTrails && vectorSourceUrl.isNotEmpty) {
+        unawaited(_snapSavedRoute(route, reportErrors: false));
+      }
     } on GpxImportCancelled {
       return;
     } on Object catch (error) {
@@ -412,6 +460,7 @@ class AppStore extends ChangeNotifier {
       _setError('A route needs at least two map points.');
       return false;
     }
+    final cleanedPoints = _routeGeometryCleaner.clean(points);
     final trimmed = name.trim();
     final now = DateTime.now().toUtc();
     final route = TrailRoute(
@@ -420,7 +469,7 @@ class AppStore extends ChangeNotifier {
       source: RouteSource.manual,
       createdAt: now,
       updatedAt: now,
-      points: points
+      points: cleanedPoints
           .map(
             (point) => RoutePoint(
               latitude: point.latitude,
@@ -438,7 +487,7 @@ class AppStore extends ChangeNotifier {
       // Snapping to nearby trails needs the network, so it runs after the
       // route is saved and visible rather than blocking the save.
       if (snapRoutesToTrails && vectorSourceUrl.isNotEmpty) {
-        unawaited(_snapSavedRoute(route, points));
+        unawaited(_snapSavedRoute(route, reportErrors: false));
       }
       return true;
     } on Object catch (error) {
@@ -447,37 +496,77 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  Future<void> _snapSavedRoute(TrailRoute route, List<LatLng> points) async {
+  Future<RouteSnapOutcome> snapRouteToTrails(TrailRoute route) =>
+      _snapSavedRoute(route, reportErrors: true);
+
+  Future<RouteSnapOutcome> _snapSavedRoute(
+    TrailRoute route, {
+    required bool reportErrors,
+  }) async {
+    if (vectorSourceUrl.isEmpty) return RouteSnapOutcome.unavailable;
     try {
+      final original = route.points
+          .map((point) => point.latLng)
+          .toList(growable: false);
+      final cleaned = _routeGeometryCleaner.clean(original);
       final result = await routeTrailBuilder.snapToTrails(
-        points,
+        cleaned,
         vectorSourceUrl,
       );
-      if (!result.changed || result.snapped.length < 2) return;
-      final updated = TrailRoute(
-        id: route.id,
-        name: route.name,
-        source: route.source,
-        createdAt: route.createdAt,
-        updatedAt: DateTime.now().toUtc(),
-        points: result.snapped
-            .map(
-              (point) => RoutePoint(
-                latitude: point.latitude,
-                longitude: point.longitude,
-              ),
-            )
-            .toList(),
-      );
+      final geometry = _routeGeometryCleaner.clean(result.snapped);
+      if (geometry.length < 2 || !_geometryDiffers(original, geometry)) {
+        return RouteSnapOutcome.unchanged;
+      }
+      final updated = _withGeometry(route, geometry);
       await repository.saveRoute(updated);
       routes = routes
           .map((item) => item.id == updated.id ? updated : item)
           .toList();
       if (selectedRoute?.id == updated.id) selectedRoute = updated;
       notifyListeners();
-    } on Object {
-      // Best-effort: keep the drawn route if snapping fails.
+      return RouteSnapOutcome.updated;
+    } on Object catch (error) {
+      if (reportErrors) _setError('Could not snap route to trails: $error');
+      return RouteSnapOutcome.failed;
     }
+  }
+
+  TrailRoute _withGeometry(
+    TrailRoute route,
+    List<LatLng> geometry, {
+    DateTime? updatedAt,
+  }) => TrailRoute(
+    id: route.id,
+    name: route.name,
+    source: route.source,
+    createdAt: route.createdAt,
+    updatedAt: updatedAt ?? DateTime.now().toUtc(),
+    points: geometry
+        .map((point) {
+          final original = route.points
+              .where(
+                (candidate) =>
+                    _distance.metersBetween(candidate.latLng, point) <= 1,
+              )
+              .firstOrNull;
+          return RoutePoint(
+            latitude: point.latitude,
+            longitude: point.longitude,
+            elevation: original?.elevation,
+            recordedAt: original?.recordedAt,
+          );
+        })
+        .toList(growable: false),
+  );
+
+  bool _geometryDiffers(List<LatLng> original, List<LatLng> candidate) {
+    if (original.length != candidate.length) return true;
+    for (var index = 0; index < original.length; index++) {
+      if (_distance.metersBetween(original[index], candidate[index]) > 1) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Replaces an existing route's name and waypoints in place, keeping its id,
@@ -492,6 +581,7 @@ class AppStore extends ChangeNotifier {
       _setError('A route needs at least two map points.');
       return false;
     }
+    final cleanedPoints = _routeGeometryCleaner.clean(points);
     final trimmed = name.trim();
     final updated = TrailRoute(
       id: original.id,
@@ -499,7 +589,7 @@ class AppStore extends ChangeNotifier {
       source: original.source,
       createdAt: original.createdAt,
       updatedAt: DateTime.now().toUtc(),
-      points: points
+      points: cleanedPoints
           .map(
             (point) => RoutePoint(
               latitude: point.latitude,
@@ -517,7 +607,7 @@ class AppStore extends ChangeNotifier {
       errorMessage = null;
       notifyListeners();
       if (snapRoutesToTrails && vectorSourceUrl.isNotEmpty) {
-        unawaited(_snapSavedRoute(updated, points));
+        unawaited(_snapSavedRoute(updated, reportErrors: false));
       }
       return true;
     } on Object catch (error) {
@@ -665,6 +755,26 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  Future<void> setRecordingMapFollow(bool value) async {
+    try {
+      await repository.saveSetting(_recordingMapFollowSetting, '$value');
+      recordingMapFollow = value;
+      notifyListeners();
+    } on Object catch (error) {
+      _setError('Could not save map following: $error');
+    }
+  }
+
+  Future<void> setRecordingMapOrientation(MapOrientationMode mode) async {
+    try {
+      await repository.saveSetting(_recordingMapOrientationSetting, mode.name);
+      recordingMapOrientation = mode;
+      notifyListeners();
+    } on Object catch (error) {
+      _setError('Could not save map orientation: $error');
+    }
+  }
+
   /// Persists the live navigation alert configuration.
   Future<void> setNavAlertConfig(NavAlertConfig config) async {
     try {
@@ -706,6 +816,8 @@ class AppStore extends ChangeNotifier {
         offRoute: false,
         junctionDistanceMeters: effectiveConfig.junctionMeters,
         junctionTurn: TurnDirection.left,
+        junctionTurnDegrees: -90,
+        maneuverPhase: ManeuverPhase.advance,
         triggered: alert,
       ),
       NavAlert.progress => const NavStatus(
@@ -741,6 +853,7 @@ class AppStore extends ChangeNotifier {
       );
       await repository.createActivity(activity);
       activeActivity = activity;
+      currentCourseDegrees = null;
       activities = [activity, ...activities];
       _beginNavigation();
       _startLocationStream();
@@ -854,32 +967,44 @@ class AppStore extends ChangeNotifier {
     final route = selectedRoute;
     _navRoute = route == null
         ? const []
-        : route.points.map((point) => point.latLng).toList(growable: false);
+        : _routeGeometryCleaner.clean(
+            route.points.map((point) => point.latLng).toList(growable: false),
+          );
     _navJunctions = const [];
-    if (route != null &&
-        _navRoute.length >= 2 &&
-        vectorSourceUrl.isNotEmpty &&
-        navAlertConfig.junctionEnabled) {
-      unawaited(_loadJunctions(_navRoute));
+    _navTrailNetwork = const TrailNetwork([]);
+    _activeForwardRecovery = null;
+    _lastForwardRecoveryAttemptAt = null;
+    if (route != null && _navRoute.length >= 2 && vectorSourceUrl.isNotEmpty) {
+      unawaited(_loadNavigationNetwork(_navRoute));
     }
   }
 
-  Future<void> _loadJunctions(List<LatLng> route) async {
+  Future<void> _loadNavigationNetwork(List<LatLng> route) async {
     try {
       final network = await routeTrailBuilder.buildNetwork(
         route,
         vectorSourceUrl,
       );
-      _navJunctions = network.junctions();
+      if (!listEquals(route, _navRoute)) return;
+      _navTrailNetwork = network;
+      _activeForwardRecovery = null;
+      _lastForwardRecoveryAttemptAt = null;
+      _navJunctions = navAlertConfig.junctionEnabled
+          ? network.junctions()
+          : const [];
     } on Object {
-      // Junction alerts are best-effort; ignore fetch/parse failures.
+      // Network navigation is best-effort; the planned route remains visible.
     }
   }
 
   void _endNavigation() {
     _navRoute = const [];
     _navJunctions = const [];
+    _navTrailNetwork = const TrailNetwork([]);
+    _activeForwardRecovery = null;
+    _lastForwardRecoveryAttemptAt = null;
     navStatus = NavStatus.idle;
+    currentCourseDegrees = null;
     _navMonitor.reset();
   }
 
@@ -889,7 +1014,7 @@ class AppStore extends ChangeNotifier {
     required DateTime timestamp,
   }) {
     if (_navRoute.length < 2) return;
-    navStatus = _navMonitor.update(
+    var updatedStatus = _navMonitor.update(
       position,
       route: _navRoute,
       junctions: _navJunctions,
@@ -897,6 +1022,40 @@ class AppStore extends ChangeNotifier {
       timestamp: timestamp,
       elapsed: activeActivity?.elapsed ?? Duration.zero,
     );
+    if (!updatedStatus.offRoute) {
+      _activeForwardRecovery = null;
+      _lastForwardRecoveryAttemptAt = null;
+    } else if (headingDegrees != null && !_navTrailNetwork.isEmpty) {
+      final sinceLastAttempt = _lastForwardRecoveryAttemptAt == null
+          ? null
+          : timestamp.difference(_lastForwardRecoveryAttemptAt!);
+      final recoveryDue =
+          updatedStatus.triggered == NavAlert.offRoute ||
+          updatedStatus.triggered == NavAlert.offRouteReminder ||
+          (_activeForwardRecovery == null &&
+              (sinceLastAttempt == null ||
+                  sinceLastAttempt >= const Duration(seconds: 5)));
+      if (recoveryDue) {
+        _lastForwardRecoveryAttemptAt = timestamp;
+        _activeForwardRecovery = _forwardRouteRecovery.recover(
+          position: position,
+          headingDegrees: headingDegrees,
+          plannedRoute: _navRoute,
+          completedRouteMeters: updatedStatus.routeCompletedMeters ?? 0,
+          network: _navTrailNetwork,
+        );
+      }
+    }
+    final recovery = _activeForwardRecovery;
+    if (updatedStatus.offRoute && recovery != null) {
+      updatedStatus = updatedStatus.withForwardRecovery(
+        path: recovery.path,
+        distanceMeters: recovery.pathDistanceMeters,
+        bearingDegrees: recovery.initialBearingDegrees,
+        reconnectPoint: recovery.reconnectPoint,
+      );
+    }
+    navStatus = updatedStatus;
     if (navStatus.triggered != NavAlert.none) {
       unawaited(
         _navigationAlertFeedback.notify(
@@ -967,6 +1126,7 @@ class AppStore extends ChangeNotifier {
         : previous != null && addedDistance >= 5
         ? _distance.bearingDegrees(previous.latLng, sample.latLng)
         : null;
+    if (movingCourse != null) currentCourseDegrees = movingCourse;
     _updateNavigation(
       sample.latLng,
       headingDegrees: movingCourse,
