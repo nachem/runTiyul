@@ -23,6 +23,11 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 As of 2026-09-22:
 
+- v1.4.3 separates manual **Center view (keep zoom)** from explicit **Fit route
+  and content (adjust zoom)**. Center view preserves both scale and rotation;
+  empty content is a no-op. Keep automatic route previews fitting as before,
+  and keep all toolbar camera actions guarded against delayed startup GPS.
+  All 28 focused map/control and 312 local full-suite tests passed.
 - v1.4.2 fixes the remaining recenter race: toolbar zoom/recenter now invalidate
   pending startup GPS camera placement before it can force z15. Recenter uses
   the latest live zoom after its fix arrives. Preserve the non-default
@@ -79,21 +84,22 @@ As of 2026-09-22:
   default and do not infer provider permission for ordinary builds.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
-  Push CI run `35745309481` passed format, analyze, and tests; CodeQL run
-  `35745308024` passed; Pages run `30808751792` passed. `v1.4.2` exercised
+  Push CI run `35750005333` passed format, analyze, and tests; CodeQL run
+  `35750004979` passed; Pages run `30808751792` passed. `v1.4.3` exercised
   the release checksums and both provenance attestations. PR dependency review
   has not been exercised yet.
 - Contribution, conduct, support, privacy, and security policies plus issue/PR
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.4.2+12` is published from `11c83fc` on `main` with the focused recenter
-  correction. The committed snapshot retained all provider guards/tests while
-  unrelated local download edits were left untouched. Full hosted formatting,
-  analysis, tests, and CodeQL passed. Workflow `35745585108`, public hashes and
-  sizes, latest download URLs, APK identity/signature, and APK+IPA provenance
-  checks passed on 2026-09-22. The tag is immutable; documentation evidence
-  updates must not move it. Device testing remains pending.
+- `v1.4.3+13` is published from `f32b565` on `main` with center-view zoom
+  preservation and separate Fit. Earlier committed download-editor changes in
+  `c55f53c` were retained; only an empty test file and unused local were removed
+  to unblock validation. Full hosted formatting, analysis, tests, and CodeQL
+  passed. Workflow `35750301499`, public hashes and sizes, latest download URLs,
+  APK identity/signature, and APK+IPA provenance checks passed on 2026-09-22.
+  The tag is immutable; documentation evidence updates must not move it.
+  Device testing remains pending.
 - Monotonic route-progress announcements and directional off-route route-finder
   alerts are implemented and unit/widget-tested. `v1.4.0+10` adds strict
   connected mapped-way recovery ahead, exact-angle advance/apex and consecutive

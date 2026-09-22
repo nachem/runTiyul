@@ -30,7 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| [v1.4.3](releases/v1.4.3.md) | 2026-09-22 | Publication in preparation | Center view preserves manual zoom and orientation; a distinct Fit route and content action intentionally adjusts zoom. |
+| [v1.4.3](releases/v1.4.3.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.3) | Center view preserves manual zoom and orientation; a distinct Fit route and content action intentionally adjusts zoom. |
 | [v1.4.2](releases/v1.4.2.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.2) | Prevents a delayed startup GPS fix from resetting toolbar zoom or current-location recenter; preserves zoom changes while GPS is pending. |
 | [v1.4.1](releases/v1.4.1.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.1) | Delayed-GPS resilience, zoom-preserving recenter, recording Follow/rotation fixes, raster pacing/cooldowns, and route/map hardening. |
 | [v1.4.0](releases/v1.4.0.md) | 2026-08-20 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.0) | Adds forward mapped-trail recovery, precise two-phase maneuver guidance, route cleanup/snapping, correct Back history, and recording map tracking. |
