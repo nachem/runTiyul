@@ -46,7 +46,7 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
-### 2026-09-22 recenter zoom regression (unreleased)
+### 2026-09-22 recenter zoom regression (released in v1.4.2)
 
 - **MAP-008:** reproduced a remaining v1.4.1 race in `TrailMap`: the recenter
   callback preserved zoom, but an older startup `_locateAndCenter` request
@@ -71,9 +71,14 @@ Flutter runner reported 305 passed. Changed Dart files were formatted and
 test/features/routes/route_map_regression_test.dart` passed. Full-project
 `flutter analyze --no-pub` reported an unrelated `unused_local_variable` warning
 for `active` in the concurrently edited offline-download screen; that user edit
-was left intact. `flutter devices` listed only Windows and web targets. No
-mobile smoke test, APK build, commit, or release of this correction occurred;
-the published v1.4.1 remains unchanged.
+was left intact and excluded from the release, along with an unrelated local
+test deletion. `flutter devices` listed only Windows and web targets.
+
+The committed hotfix `11c83fc` subsequently passed full hosted formatting,
+analysis, tests, and CodeQL, then published as [v1.4.2+12](releases/v1.4.2.md).
+Both platform builds and independent public artifact verification passed.
+The v1.4.1 tag remains unchanged; no physical-device smoke test or installation
+was performed for this correction.
 
 ### 2026-09-22 battery-saver GPS and camera hardening
 
@@ -654,11 +659,12 @@ limits, and production licensing still require independent verification.
 
 ## 9. Automated validation
 
-Latest local code and hosted `v1.4.1` release validation completed on 2026-09-22.
+Latest local code and hosted `v1.4.2` release validation completed on 2026-09-22.
 Earlier dated entries below remain historical evidence:
 
 | Command | Result |
 | --- | --- |
+| Public `v1.4.2+12` recenter hotfix (2026-09-22) | Tagged commit `11c83fc` is pushed to `main`. CI `35745309481` passed formatting, clean analysis, and the complete committed-source test suite; CodeQL `35745308024` passed. [Release run 35745585108](https://github.com/nachem/runTiyul/actions/runs/35745585108) passed signed Android identity/build, unsigned iOS packaging, checksums, provenance, and publication. Independent APK (62,741,224 bytes) and IPA (16,035,861 bytes) downloads match public hashes, both tagged-workflow/source-commit attestations verify, and latest URLs return HTTP 200 with matching sizes. Android SDK inspection confirms the permanent certificate and `1.4.2+12`; hashes are in the [release notes](releases/v1.4.2.md). Unrelated local download edits were excluded and left untouched. No physical-device validation occurred. |
 | Public `v1.4.1+11` release (2026-09-22) | Tagged commit `fcf721f` is committed and pushed to `main`. [Release run 35740728459](https://github.com/nachem/runTiyul/actions/runs/35740728459) passed metadata, permanent-signed Android build/identity, unsigned iOS packaging, checksums, provenance, and publication. Independently downloaded APK (62,741,220 bytes) and IPA (16,035,792 bytes) match both published checksums and GitHub digests. Public APK identity/signature and both tagged-workflow/source-commit attestations verify; both stable latest URLs return HTTP 200. Hashes are recorded in the [release notes](releases/v1.4.1.md). No physical-device installation, background/Battery Saver test, or iOS runtime test was performed. |
 | Raster pacing and cooldown hardening (2026-09-22) | All 305 tests passed in the full VS Code Flutter runner after changed Dart files were formatted; `flutter analyze --no-pub` passed with no issues. Fake HTTP verifies shared `Retry-After`, persisted deadlines, interruptible waits, bounded retry, cache reuse, unchanged permission gates, and foreground-resume protection. No live provider requests or device validation occurred for this change. |
 | Local signed `1.4.1+11` build (2026-09-22) | All 303 tests passed; the read-only Dart format check covered 102 files with no changes, and `flutter analyze --no-pub` passed. `flutter build apk --release --no-pub` succeeded; Android SDK `apksigner` and `aapt` verified the permanent certificate, application ID, and version `1.4.1+11`. The APK is 62,724,952 bytes; checksum and local path are in the [release notes](releases/v1.4.1.md). No commit/tag/push, publication, device install, or iOS build occurred. The existing `flutter_tts` Kotlin warning remains non-fatal. |
@@ -671,8 +677,8 @@ Earlier dated entries below remain historical evidence:
 | VS Code Flutter test runner (full suite) | Passed all 173 tests on 2026-09-04. |
 | GitHub configuration and documentation checks | Seven YAML files parsed; checksum-verified `actionlint` 1.7.12 passed; issue-form labels and private-reporting availability were verified; all external Actions use immutable SHAs; Flutter 3.44.6, non-persisted checkout credentials, checksums, and provenance steps are present; every local Markdown file target resolves. |
 | GitHub repository security settings | Authenticated API checks confirmed private vulnerability reporting, Dependabot alerts/security updates, secret scanning, and secret push protection enabled. There are zero open Dependabot alerts and zero open secret-scanning alerts; the dependency graph inventories 161 packages and can return an SPDX SBOM. No branch protection or ruleset exists. |
-| GitHub Actions `Continuous integration` | Run [`35740358839`](https://github.com/nachem/runTiyul/actions/runs/35740358839) passed setup, dependency install, format, analyze, and tests for release commit `fcf721f` on 2026-09-22. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
-| GitHub Actions CodeQL | Run [`35740358543`](https://github.com/nachem/runTiyul/actions/runs/35740358543) passed for release commit `fcf721f` on 2026-09-22. |
+| GitHub Actions `Continuous integration` | Run [`35745309481`](https://github.com/nachem/runTiyul/actions/runs/35745309481) passed setup, dependency install, format, analyze, and the complete test suite for release commit `11c83fc` on 2026-09-22. The dependency-review job correctly skipped on a push and still requires pull-request verification. |
+| GitHub Actions CodeQL | Run [`35745308024`](https://github.com/nachem/runTiyul/actions/runs/35745308024) passed for release commit `11c83fc` on 2026-09-22. |
 | GitHub Actions `Deploy website` | Run [`30808751792`](https://github.com/nachem/runTiyul/actions/runs/30808751792) passed for commit `87290ca` on 2026-08-03. |
 | `flutter build apk --debug --no-pub` | Passed for `1.4.0+10`; Android SDK inspection reports package `com.bernoulli.trailrunner.trail_runner`, `versionName=1.4.0`, `versionCode=10`, and label `RunTiyul`. The 166,344,270-byte local debug APK SHA-256 is `e4a076f89c8b6d221ce947620c58e1ae71d841dd86446f030aa158fdbcb2f4aa`. |
 | Map-source regression validation (2026-09-04) | `flutter test test/persistence_test.dart test/app_shell_test.dart test/features/map/tmp_offline_preview_repro_test.dart` passed all 15 focused tests. The subsequent full VS Code Flutter test run passed all 173 tests, including restart and deletion regressions proving that downloaded-area preview does not persist Offline mode. `flutter analyze --no-pub` passed with no issues. No emulator or mobile device was connected. During diagnosis, a direct OSM Standard tile request returned HTTP 200 while the configured CyclOSM `a` endpoint returned HTTP 504; independent requests to CyclOSM `a`, `b`, and `c` endpoints returned HTTP 502, confirming a simultaneous upstream CyclOSM outage rather than loss of local map data. |

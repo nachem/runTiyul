@@ -23,6 +23,12 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 As of 2026-09-22:
 
+- v1.4.2 fixes the remaining recenter race: toolbar zoom/recenter now invalidate
+  pending startup GPS camera placement before it can force z15. Recenter uses
+  the latest live zoom after its fix arrives. Preserve the non-default
+  fractional-zoom and both-completion-order regressions; testing only at z15
+  hides the failure. All 13 focused camera tests and committed-source hosted CI
+  passed; field verification remains pending.
 - Battery-saver GPS hardening accepts plausible delayed fixes with a
   time-scaled jump limit, starts a zero-distance segment after five-minute
   outages, and durably pauses on stream failure. Recording map Follow survives
@@ -73,18 +79,19 @@ As of 2026-09-22:
   default and do not infer provider permission for ordinary builds.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
-  Push CI run `35740358839` passed format, analyze, and tests; CodeQL run
-  `35740358543` passed; Pages run `30808751792` passed. `v1.4.1` exercised
+  Push CI run `35745309481` passed format, analyze, and tests; CodeQL run
+  `35745308024` passed; Pages run `30808751792` passed. `v1.4.2` exercised
   the release checksums and both provenance attestations. PR dependency review
   has not been exercised yet.
 - Contribution, conduct, support, privacy, and security policies plus issue/PR
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.4.1+11` is published from `fcf721f` on `main` with delayed-GPS and camera
-  fixes, raster pacing/cooldowns, and route/map hardening. All 305 local tests,
-  formatting, and analysis passed. Workflow `35740728459`, public asset hashes
-  and sizes, stable download URLs, APK identity/signature, and APK+IPA provenance
+- `v1.4.2+12` is published from `11c83fc` on `main` with the focused recenter
+  correction. The committed snapshot retained all provider guards/tests while
+  unrelated local download edits were left untouched. Full hosted formatting,
+  analysis, tests, and CodeQL passed. Workflow `35745585108`, public hashes and
+  sizes, latest download URLs, APK identity/signature, and APK+IPA provenance
   checks passed on 2026-09-22. The tag is immutable; documentation evidence
   updates must not move it. Device testing remains pending.
 - Monotonic route-progress announcements and directional off-route route-finder
