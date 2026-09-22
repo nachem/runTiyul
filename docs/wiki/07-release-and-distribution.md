@@ -38,6 +38,15 @@ tagged release workflow, exact source commit, and GitHub-hosted runner policy.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
 `versionName=1.4.2`, `versionCode=12`, and the pinned permanent certificate.
 
+### 1.4.3 center-view release preparation
+
+[v1.4.3+13](releases/v1.4.3.md) is being prepared on 2026-09-22. The release
+changes the center-to-view icon to preserve zoom and adds a separate explicit
+zoom-to-fit control. Only the shared map widget, related tests, release metadata,
+and wiki changes belong to this release; unrelated local edits and the private
+backup remain excluded. All 28 focused map/control tests passed. Committed-source
+CI, platform builds, publication, and independent artifact checks are pending.
+
 ### 1.4.2 recenter hotfix publication
 
 Publication of [v1.4.2+12](releases/v1.4.2.md) completed on 2026-09-22 for

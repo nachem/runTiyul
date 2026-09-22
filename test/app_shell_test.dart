@@ -64,6 +64,7 @@ void main() {
   ) async {
     var zoomedIn = false;
     var zoomedOut = false;
+    var centered = false;
     var fitted = false;
     var located = false;
     MapTileMode? selectedMode;
@@ -83,6 +84,7 @@ void main() {
               onModeSelected: (mode) => selectedMode = mode,
               onZoomIn: () => zoomedIn = true,
               onZoomOut: () => zoomedOut = true,
+              onCenterContent: () => centered = true,
               onFitContent: () => fitted = true,
               onCurrentLocation: () => located = true,
             ),
@@ -93,7 +95,10 @@ void main() {
 
     await tester.tap(find.byTooltip('Zoom in'));
     await tester.tap(find.byTooltip('Zoom out'));
-    await tester.tap(find.byTooltip('Fit current location and checkpoints'));
+    await tester.tap(find.byTooltip('Center view (keep zoom)'));
+    expect(centered, isTrue);
+    expect(fitted, isFalse);
+    await tester.tap(find.byTooltip('Fit route and content (adjust zoom)'));
     await tester.tap(find.byTooltip('Center on current location'));
     expect((zoomedIn, zoomedOut, fitted, located), (true, true, true, true));
 

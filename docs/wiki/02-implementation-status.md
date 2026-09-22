@@ -46,6 +46,29 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
+### 2026-09-22 center-view control separation (v1.4.3 preparation)
+
+- **MAP-008:** the existing center-focus icon now invokes a distinct center-only
+  action, labeled **Center view (keep zoom)**. It moves to the bounds center of
+  the route, track, checkpoints, selection, and known location while preserving
+  live zoom and rotation. Empty content leaves the camera unchanged.
+- **Fit route and content (adjust zoom)** is a separate `zoom_out_map` action.
+  Explicit Fit and automatic route/area previews retain the existing fitting
+  behavior; GPS recenter remains zoom-preserving. Both toolbar actions cancel
+  any delayed startup camera placement.
+- Before the change, widget tests reproduced center-view changing z17.25 to
+  z15 for a single location and z16 for a route. The new implementation passes
+  both cases, including course-up orientation. Tests also cover selected-area
+  centering, independent control callbacks, explicit and automatic route fit,
+  and empty-content startup races.
+
+Validation on 2026-09-22: all 28 focused map/control tests passed; the full
+VS Code runner reported 312 passes. Changed Dart files were formatted. Local
+whole-workspace formatting/analysis encountered separate download-test and
+download-screen edits; these are outside the release scope and left untouched.
+The committed source must pass hosted CI before tagging. No physical-device
+validation or public v1.4.3 artifact verification has occurred yet.
+
 ### 2026-09-22 recenter zoom regression (released in v1.4.2)
 
 - **MAP-008:** reproduced a remaining v1.4.1 race in `TrailMap`: the recenter

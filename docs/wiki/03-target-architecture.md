@@ -315,8 +315,14 @@ changing orientation. Pinch/double-tap zoom and rotation retain following; all
 tracking and explicit current-location recenter moves preserve the live camera
 zoom so the runner controls map scale.
 
+Manual **Center view (keep zoom)** uses the same content-point collection as
+fitting but only moves to its bounds center at the live zoom, without rotating.
+Empty content is a no-op. Explicit **Fit route and content (adjust zoom)** uses
+the existing camera-fit rules, separately from both centering actions and from
+automatic route/area previews.
+
 Startup location centering must yield to explicit map interaction. Both map
-gestures and toolbar zoom/recenter invalidate the pending startup camera move;
+gestures and toolbar zoom/center/fit invalidate the pending startup camera move;
 recenter invalidates it before awaiting GPS. Its eventual move reads the live
 zoom, retaining any further zoom adjustment made while the fix is pending.
 

@@ -519,7 +519,7 @@ class _TrailMapState extends State<TrailMap> {
     );
   }
 
-  void _fitContent({bool includeLocation = true}) {
+  List<LatLng> _contentPoints({bool includeLocation = true}) {
     final points = <LatLng>[
       ..._routePoints,
       ...widget.track,
@@ -534,6 +534,21 @@ class _TrailMapState extends State<TrailMap> {
         LatLng(selection.south, selection.east),
       ]);
     }
+    return points;
+  }
+
+  void _centerContent() {
+    _userInteracted = true;
+    final points = _contentPoints();
+    if (points.isEmpty) return;
+    _controller.move(
+      LatLngBounds.fromPoints(points).center,
+      _controller.camera.zoom,
+    );
+  }
+
+  void _fitContent({bool includeLocation = true}) {
+    final points = _contentPoints(includeLocation: includeLocation);
 
     // In offline mode the map only has saved tiles within the downloaded zoom
     // range, so fitting to a zoom below that range leaves the camera on a blank
@@ -973,7 +988,11 @@ class _TrailMapState extends State<TrailMap> {
                   onModeSelected: (mode) => unawaited(_selectTileMode(mode)),
                   onZoomIn: _cameraZoom >= 19 ? null : () => _zoomBy(1),
                   onZoomOut: _cameraZoom <= 1 ? null : () => _zoomBy(-1),
-                  onFitContent: _fitContent,
+                  onCenterContent: _centerContent,
+                  onFitContent: () {
+                    _userInteracted = true;
+                    _fitContent();
+                  },
                   onCurrentLocation: _centerOnCurrentLocation,
                   followingCurrentLocation: widget.followCurrentLocation,
                   orientationMode: widget.orientationMode,
@@ -1034,6 +1053,7 @@ class TrailMapControls extends StatelessWidget {
     required this.onModeSelected,
     required this.onZoomIn,
     required this.onZoomOut,
+    this.onCenterContent,
     required this.onFitContent,
     required this.onCurrentLocation,
     this.followingCurrentLocation,
@@ -1054,6 +1074,7 @@ class TrailMapControls extends StatelessWidget {
   final ValueChanged<MapTileMode> onModeSelected;
   final VoidCallback? onZoomIn;
   final VoidCallback? onZoomOut;
+  final VoidCallback? onCenterContent;
   final VoidCallback onFitContent;
   final VoidCallback onCurrentLocation;
   final bool? followingCurrentLocation;
@@ -1193,15 +1214,21 @@ class TrailMapControls extends StatelessWidget {
               icon: const Icon(Icons.polyline_outlined),
               selectedIcon: const Icon(Icons.polyline),
             ),
-          IconButton(
-            onPressed: onFitContent,
-            tooltip: 'Fit current location and checkpoints',
-            icon: const Icon(Icons.center_focus_strong),
-          ),
+          if (onCenterContent != null)
+            IconButton(
+              onPressed: onCenterContent,
+              tooltip: 'Center view (keep zoom)',
+              icon: const Icon(Icons.center_focus_strong),
+            ),
           IconButton(
             onPressed: onCurrentLocation,
             tooltip: 'Center on current location',
             icon: const Icon(Icons.my_location),
+          ),
+          IconButton(
+            onPressed: onFitContent,
+            tooltip: 'Fit route and content (adjust zoom)',
+            icon: const Icon(Icons.zoom_out_map),
           ),
           if (followingCurrentLocation != null &&
               onFollowCurrentLocationChanged != null) ...[

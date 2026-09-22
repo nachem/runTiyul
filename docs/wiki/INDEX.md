@@ -50,6 +50,7 @@ instructions are mandatory for all future agents.
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
+| Next release | [v1.4.3+13](releases/v1.4.3.md) preparation: Center view now preserves zoom and orientation, with separate explicit Fit. All 28 focused map/control tests pass; clean committed-source CI and public artifact checks are pending. Unrelated local edits are excluded. |
 | Latest published release | [v1.4.2+12](releases/v1.4.2.md) published 2026-09-22 from `11c83fc` on `main`, after hosted CI and CodeQL passed. Public APK/IPA checksums, Android identity/certificate, tagged-workflow provenance, and stable latest URLs verify. Unrelated local download edits were excluded and left intact; device testing remains pending. |
 | Release workflow | [Run 35745585108](https://github.com/nachem/runTiyul/actions/runs/35745585108) passed metadata, Android permanent-signature/identity verification, unsigned iOS build, checksums, APK+IPA provenance, and publication for `v1.4.2`; `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | `v1.4.2` retains the `v1.2.2` permanent certificate and increases `versionCode` to 12. On 2026-09-04, a locally rebuilt, matching-signed `1.4.0+10` APK replaced the installed `1.4.0+10` app on a Pixel 10 with `pm install -r`; Android preserved the original install timestamp and recorded a new update timestamp. A true cross-version upgrade and manual inspection of retained routes/maps remain unverified. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
@@ -77,7 +78,8 @@ vector/terrain requests. See the
 
 Camera verification gate: v1.4.2 includes the tested MAP-008 delayed-startup
 correction. Verify toolbar zoom/recenter with slow GPS on a phone; v1.4.1 does
-not contain that correction.
+not contain that correction. The separate center-view zoom-preservation change
+is prepared for v1.4.3 and must not be attributed to the v1.4.2 APK.
 
 Routing verification gate: on a physical device, compare vector overlays with
 the problematic raster routes, test sparse-control edits/save/reload, and check

@@ -332,6 +332,114 @@ void main() {
     expect(map.orientationMode, MapOrientationMode.courseUp);
   });
 
+  for (final showRoute in [false, true]) {
+    testWidgets(
+      'MAP-008 center view keeps zoom with ${showRoute ? 'a route' : 'location only'}',
+      (tester) async {
+        store.currentLocation = const LatLng(31.8, 35.205);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TrailMap(
+                store: store,
+                route: showRoute ? _route('view', 31.8) : null,
+                initialCenter: const LatLng(31.7, 35.1),
+                initialZoom: 17.25,
+                showControls: true,
+                followCurrentLocation: false,
+                orientationMode: MapOrientationMode.courseUp,
+                courseDegrees: 90,
+                onFollowCurrentLocationChanged: (_) {},
+                onOrientationModeChanged: (_) {},
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.tap(
+          find.widgetWithIcon(IconButton, Icons.center_focus_strong),
+        );
+        await tester.pumpAndSettle();
+        final camera = MapCamera.of(
+          tester.element(find.byType(RichAttributionWidget)),
+        );
+        expect(camera.zoom, 17.25);
+        expect(camera.rotation, closeTo(270, 0.001));
+        expect(camera.center.latitude, closeTo(31.8, 0.000001));
+        expect(camera.center.longitude, closeTo(35.205, 0.000001));
+      },
+    );
+  }
+
+  for (final autoFit in [false, true]) {
+    testWidgets(
+      'MAP-008 ${autoFit ? 'automatic preview' : 'explicit Fit'} still frames the route',
+      (tester) async {
+        final route = _route('fit', 31.8);
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TrailMap(
+                store: store,
+                route: route,
+                initialCenter: const LatLng(31.7, 35.1),
+                initialZoom: 17.25,
+                autoFit: autoFit,
+                showControls: true,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        if (!autoFit) {
+          await tester.tap(
+            find.byTooltip('Fit route and content (adjust zoom)'),
+          );
+        }
+        await tester.pumpAndSettle();
+        final camera = MapCamera.of(
+          tester.element(find.byType(RichAttributionWidget)),
+        );
+        expect(camera.zoom, lessThan(17.25));
+        for (final point in route.points) {
+          expect(camera.visibleBounds.contains(point.latLng), isTrue);
+        }
+      },
+    );
+  }
+
+  testWidgets('MAP-008 center view preserves zoom for a selected area', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TrailMap(
+            store: store,
+            selection: const GeoBounds(
+              north: 31.81,
+              south: 31.8,
+              east: 35.22,
+              west: 35.2,
+            ),
+            initialCenter: const LatLng(31.7, 35.1),
+            initialZoom: 17.25,
+            showControls: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Center view (keep zoom)'));
+    await tester.pumpAndSettle();
+    final camera = MapCamera.of(
+      tester.element(find.byType(RichAttributionWidget)),
+    );
+    expect(camera.zoom, 17.25);
+    expect(camera.center.latitude, closeTo(31.805, 0.000001));
+    expect(camera.center.longitude, closeTo(35.21, 0.000001));
+  });
+
   testWidgets('NAV-005 course-up and GPS recenter preserve the manual zoom', (
     tester,
   ) async {
@@ -411,7 +519,12 @@ void main() {
     );
   }
 
-  for (final control in ['Zoom in', 'Zoom out']) {
+  for (final control in [
+    'Zoom in',
+    'Zoom out',
+    'Center view (keep zoom)',
+    'Fit route and content (adjust zoom)',
+  ]) {
     testWidgets('MAP-008 $control cancels pending startup centering', (
       tester,
     ) async {
@@ -419,7 +532,11 @@ void main() {
       MapCamera camera() =>
           MapCamera.of(tester.element(find.byType(RichAttributionWidget)));
       final center = camera().center;
-      final expectedZoom = control == 'Zoom in' ? 17.25 : 15.25;
+      final expectedZoom = switch (control) {
+        'Zoom in' => 17.25,
+        'Zoom out' => 15.25,
+        _ => 16.25,
+      };
       await tester.tap(find.byTooltip(control));
       await tester.pump();
       expect(camera().zoom, expectedZoom);
