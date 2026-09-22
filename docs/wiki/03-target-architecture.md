@@ -315,6 +315,11 @@ changing orientation. Pinch/double-tap zoom and rotation retain following; all
 tracking and explicit current-location recenter moves preserve the live camera
 zoom so the runner controls map scale.
 
+Startup location centering must yield to explicit map interaction. Both map
+gestures and toolbar zoom/recenter invalidate the pending startup camera move;
+recenter invalidates it before awaiting GPS. Its eventual move reads the live
+zoom, retaining any further zoom adjustment made while the fix is pending.
+
 ## 8. Metric calculation boundaries
 
 - Distance: geodesic distance between accepted sequential points.

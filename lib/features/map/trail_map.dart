@@ -133,8 +133,8 @@ class _TrailMapState extends State<TrailMap> {
   /// Whether saved trails/routes are drawn on the map (toggled from controls).
   bool _showTrails = true;
 
-  /// True once the user pans or pinches the map, so the initial auto-center on
-  /// the current location never overrides a deliberate interaction.
+  /// True after a gesture or camera-control action, so initial auto-centering
+  /// never overrides the user's chosen view.
   bool _userInteracted = false;
 
   LatLng get _defaultCenter =>
@@ -447,6 +447,7 @@ class _TrailMapState extends State<TrailMap> {
   }
 
   void _zoomBy(double delta) {
+    _userInteracted = true;
     // Offline mode uses the same zoom range as online: zooming out is not
     // capped at the downloaded minimum, and zooming in overzooms the deepest
     // saved tiles instead of going blank past the downloaded maximum.
@@ -457,6 +458,7 @@ class _TrailMapState extends State<TrailMap> {
   }
 
   Future<void> _centerOnCurrentLocation() async {
+    _userInteracted = true;
     await widget.store.locate();
     if (!mounted) return;
     final location = widget.store.currentLocation;

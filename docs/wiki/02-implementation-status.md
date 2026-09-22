@@ -46,6 +46,35 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
+### 2026-09-22 recenter zoom regression (unreleased)
+
+- **MAP-008:** reproduced a remaining v1.4.1 race in `TrailMap`: the recenter
+  callback preserved zoom, but an older startup `_locateAndCenter` request
+  could finish afterward and force z15. Only map gestures set the interaction
+  guard; toolbar zoom and recenter did not. A delayed-GPS widget regression
+  failed with expected z17.25, actual z15 before the fix.
+- Toolbar zoom now cancels pending initial camera placement immediately.
+  Recenter does the same before awaiting its GPS fix and still uses the latest
+  live zoom when that fix arrives. It therefore also preserves zoom adjustments
+  made while the request is pending. Untouched startup neighborhood centering
+  remains unchanged.
+- The earlier course-up/recenter test zoomed from z14 to z15, accidentally
+  matching the reset value. It now uses z16.25 to z17.25. Five added cases cover
+  both startup/recenter response orders, each zoom button independently, and
+  untouched startup, using deferred fixes and real store-driven map rebuilds
+  in Offline mode.
+
+Validation on 2026-09-22: all 13 tests in
+`test/features/routes/route_map_regression_test.dart` passed; the full VS Code
+Flutter runner reported 305 passed. Changed Dart files were formatted and
+`flutter analyze --no-pub lib/features/map/trail_map.dart
+test/features/routes/route_map_regression_test.dart` passed. Full-project
+`flutter analyze --no-pub` reported an unrelated `unused_local_variable` warning
+for `active` in the concurrently edited offline-download screen; that user edit
+was left intact. `flutter devices` listed only Windows and web targets. No
+mobile smoke test, APK build, commit, or release of this correction occurred;
+the published v1.4.1 remains unchanged.
+
 ### 2026-09-22 battery-saver GPS and camera hardening
 
 - **ACT-004:** sample jump validation now scales its plausible distance with

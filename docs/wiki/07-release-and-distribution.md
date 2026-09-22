@@ -38,6 +38,16 @@ tagged release workflow, exact source commit, and GitHub-hosted runner policy.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
 `versionName=1.4.1`, `versionCode=11`, and the pinned permanent certificate.
 
+### 1.4.2 recenter hotfix preparation
+
+Publication of [v1.4.2+12](releases/v1.4.2.md) was requested on 2026-09-22 for
+the delayed-startup recenter zoom regression. The release includes only the
+camera fix, its regression tests, version metadata, and wiki updates. Separate
+uncommitted download-screen/test edits and the private backup remain local.
+The committed snapshot retains download permission checks and the full test
+suite; hosted CI must pass before tagging. Platform builds and public artifact
+verification are pending. The latest published version remains v1.4.1.
+
 ### Local 1.4.1 build
 
 On 2026-09-22 the workspace version was advanced to `1.4.1+11` with

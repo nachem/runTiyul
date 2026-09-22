@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -60,6 +61,17 @@ class _CurrentLocationService extends LocationService {
   );
 }
 
+class _DeferredLocationService extends LocationService {
+  final requests = <Completer<Position>>[];
+
+  @override
+  Future<Position> current() {
+    final request = Completer<Position>();
+    requests.add(request);
+    return request.future;
+  }
+}
+
 const _provider = MapProviderConfig(
   id: 'test',
   urlTemplate: 'https://example.invalid/{z}/{x}/{y}.png',
@@ -113,6 +125,40 @@ void main() {
     await database.close();
     await tileDirectory.delete(recursive: true);
   });
+
+  Future<_DeferredLocationService> pumpPendingLocationMap(
+    WidgetTester tester, {
+    double? initialZoom = 16.25,
+  }) async {
+    final locations = _DeferredLocationService();
+    final pendingStore = (await tester.runAsync(
+      () => AppStore.forTesting(
+        repository: AppRepository(database),
+        tileStore: store.tileStore,
+        mapProvider: _provider,
+        locationService: locations,
+      ),
+    ))!;
+    addTearDown(pendingStore.dispose);
+    pendingStore.mapTileMode = MapTileMode.offline;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: AnimatedBuilder(
+            animation: pendingStore,
+            builder: (context, _) => TrailMap(
+              store: pendingStore,
+              initialZoom: initialZoom,
+              autoFit: true,
+              showControls: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    return locations;
+  }
 
   testWidgets(
     'RTE-003 dense editor preserves geometry and exposes sparse clickable controls',
@@ -296,7 +342,7 @@ void main() {
           body: TrailMap(
             store: store,
             initialCenter: const LatLng(31.7, 35.1),
-            initialZoom: 14,
+            initialZoom: 16.25,
             showControls: true,
             followCurrentLocation: true,
             orientationMode: MapOrientationMode.courseUp,
@@ -312,18 +358,94 @@ void main() {
     MapCamera camera() =>
         MapCamera.of(tester.element(find.byType(RichAttributionWidget)));
     expect(camera().rotation, closeTo(270, 0.001));
-    expect(camera().zoom, 14);
+    expect(camera().zoom, 16.25);
 
     await tester.tap(find.byTooltip('Zoom in'));
     await tester.pump();
-    expect(camera().zoom, 15);
+    expect(camera().zoom, 17.25);
 
     await tester.tap(find.byTooltip('Center on current location'));
     await tester.pumpAndSettle();
     expect(camera().center.latitude, closeTo(31.8, 0.000001));
     expect(camera().center.longitude, closeTo(35.2, 0.000001));
-    expect(camera().zoom, 15);
+    expect(camera().zoom, 17.25);
     expect(camera().rotation, closeTo(270, 0.001));
+  });
+
+  for (final startupFinishesFirst in [true, false]) {
+    testWidgets(
+      'MAP-008 startup fix finishing ${startupFinishesFirst ? 'before' : 'after'} '
+      'recenter preserves manual zoom',
+      (tester) async {
+        final locations = await pumpPendingLocationMap(tester);
+        expect(locations.requests, hasLength(1));
+        MapCamera camera() =>
+            MapCamera.of(tester.element(find.byType(RichAttributionWidget)));
+        expect(camera().zoom, 16.25);
+
+        await tester.tap(find.byTooltip('Center on current location'));
+        await tester.pump();
+        expect(locations.requests, hasLength(2));
+        final fix = await const _CurrentLocationService().current();
+        if (startupFinishesFirst) {
+          locations.requests[0].complete(fix);
+          await tester.pumpAndSettle();
+          expect(camera().zoom, 16.25);
+        }
+
+        await tester.tap(find.byTooltip('Zoom in'));
+        await tester.pump();
+        expect(camera().zoom, 17.25);
+        locations.requests[1].complete(fix);
+        await tester.pumpAndSettle();
+        expect(camera().center, const LatLng(31.8, 35.2));
+        expect(camera().zoom, 17.25);
+
+        if (!startupFinishesFirst) {
+          locations.requests[0].complete(fix);
+          await tester.pumpAndSettle();
+          expect(camera().center, const LatLng(31.8, 35.2));
+          expect(camera().zoom, 17.25);
+        }
+      },
+    );
+  }
+
+  for (final control in ['Zoom in', 'Zoom out']) {
+    testWidgets('MAP-008 $control cancels pending startup centering', (
+      tester,
+    ) async {
+      final locations = await pumpPendingLocationMap(tester);
+      MapCamera camera() =>
+          MapCamera.of(tester.element(find.byType(RichAttributionWidget)));
+      final center = camera().center;
+      final expectedZoom = control == 'Zoom in' ? 17.25 : 15.25;
+      await tester.tap(find.byTooltip(control));
+      await tester.pump();
+      expect(camera().zoom, expectedZoom);
+
+      locations.requests.single.complete(
+        await const _CurrentLocationService().current(),
+      );
+      await tester.pumpAndSettle();
+      expect(camera().center, center);
+      expect(camera().zoom, expectedZoom);
+    });
+  }
+
+  testWidgets('MAP-008 untouched startup still centers at neighborhood zoom', (
+    tester,
+  ) async {
+    final locations = await pumpPendingLocationMap(tester, initialZoom: null);
+    locations.requests.single.complete(
+      await const _CurrentLocationService().current(),
+    );
+    await tester.pumpAndSettle();
+    final camera = MapCamera.of(
+      tester.element(find.byType(RichAttributionWidget)),
+    );
+    expect(camera.center, const LatLng(31.8, 35.2));
+    expect(camera.zoom, 15);
   });
 
   testWidgets('recording banner shows precise apex and consecutive turn', (
