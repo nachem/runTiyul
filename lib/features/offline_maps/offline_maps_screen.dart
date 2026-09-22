@@ -592,17 +592,18 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
       (_currentRasterProvider?.isDevelopmentOsmOverride ?? false);
 
   Future<void> _handleLockedCurrentMapTap() async {
-    // if (!widget.store.canUnlockRasterProvider(active)) {
-    //   ScaffoldMessenger.of(context).showSnackBar(
-    //     SnackBar(
-    //       content: Text(
-    //         '${active.label} is view-only and its provider does not allow '
-    //         'offline caching. Select Streets/CyclOSM or use MBTiles / vector.',
-    //       ),
-    //     ),
-    //   );
-    //   return;
-    // }
+    final active = widget.store.activeMapLayer;
+    if (!widget.store.canUnlockRasterProvider(active)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${active.label} is view-only in this build. Use a separately '
+            'authorized development build or MBTiles / vector.',
+          ),
+        ),
+      );
+      return;
+    }
     if (!widget.store.publicRasterDevUnlockAvailable) return;
 
     _publicRasterUnlockResetTimer?.cancel();
@@ -981,12 +982,19 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
                           const SizedBox(height: 6),
                           OfflineDownloadSourcePicker(
                             vectorAvailable: widget.store.usesVectorSource,
-                            activeMapLayer: widget.store.activeMapLayer,
-                            currentMapDownloadAllowed:
-                                _currentRasterProvider != null,
+                            activeMapLayer:
+                                _currentRasterProvider ??
+                                widget.store.activeMapLayer,
+                            currentMapDownloadAllowed: true,
                             selectedFormat: _selectedFormat,
-                            onSelected: (format) =>
-                                setState(() => _selectedFormat = format),
+                            onSelected: (format) {
+                              if (format == OfflineSourceFormat.rasterTiles &&
+                                  _currentRasterProvider == null) {
+                                unawaited(_handleLockedCurrentMapTap());
+                                return;
+                              }
+                              setState(() => _selectedFormat = format);
+                            },
                             onLockedCurrentMapTap: _handleLockedCurrentMapTap,
                           ),
                           const SizedBox(height: 6),

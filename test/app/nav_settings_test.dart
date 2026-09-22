@@ -57,6 +57,22 @@ class _FakeRouteTrailBuilder extends RouteTrailBuilder {
   }
 }
 
+class _LocalPlanningBuilder extends RouteTrailBuilder {
+  bool? allowedNetwork;
+
+  @override
+  Future<TrailNetwork> buildNetwork(
+    List<LatLng> route,
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
+    allowedNetwork = allowNetwork;
+    return const TrailNetwork([
+      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
+    ]);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -91,6 +107,53 @@ void main() {
     mapProvider: config,
     navigationAlertFeedback: feedback,
     routeTrailBuilder: routeTrailBuilder,
+  );
+
+  test(
+    'RTE-011: partial snapping saves off-map stops and their GPX metadata',
+    () async {
+      final now = DateTime.utc(2026, 9, 22);
+      final route = TrailRoute(
+        id: 'partial',
+        name: 'Trail and campsite',
+        source: RouteSource.gpx,
+        createdAt: now,
+        updatedAt: now,
+        points: [
+          const RoutePoint(latitude: 0.0001, longitude: 0),
+          RoutePoint(
+            latitude: 0.001,
+            longitude: 0.002,
+            elevation: 85,
+            recordedAt: now,
+          ),
+          const RoutePoint(latitude: 0.0001, longitude: 0.004),
+        ],
+      );
+      await repository.saveRoute(route);
+      final builder = _LocalPlanningBuilder();
+      final store = await openStore(
+        config: _vectorConfig,
+        routeTrailBuilder: builder,
+      );
+      addTearDown(store.dispose);
+      await store.setMapTileMode(MapTileMode.offline);
+
+      final outcome = await store.snapRouteToTrails(store.routes.single);
+
+      expect(outcome, RouteSnapOutcome.updatedWithDirectConnections);
+      expect(builder.allowedNetwork, isFalse);
+      final saved = (await repository.loadRoutes()).single;
+      expect(saved.id, route.id);
+      expect(saved.source, RouteSource.gpx);
+      expect(saved.points.first.latitude, closeTo(0, 1e-10));
+      final campsite = saved.points.singleWhere(
+        (point) => point.latitude == 0.001,
+      );
+      expect(campsite.longitude, 0.002);
+      expect(campsite.elevation, 85);
+      expect(campsite.recordedAt, now);
+    },
   );
 
   test(

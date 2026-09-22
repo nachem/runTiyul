@@ -20,6 +20,7 @@ class RouteTrailResult {
     required this.network,
     required this.changed,
     this.matched = true,
+    this.hasDirectConnections = false,
   });
 
   /// The route after snapping (equal to the input when nothing was snapped).
@@ -31,20 +32,7 @@ class RouteTrailResult {
   /// Whether snapping changed the route.
   final bool changed;
   final bool matched;
-}
-
-class _MatchState {
-  const _MatchState(
-    this.anchor,
-    this.cost, {
-    this.previous,
-    this.leg = const [],
-  });
-
-  final TrailAnchor anchor;
-  final double cost;
-  final _MatchState? previous;
-  final List<LatLng> leg;
+  final bool hasDirectConnections;
 }
 
 /// Downloads the minimal vector data covering a route, extracts the trail
@@ -293,12 +281,16 @@ class RouteTrailBuilder {
         matched: false,
       );
     }
-    final refined = matchOnNetwork(route, network);
+    final plan = planOnNetwork(route, network);
+    final refined = plan != null && plan.points.length >= 2
+        ? plan.points
+        : null;
     return RouteTrailResult(
       snapped: refined ?? route,
       network: network,
       changed: refined != null && _differs(route, refined),
-      matched: refined != null,
+      matched: refined != null && plan!.snappedWaypoints > 0,
+      hasDirectConnections: plan?.directSegments.isNotEmpty ?? false,
     );
   }
 
@@ -308,7 +300,16 @@ class RouteTrailBuilder {
       matchOnNetwork(route, network) ?? route;
 
   List<LatLng>? matchOnNetwork(List<LatLng> route, TrailNetwork network) {
-    if (route.length < 2 || network.isEmpty) return null;
+    final plan = planOnNetwork(route, network, allowDirectConnections: false);
+    return plan != null && plan.points.length >= 2 ? plan.points : null;
+  }
+
+  TrailRoutePlan? planOnNetwork(
+    List<LatLng> route,
+    TrailNetwork network, {
+    bool allowDirectConnections = true,
+  }) {
+    if (route.length < 2) return null;
     final router = TrailRouter(network);
     final observations = <int>[0];
     var accumulated = 0.0;
@@ -319,61 +320,19 @@ class RouteTrailBuilder {
         accumulated = 0;
       }
     }
-    var states = [
-      for (final anchor in router.snapCandidates(route.first))
-        _MatchState(anchor, anchor.distanceMeters),
+    final inputs = [
+      for (var index = 1; index < observations.length; index++)
+        route.sublist(observations[index - 1], observations[index] + 1),
     ];
-    for (
-      var observation = 1;
-      observation < observations.length;
-      observation++
-    ) {
-      if (states.isEmpty) return null;
-      final input = route.sublist(
-        observations[observation - 1],
-        observations[observation] + 1,
-      );
-      final inputLength = distance.pathLengthMeters(input);
-      final nextStates = <_MatchState>[];
-      for (final anchor in router.snapCandidates(input.last)) {
-        _MatchState? best;
-        for (final previous in states) {
-          final leg = router.buildConnectedLeg(previous.anchor, anchor);
-          if (leg == null || !_withinMatchingCorridor(leg, input)) continue;
-          final length = distance.pathLengthMeters(leg);
-          if (length > inputLength * 3 + 40) continue;
-          final cost =
-              previous.cost +
-              anchor.distanceMeters +
-              (length - inputLength).abs();
-          if (best == null || cost < best.cost) {
-            best = _MatchState(anchor, cost, previous: previous, leg: leg);
-          }
-        }
-        if (best != null) nextStates.add(best);
-      }
-      states = nextStates;
-    }
-    if (states.isEmpty) return null;
-    states.sort((left, right) => left.cost.compareTo(right.cost));
-    final legs = <List<LatLng>>[];
-    for (
-      _MatchState? current = states.first;
-      current?.previous != null;
-      current = current.previous
-    ) {
-      legs.add(current!.leg);
-    }
-    final result = <LatLng>[];
-    for (final leg in legs.reversed) {
-      for (final point in leg) {
-        if (result.isEmpty ||
-            distance.metersBetween(result.last, point) > 0.01) {
-          result.add(point);
-        }
-      }
-    }
-    return result.length < 2 ? null : result;
+    return router.planWaypoints(
+      [for (final index in observations) route[index]],
+      allowDirectConnections: allowDirectConnections,
+      originalLegs: inputs,
+      acceptMappedLeg: (leg, index) =>
+          _withinMatchingCorridor(leg, inputs[index]) &&
+          distance.pathLengthMeters(leg) <=
+              distance.pathLengthMeters(inputs[index]) * 3 + 40,
+    );
   }
 
   bool _withinMatchingCorridor(List<LatLng> leg, List<LatLng> input) {
@@ -394,9 +353,14 @@ class RouteTrailBuilder {
           from.latitude + (to.latitude - from.latitude) * fraction,
           from.longitude + (to.longitude - from.longitude) * fraction,
         );
-        if ((nearestOnPolyline(point, input)?.distanceMeters ??
-                double.infinity) >
-            maxDeviationMeters) {
+        final projection = nearestOnPolyline(point, input);
+        if (projection == null) return false;
+        final observedGap = distance.metersBetween(
+          input[projection.segmentIndex],
+          input[projection.segmentIndex + 1],
+        );
+        if (projection.distanceMeters > maxDeviationMeters &&
+            observedGap <= maxDeviationMeters * 2) {
           return false;
         }
       }

@@ -63,7 +63,7 @@ flutter run -d emulator-5554 `
 
 When launching from VS Code, select **Running App**. Profile and release always
 start with public-raster downloads locked. This repository defaults
-`ALLOW_PUBLIC_RASTER_DEV_UNLOCK=true`: on an internal release, tap the disabled
+`ALLOW_PUBLIC_RASTER_DEV_UNLOCK=true`: on an internal release, tap the locked
 **Current map** choice seven times within four seconds, read the warning, and
 confirm. The unlock persists on that device and enables only public Streets and
 CyclOSM; Satellite remains view-only. To compile out this capability for a
@@ -75,7 +75,8 @@ flutter build apk --release `
 ```
 
 For a separately authorized internal build, Topographic and Satellite can be
-added to that same seven-tap workflow with:
+added to that same seven-tap workflow by selecting **Running App (authorized
+raster DEV)** in VS Code, or with:
 
 ```powershell
 flutter build apk --release `
@@ -85,6 +86,13 @@ flutter build apk --release `
 This flag is false by default. Use it only when the provider permission covers
 offline/debug caching, and continue to enforce the in-app tile cap, attribution,
 retention, credentials, and any narrower terms in that grant.
+
+Select Satellite with the map-layer picker, open Download area, and tap
+**Current map: Satellite** seven times within four seconds. Confirm the DEV
+warning; the chip becomes **Satellite · DEV** and the provider-limited raster
+workflow becomes available. The chip stays tappable before unlock, but its tap
+handler still checks build eligibility. Merely setting its enabled state does
+not authorize Esri. Ordinary launch and published release defaults are unchanged.
 
 Converted-vector downloads remain a separate path and never authorize a raster
 endpoint.
@@ -237,6 +245,17 @@ the neighboring span changes. Checkpoint mode allows explicit straight edits;
 switching modes itself must not change the line. Undo restores the whole edit.
 Test repeated mode switching, failed/disconnected edits, and save/reload with
 optional GPX altitude/timestamps.
+
+For the v1.4.4 planning change, test a sparse right-angle bend, an S-bend,
+hairpin with a point at its apex, and a T-junction whose branch meets a segment
+interior. Tap within 40 m of a mapped way, then well outside it: the nearby point
+should snap; the distant point should remain and produce a direct-unmapped
+segment count. Undo should remove that leg and its diagnostic. Bridges, nearby
+parallel paths, and prohibited connectors must not become mapped links. Repeat
+with cached data in Offline mode and with a GPX off-map stop, checking retained
+geometry and metadata after save/reload. Direct lines are not verified access
+or navigation-recovery connections. Automated versions of these scenarios pass;
+outdoor and phone performance verification remain pending.
 
 For `NAV-007`, start a selected-route recording and move onto a connected
 off-route way with a reliable course. The recovery line and arrow should start

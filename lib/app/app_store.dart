@@ -36,7 +36,13 @@ import '../services/trail_network_cache.dart';
 import '../services/vector_area_conversion_service.dart';
 import '../services/vector_terrain_baker.dart';
 
-enum RouteSnapOutcome { updated, unchanged, unavailable, failed }
+enum RouteSnapOutcome {
+  updated,
+  updatedWithDirectConnections,
+  unchanged,
+  unavailable,
+  failed,
+}
 
 class AppStore extends ChangeNotifier {
   static const _mapTileModeSetting = 'map_tile_mode';
@@ -613,7 +619,9 @@ class AppStore extends ChangeNotifier {
           .toList();
       if (selectedRoute?.id == updated.id) selectedRoute = updated;
       notifyListeners();
-      return RouteSnapOutcome.updated;
+      return result.hasDirectConnections
+          ? RouteSnapOutcome.updatedWithDirectConnections
+          : RouteSnapOutcome.updated;
     } on Object catch (error) {
       if (reportErrors) _setError('Could not snap route to trails: $error');
       return RouteSnapOutcome.failed;

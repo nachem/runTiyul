@@ -43,6 +43,43 @@ class _OverlayBuilder extends RouteTrailBuilder {
   }
 }
 
+class _PlanningBuilder extends RouteTrailBuilder {
+  final permissions = <bool>[];
+  final nearbyRequests = <LatLng>[];
+  static const network = TrailNetwork([
+    TrailPolyline(
+      points: [
+        LatLng(31.8, 35.2),
+        LatLng(31.802, 35.2),
+        LatLng(31.802, 35.202),
+      ],
+      kind: 'path',
+    ),
+  ]);
+
+  @override
+  Future<TrailNetwork> networkForBounds(
+    GeoBounds bounds,
+    String sourceUrl, {
+    bool allowNetwork = true,
+    bool Function()? isCancelled,
+  }) async {
+    permissions.add(allowNetwork);
+    return network;
+  }
+
+  @override
+  Future<TrailNetwork> networkNearPoint(
+    LatLng point,
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
+    permissions.add(allowNetwork);
+    nearbyRequests.add(point);
+    return network;
+  }
+}
+
 class _CurrentLocationService extends LocationService {
   const _CurrentLocationService();
 
@@ -159,6 +196,59 @@ void main() {
     await tester.pump();
     return locations;
   }
+
+  testWidgets(
+    'RTE-003: editor follows a bend, adds a far point, and undoes the direct leg',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 932);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final builder = _PlanningBuilder();
+      final planningStore = (await tester.runAsync(
+        () => AppStore.forTesting(
+          repository: AppRepository(database),
+          tileStore: store.tileStore,
+          mapProvider: _provider,
+          routeTrailBuilder: builder,
+          locationService: const _CurrentLocationService(),
+        ),
+      ))!;
+      addTearDown(planningStore.dispose);
+      planningStore.mapTileMode = MapTileMode.offline;
+      planningStore.vectorSourceUrl = 'https://example.invalid/planet';
+      await tester.pumpWidget(
+        MaterialApp(home: ManualRouteEditor(store: planningStore)),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Follow trails'));
+      await tester.pumpAndSettle();
+      TrailMap map() => tester.widget<TrailMap>(find.byType(TrailMap));
+      map().onTap!(const LatLng(31.8004, 35.20005));
+      await tester.pumpAndSettle();
+      map().onTap!(const LatLng(31.8021, 35.2018));
+      await tester.pumpAndSettle();
+      final bentRoute = [...map().waypoints];
+      expect(bentRoute, contains(const LatLng(31.802, 35.2)));
+      expect(map().waypointMarkers, hasLength(2));
+
+      const far = LatLng(32.8, 36.2);
+      map().onTap!(far);
+      await tester.pumpAndSettle();
+      expect(map().waypoints.last, far);
+      expect(map().waypointMarkers, hasLength(3));
+      expect(find.text('1 direct segment (not mapped)'), findsOneWidget);
+      expect(builder.nearbyRequests, [far]);
+      expect(builder.permissions.every((allowed) => !allowed), isTrue);
+
+      await tester.tap(find.byTooltip('Undo route edit'));
+      await tester.pumpAndSettle();
+      expect(map().waypoints, bentRoute);
+      expect(find.text('1 direct segment (not mapped)'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 
   testWidgets(
     'RTE-003 dense editor preserves geometry and exposes sparse clickable controls',

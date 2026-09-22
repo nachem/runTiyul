@@ -376,34 +376,43 @@ Do not bury download policy in a widget. Define:
 
 Follow-trails editing uses z14 vector data independent of camera zoom. A tap
 that is outside the loaded graph fetches only the surrounding 3x3 tile
-neighborhood. If that neighborhood cannot overlap the previous anchor's local
-coverage, the editor rejects the tap and asks for a closer point rather than
-building disconnected endpoint graphs. Panning and later nearby taps merge
+neighborhood. If that bounded neighborhood cannot connect to the preceding
+point, planning retains a direct connection and reports it as unmapped. It does
+not fetch an unbounded corridor between distant taps. Panning and nearby taps merge
 de-duplicated networks without changing existing anchor indices. Explicit
 viewport loads are capped and centered on the viewport.
 
-Follow mode uses strict connected routing: disconnected or unreasonably long
-graph detours are rejected and never represented as straight trail-following
-legs. The shared router searches connected alternatives even when both anchors
+The strict graph API rejects disconnected or unreasonable detours; navigation
+recovery continues to use it. `TrailRouter.planWaypoints` is the planning layer:
+it compares up to six nearby candidates, prefers fewer direct legs before
+distance/shape cost, snaps within 40 m, and retains unsnappable points in place.
+Its explicit direct fallback preserves original intermediate geometry for saved
+routes and never changes graph connectivity. The shared router searches
+connected alternatives even when both anchors
 belong to the same feature. Coincident nodes use a 0.01 m rounding grid, not a
 multi-metre proximity merge. Grade metadata separates bridge/tunnel interiors;
 coincident endpoints permit structure transitions. Available pedestrian/access
 restrictions exclude ways from the routing graph; motorway/trunk requires
-explicit pedestrian permission. Category preference is only a 6 m near-tie
-breaker. Display tiles are not a complete routing dataset: missing shared
-vertices, access/barrier tags, and tile-boundary topology can cause conservative
-failure. Do not infer an intersection solely from crossing lines.
+explicit pedestrian permission. Same-level branch endpoints lying on a segment
+within coordinate precision split that segment; a latitude-sorted endpoint index
+and bounds filtering limit candidate checks. Anchors attach to the neighboring
+split nodes. Category preference is only a 6 m near-tie breaker. Missing metadata
+and tile-boundary quantization can still prevent mapped connections. Do not infer
+arbitrary interior intersections solely from crossing lines.
 
 `RouteEditorDraft` owns immutable full geometry plus sparse control indices.
 Opening a dense route derives at most 32 controls from endpoints and significant
 shape changes; those controls are not substituted for the stored track. Map
 markers are viewport/spacing culled (at most 40 visible). Long-press may insert
 a control without changing the line. Move/delete replaces only the span between
-neighboring controls, using connected routing in Follow trails and preserving
+neighboring controls, preferring connected routing and reporting direct fallback
+in Follow trails while preserving
 all geometry outside the span. Mode changes do not modify geometry. Undo keeps
 up to 30 complete draft states. Editor saves bypass post-routing cleanup and
 whole-route auto-snap by default for existing routes, preserving matching GPX
-metadata and preventing unrequested changes to untouched sections.
+metadata and preventing unrequested changes to untouched sections. Direct segment
+indices are transient draft diagnostics carried through append, insert, local
+replacement, and Undo; they are not new persisted route metadata.
 
 The vector overlay is independent of saved-route visibility and base-layer
 selection. It uses the configured `transportation` extractor, hides below z14,
@@ -424,10 +433,14 @@ area accounting. A guaranteed offline routing package needs additional design.
 
 `RouteGeometryCleaner` may prepare raw manual/imported geometry, but must not
 rewrite a connected graph result or geometry opened for navigation. Whole-route
-**Snap to trails** uses dynamic programming over up to six nearby anchors per
-observation, connected shortest-path legs, route-length scoring, and a 40 m
-input corridor checked in both directions. It rejects incomplete matches instead
-of dropping unmatchable observations. Graph results are not cleaned afterward.
+**Snap to trails** uses the shared candidate planner over observations sampled
+at 20 m of original travel. Observed geometry must remain within 40 m of a mapped
+replacement; candidate routes respect the length bound. Sparse gaps over 80 m
+do not force the mapped bend to remain near the unobserved straight chord, while
+dense spans retain the reverse corridor check. Unmatched observations and input
+spans remain explicit direct connections; no partial prefix replaces the whole
+route. Strict `matchOnNetwork` remains available for all-mapped callers. Graph
+results are not cleaned afterward.
 The caller checks that the route is still current before persisting an async
 result. Route identity/source are stable, and optional GPX metadata is retained
 for points that remain within one meter.

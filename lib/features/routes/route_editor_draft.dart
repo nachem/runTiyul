@@ -13,10 +13,15 @@ class RouteEditorDraft {
     routeControlIndices(points),
   );
 
-  const RouteEditorDraft._(this.points, this.controlIndices);
+  const RouteEditorDraft._(
+    this.points,
+    this.controlIndices, [
+    this.directSegments = const [],
+  ]);
 
   final List<LatLng> points;
   final List<int> controlIndices;
+  final List<int> directSegments;
   static const _distance = GeoDistance();
 
   List<LatLng> get controls => [
@@ -27,12 +32,14 @@ class RouteEditorDraft {
     LatLng point, {
     TrailRouter? router,
     bool followTrails = false,
+    bool allowDirectConnections = false,
   }) {
     final goals = [if (points.isNotEmpty) points.last, point];
     final replacement = _connect(
       goals,
       router,
       followTrails,
+      allowDirectConnections: allowDirectConnections,
       movableGoal: goals.length - 1,
     );
     if (replacement == null) return null;
@@ -41,10 +48,20 @@ class RouteEditorDraft {
         0,
       ]);
     }
+    if (replacement.points.length == 1 &&
+        _distance.metersBetween(points.last, replacement.points.single) <=
+            0.01) {
+      return this;
+    }
     final joined = [...points, ...replacement.points.skip(1)];
     return RouteEditorDraft._(
       List.unmodifiable(joined),
       List.unmodifiable([...controlIndices, joined.length - 1]),
+      List.unmodifiable([
+        ...directSegments,
+        for (final segment in replacement.directSegments)
+          points.length - 1 + segment,
+      ]),
     );
   }
 
@@ -53,6 +70,7 @@ class RouteEditorDraft {
     LatLng point, {
     TrailRouter? router,
     bool followTrails = false,
+    bool allowDirectConnections = false,
   }) {
     if (control < 0 || control >= controlIndices.length) return null;
     final first = math.max(0, control - 1);
@@ -65,6 +83,7 @@ class RouteEditorDraft {
       goals,
       router,
       followTrails,
+      allowDirectConnections: allowDirectConnections,
       movableGoal: control - first,
     );
     return replacement == null ? null : _replace(first, last, replacement);
@@ -74,6 +93,7 @@ class RouteEditorDraft {
     int control, {
     TrailRouter? router,
     bool followTrails = false,
+    bool allowDirectConnections = false,
   }) {
     if (control < 0 || control >= controlIndices.length) return null;
     if (controlIndices.length == 1) return RouteEditorDraft(const []);
@@ -84,12 +104,21 @@ class RouteEditorDraft {
         List.unmodifiable(
           controlIndices.skip(1).map((index) => index - offset),
         ),
+        List.unmodifiable([
+          for (final segment in directSegments)
+            if (segment >= offset) segment - offset,
+        ]),
       );
     }
     if (control == controlIndices.length - 1) {
       return RouteEditorDraft._(
         List.unmodifiable(points.take(controlIndices[control - 1] + 1)),
         List.unmodifiable(controlIndices.take(control)),
+        List.unmodifiable(
+          directSegments.where(
+            (segment) => segment < controlIndices[control - 1],
+          ),
+        ),
       );
     }
     final replacement = _connect(
@@ -99,6 +128,7 @@ class RouteEditorDraft {
       ],
       router,
       followTrails,
+      allowDirectConnections: allowDirectConnections,
     );
     return replacement == null
         ? null
@@ -133,6 +163,12 @@ class RouteEditorDraft {
       draft: RouteEditorDraft._(
         List.unmodifiable(updated),
         List.unmodifiable(handles),
+        List.unmodifiable([
+          for (final segment in directSegments) ...[
+            inserted && segment >= index ? segment + 1 : segment,
+            if (inserted && segment == index - 1) segment + 1,
+          ],
+        ]),
       ),
       control: handles.indexOf(index),
     );
@@ -141,7 +177,8 @@ class RouteEditorDraft {
   RouteEditorDraft _replace(
     int firstControl,
     int lastControl,
-    ({List<LatLng> points, List<int> controls}) replacement,
+    ({List<LatLng> points, List<int> controls, List<int> directSegments})
+    replacement,
   ) {
     final start = controlIndices[firstControl];
     final end = controlIndices[lastControl];
@@ -157,40 +194,58 @@ class RouteEditorDraft {
         for (final index in replacement.controls) start + index,
         for (final index in controlIndices.skip(lastControl + 1)) index + delta,
       ]),
+      List.unmodifiable([
+        for (final segment in directSegments)
+          if (segment < start) segment,
+        for (final segment in replacement.directSegments) start + segment,
+        for (final segment in directSegments)
+          if (segment >= end) segment + delta,
+      ]),
     );
   }
 
-  ({List<LatLng> points, List<int> controls})? _connect(
+  ({List<LatLng> points, List<int> controls, List<int> directSegments})?
+  _connect(
     List<LatLng> goals,
     TrailRouter? router,
     bool followTrails, {
     int? movableGoal,
+    bool allowDirectConnections = false,
   }) {
     if (!followTrails) {
       return (
         points: goals,
         controls: List.generate(goals.length, (index) => index),
+        directSegments: const [],
       );
     }
-    if (router == null) return null;
-    final anchors = <TrailAnchor>[];
-    for (var index = 0; index < goals.length; index++) {
-      final anchor = router.snap(
-        goals[index],
-        maxMeters: index == movableGoal ? 40 : 2,
-      );
-      if (anchor == null) return null;
-      anchors.add(anchor);
+    if (router == null) {
+      return allowDirectConnections
+          ? (
+              points: goals,
+              controls: List.generate(goals.length, (index) => index),
+              directSegments: List.generate(
+                math.max(0, goals.length - 1),
+                (index) => index,
+              ),
+            )
+          : null;
     }
-    final geometry = <LatLng>[anchors.first.point];
-    final handles = <int>[0];
-    for (var index = 1; index < anchors.length; index++) {
-      final leg = router.buildConnectedLeg(anchors[index - 1], anchors[index]);
-      if (leg == null) return null;
-      geometry.addAll(leg.skip(1));
-      handles.add(geometry.length - 1);
-    }
-    return (points: geometry, controls: handles);
+    final plan = router.planWaypoints(
+      goals,
+      snapLimits: [
+        for (var index = 0; index < goals.length; index++)
+          index == movableGoal ? 40 : 2,
+      ],
+      allowDirectConnections: allowDirectConnections,
+    );
+    return plan == null
+        ? null
+        : (
+            points: plan.points,
+            controls: plan.waypointIndices,
+            directSegments: plan.directSegments,
+          );
   }
 }
 

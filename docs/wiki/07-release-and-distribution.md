@@ -38,6 +38,55 @@ tagged release workflow, exact source commit, and GitHub-hosted runner policy.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
 `versionName=1.4.3`, `versionCode=13`, and the pinned permanent certificate.
 
+### APK size audit (2026-09-22)
+
+Read-only ZIP inspection of the verified public v1.4.3 APK measured 62,741,316
+bytes: 62.74 decimal MB or 59.83 MiB. Most of the download is native code for
+three CPU architectures, not maps or activity data:
+
+| Packaged component | Stored MiB |
+| --- | --- |
+| ARM64 native libraries | 18.98 |
+| ARMv7 native libraries | 16.78 |
+| x86-64 native libraries | 20.43 |
+| Flutter assets | 2.32 |
+| Android image resources | 0.72 |
+| Android DEX bytecode | 0.36 |
+
+Flutter engine and compiled application libraries dominate the native entries.
+The two non-ARM64 architectures account for 39,014,388 bytes (39.01 MB), useful
+for broad device compatibility but unnecessary on an ARM64-only phone. Summing
+ARM64 entries and shared content gives an estimated 23.62 MB payload, so an
+architecture-specific release could be roughly 24 MB before further asset
+optimization. This is an archive-derived estimate, not a built or installed
+split APK. Distribution still publishes the unchanged universal APK; separate
+per-ABI APKs or Play app-bundle delivery have not been implemented here.
+
+The largest bundled asset is `assets/branding/app_icon.png` at 2.06 MiB. It is
+used in the About dialog and for launcher generation, so a smaller display
+variant or lossless image optimization is preferable to removal. The private
+`backup.ab` file is not present in the APK. No source changes, dependency
+removals, new build, or device storage inspection were performed for this audit.
+
+Android **User data** is separate from APK size: downloaded maps, SQLite data,
+and caches may contribute. `TrailNetworkCache` caps its routing-data disk cache
+at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
+evidence of the actual bytes on a phone. A device storage breakdown is needed
+to attribute a reported 64 MB specifically to User data rather than App size.
+
+### 1.4.4 local preparation
+
+[v1.4.4+14](releases/v1.4.4.md) is prepared locally on 2026-09-22 with route
+bend/T-junction fixes, nearby snapping and reported direct connections, and the
+authorized Esri DEV picker/profile. All 331 tests and the full analyzer passed;
+changed Dart files were formatted. The Android debug APK built with
+`ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS=true`, without installation. This
+debug artifact is not an in-place update for the permanent-signed release.
+Signing identity, schema, provider licensing, and production defaults are
+unchanged. The private backup remains excluded. No tag, push, publication,
+signed release build, live-provider request, or device test was performed as
+part of this preparation; v1.4.3 remains the latest public release.
+
 ### 1.4.3 center-view release publication
 
 [v1.4.3+13](releases/v1.4.3.md) was published on 2026-09-22. The release

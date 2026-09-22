@@ -13,6 +13,16 @@
             ]
         },
         {
+            "name": "Running App (authorized raster DEV)",
+            "request": "launch",
+            "type": "dart",
+            "toolArgs": [
+                "--dart-define=ENABLE_DEV_OSM_DOWNLOADS=true",
+                "--dart-define=ALLOW_PUBLIC_RASTER_DEV_UNLOCK=true",
+                "--dart-define=ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS=true"
+            ]
+        },
+        {
             "name": "Running App (profile mode)",
             "request": "launch",
             "type": "dart",

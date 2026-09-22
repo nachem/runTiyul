@@ -277,30 +277,20 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
     if (_loadingTrails || _saving) return;
     final original = _draft;
     final selected = _moving ? _selected : null;
-    if (_followTrails &&
-        selected == null &&
-        _points.isNotEmpty &&
-        !widget.store.routeTrailBuilder.canLoadInteractiveLeg(
-          _points.last,
-          point,
-        )) {
-      setState(
-        () => _trailError =
-            'Point is too far away. Add a closer trail point first',
-      );
-      return;
-    }
-    RouteEditorDraft? edit() => selected == null
+    RouteEditorDraft? edit({bool allowDirectConnections = false}) =>
+        selected == null
         ? original.append(
             point,
             router: _trailRouter,
             followTrails: _followTrails,
+            allowDirectConnections: allowDirectConnections,
           )
         : original.moveControl(
             selected,
             point,
             router: _trailRouter,
             followTrails: _followTrails,
+            allowDirectConnections: allowDirectConnections,
           );
     var result = edit();
     if (_followTrails && result == null) {
@@ -308,11 +298,12 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
       if (!mounted || !identical(original, _draft)) return;
       result = edit();
     }
+    result ??= edit(allowDirectConnections: true);
     _applyEdit(result);
   }
 
   void _applyEdit(RouteEditorDraft? result) {
-    if (!mounted) return;
+    if (!mounted || identical(result, _draft)) return;
     setState(() {
       if (result == null) {
         _trailError =
@@ -340,6 +331,7 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
         selected,
         router: _trailRouter,
         followTrails: _followTrails,
+        allowDirectConnections: true,
       ),
     );
   }
@@ -449,7 +441,10 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                               _loadingTrails
                                   ? 'Loading trails\u2026'
                                   : (_trailError ??
-                                        '${_trailNetwork.trails.length} mapped ways'),
+                                        (_draft.directSegments.isEmpty
+                                            ? '${_trailNetwork.trails.length} mapped ways'
+                                            : '${_draft.directSegments.length} direct '
+                                                  'segment${_draft.directSegments.length == 1 ? '' : 's'} (not mapped)')),
                               style: Theme.of(context).textTheme.bodySmall,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -798,9 +793,10 @@ class _SnapToTrailsButtonState extends State<_SnapToTrailsButton> {
     setState(() => _snapping = false);
     final message = switch (outcome) {
       RouteSnapOutcome.updated => 'Route aligned to recognized trails.',
+      RouteSnapOutcome.updatedWithDirectConnections =>
+        'Nearby points snapped. Direct connections remain where no mapped path was found.',
       RouteSnapOutcome.unchanged => 'Route unchanged.',
-      RouteSnapOutcome.unavailable =>
-        'No complete nearby mapped match. Route unchanged.',
+      RouteSnapOutcome.unavailable => 'No nearby mapped ways. Route unchanged.',
       RouteSnapOutcome.failed => 'Route could not be snapped to trails.',
     };
     ScaffoldMessenger.of(

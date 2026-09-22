@@ -36,6 +36,44 @@ class _Edge {
   final double weight;
 }
 
+class TrailRoutePlan {
+  const TrailRoutePlan({
+    required this.points,
+    required this.waypointIndices,
+    required this.directSegments,
+    required this.snappedWaypoints,
+  });
+
+  final List<LatLng> points;
+  final List<int> waypointIndices;
+  final List<int> directSegments;
+  final int snappedWaypoints;
+}
+
+class _WaypointState {
+  const _WaypointState({
+    required this.point,
+    required this.anchor,
+    required this.cost,
+    this.directLegs = 0,
+    this.previous,
+    this.leg = const [],
+    this.direct = false,
+  });
+
+  final LatLng point;
+  final TrailAnchor? anchor;
+  final double cost;
+  final int directLegs;
+  final _WaypointState? previous;
+  final List<LatLng> leg;
+  final bool direct;
+
+  bool betterThan(_WaypointState other) =>
+      directLegs < other.directLegs ||
+      (directLegs == other.directLegs && cost < other.cost);
+}
+
 class _QueueEntry {
   const _QueueEntry(this.node, this.distance);
 
@@ -107,6 +145,7 @@ class TrailRouter {
   final List<LatLng> _nodePoints = [];
   final Map<(int, int, String), int> _cellToNode = {};
   final List<List<_Edge>> _adjacency = [];
+  final Map<(int, int), List<int>> _segmentNodes = {};
   var _graphBuilt = false;
 
   double _dLat = 1;
@@ -135,20 +174,49 @@ class TrailRouter {
         (111320.0 * math.max(0.01, math.cos(referenceLat * math.pi / 180.0)));
 
     final endpoints = <(int, int), Set<int>>{};
+    final endpointsByLevel = <String, Set<int>>{};
     for (final trail in _network.trails) {
-      if (!trail.routable) continue;
-      final points = trail.points;
-      for (var i = 0; i + 1 < points.length; i++) {
-        final a = _nodeFor(points[i], trail.routingLevel);
-        final b = _nodeFor(points[i + 1], trail.routingLevel);
-        if (i == 0) endpoints.putIfAbsent(_cell(points[i]), () => {}).add(a);
-        if (i + 2 == points.length) {
-          endpoints.putIfAbsent(_cell(points[i + 1]), () => {}).add(b);
+      if (!trail.routable || trail.points.length < 2) continue;
+      for (final point in [trail.points.first, trail.points.last]) {
+        final node = _nodeFor(point, trail.routingLevel);
+        endpoints.putIfAbsent(_cell(point), () => {}).add(node);
+        endpointsByLevel.putIfAbsent(trail.routingLevel, () => {}).add(node);
+      }
+    }
+    final sortedEndpoints = endpointsByLevel.map(
+      (level, nodes) => MapEntry(
+        level,
+        nodes.toList()..sort(
+          (left, right) =>
+              _nodePoints[left].latitude.compareTo(_nodePoints[right].latitude),
+        ),
+      ),
+    );
+    for (
+      var trailIndex = 0;
+      trailIndex < _network.trails.length;
+      trailIndex++
+    ) {
+      final trail = _network.trails[trailIndex];
+      if (!trail.routable || trail.points.length < 2) continue;
+      for (var segment = 0; segment + 1 < trail.points.length; segment++) {
+        final nodes = _splitSegment(
+          trail.points[segment],
+          trail.points[segment + 1],
+          trail.routingLevel,
+          sortedEndpoints[trail.routingLevel]!,
+        );
+        _segmentNodes[(trailIndex, segment)] = nodes;
+        for (var index = 1; index < nodes.length; index++) {
+          final from = nodes[index - 1];
+          final to = nodes[index];
+          final weight = distance.metersBetween(
+            _nodePoints[from],
+            _nodePoints[to],
+          );
+          _adjacency[from].add(_Edge(to, weight));
+          _adjacency[to].add(_Edge(from, weight));
         }
-        if (a == b) continue;
-        final weight = distance.metersBetween(points[i], points[i + 1]);
-        _adjacency[a].add(_Edge(b, weight));
-        _adjacency[b].add(_Edge(a, weight));
       }
     }
     for (final nodes in endpoints.values) {
@@ -158,6 +226,53 @@ class TrailRouter {
         }
       }
     }
+  }
+
+  List<int> _splitSegment(
+    LatLng from,
+    LatLng to,
+    String level,
+    List<int> endpoints,
+  ) {
+    final positions = <int, double>{
+      _nodeFor(from, level): 0,
+      _nodeFor(to, level): 1,
+    };
+    final south = math.min(from.latitude, to.latitude) - _dLat;
+    final north = math.max(from.latitude, to.latitude) + _dLat;
+    final west = math.min(from.longitude, to.longitude) - _dLon;
+    final east = math.max(from.longitude, to.longitude) + _dLon;
+    var lower = 0;
+    var upper = endpoints.length;
+    while (lower < upper) {
+      final middle = (lower + upper) ~/ 2;
+      if (_nodePoints[endpoints[middle]].latitude < south) {
+        lower = middle + 1;
+      } else {
+        upper = middle;
+      }
+    }
+    for (var index = lower; index < endpoints.length; index++) {
+      final node = endpoints[index];
+      final point = _nodePoints[node];
+      if (point.latitude > north) break;
+      if (point.longitude < west ||
+          point.longitude > east ||
+          positions.containsKey(node)) {
+        continue;
+      }
+      final projection = nearestOnPolyline(point, [
+        from,
+        to,
+      ], distance: distance)!;
+      if (projection.distanceMeters <= nodeGridMeters &&
+          projection.t > 0 &&
+          projection.t < 1) {
+        positions[node] = projection.t;
+      }
+    }
+    return positions.keys.toList()
+      ..sort((left, right) => positions[left]!.compareTo(positions[right]!));
   }
 
   (int, int) _cell(LatLng point) =>
@@ -175,9 +290,20 @@ class TrailRouter {
     return id;
   }
 
-  int? _nodeIndexOf(LatLng vertex, String level) {
-    final position = _cell(vertex);
-    return _cellToNode[(position.$1, position.$2, level)];
+  List<int> _nodesAroundAnchor(TrailAnchor anchor) {
+    final nodes =
+        _segmentNodes[(anchor.trailIndex, anchor.segmentIndex)] ??
+        const <int>[];
+    if (nodes.length <= 2) return nodes;
+    final origin =
+        _network.trails[anchor.trailIndex].points[anchor.segmentIndex];
+    final along = distance.metersBetween(origin, anchor.point);
+    for (var index = 1; index < nodes.length; index++) {
+      if (distance.metersBetween(origin, _nodePoints[nodes[index]]) >= along) {
+        return [nodes[index - 1], nodes[index]];
+      }
+    }
+    return nodes.sublist(nodes.length - 2);
   }
 
   /// The nearest point on any trail *line* within [maxMeters], or null. Uses
@@ -230,6 +356,107 @@ class TrailRouter {
       (left, right) => left.distanceMeters.compareTo(right.distanceMeters),
     );
     return candidates.take(limit).toList(growable: false);
+  }
+
+  TrailRoutePlan? planWaypoints(
+    List<LatLng> waypoints, {
+    bool allowDirectConnections = false,
+    List<double>? snapLimits,
+    List<List<LatLng>>? originalLegs,
+    bool Function(List<LatLng> leg, int legIndex)? acceptMappedLeg,
+  }) {
+    if (waypoints.isEmpty) {
+      return const TrailRoutePlan(
+        points: [],
+        waypointIndices: [],
+        directSegments: [],
+        snappedWaypoints: 0,
+      );
+    }
+    List<TrailAnchor?> candidates(int index) {
+      final nearby = snapCandidates(
+        waypoints[index],
+        maxMeters: snapLimits?[index] ?? 40,
+      );
+      return nearby.isEmpty && allowDirectConnections ? [null] : nearby;
+    }
+
+    var states = [
+      for (final anchor in candidates(0))
+        _WaypointState(
+          point: anchor?.point ?? waypoints.first,
+          anchor: anchor,
+          cost: (anchor?.distanceMeters ?? 0) * 4,
+        ),
+    ];
+    for (var index = 1; index < waypoints.length; index++) {
+      final next = <_WaypointState>[];
+      final original =
+          originalLegs?[index - 1] ?? [waypoints[index - 1], waypoints[index]];
+      final originalLength = distance.pathLengthMeters(original);
+      for (final anchor in candidates(index)) {
+        final point = anchor?.point ?? waypoints[index];
+        _WaypointState? best;
+        for (final previous in states) {
+          var leg = previous.anchor == null || anchor == null
+              ? null
+              : buildConnectedLeg(previous.anchor!, anchor);
+          if (leg != null && !(acceptMappedLeg?.call(leg, index - 1) ?? true)) {
+            leg = null;
+          }
+          final direct = leg == null;
+          if (direct && !allowDirectConnections) continue;
+          leg ??= [
+            previous.point,
+            ...original.skip(1).take(original.length - 2),
+            point,
+          ];
+          final state = _WaypointState(
+            point: point,
+            anchor: anchor,
+            cost:
+                previous.cost +
+                (anchor?.distanceMeters ?? 0) * 4 +
+                (distance.pathLengthMeters(leg) - originalLength).abs(),
+            directLegs: previous.directLegs + (direct ? 1 : 0),
+            previous: previous,
+            leg: leg,
+            direct: direct,
+          );
+          if (best == null || state.betterThan(best)) best = state;
+        }
+        if (best != null) next.add(best);
+      }
+      states = next;
+      if (states.isEmpty) return null;
+    }
+    if (states.isEmpty) return null;
+    var best = states.first;
+    for (final state in states.skip(1)) {
+      if (state.betterThan(best)) best = state;
+    }
+    final chain = <_WaypointState>[];
+    for (_WaypointState? state = best; state != null; state = state.previous) {
+      chain.add(state);
+    }
+    final ordered = chain.reversed.toList(growable: false);
+    final points = <LatLng>[ordered.first.point];
+    final handles = <int>[0];
+    final directSegments = <int>[];
+    for (final state in ordered.skip(1)) {
+      for (final point in state.leg.skip(1)) {
+        if (distance.metersBetween(points.last, point) <= 0.01) continue;
+        if (state.direct) directSegments.add(points.length - 1);
+        points.add(point);
+      }
+      handles.add(points.length - 1);
+    }
+    return TrailRoutePlan(
+      points: List.unmodifiable(points),
+      waypointIndices: List.unmodifiable(handles),
+      directSegments: List.unmodifiable(directSegments),
+      snappedWaypoints: ordered.where((state) => state.anchor != null).length,
+    );
   }
 
   /// Stitches [anchors] into a route that follows the trail network between
@@ -323,33 +550,22 @@ class TrailRouter {
     if (nodeCount == 0 || targets.isEmpty) return null;
     final startId = nodeCount;
     final total = nodeCount + 1 + targets.length;
-    final fromTrail = _network.trails[from.trailIndex];
-    final startNodes = [
-      _nodeIndexOf(fromTrail.points[from.segmentIndex], fromTrail.routingLevel),
-      _nodeIndexOf(
-        fromTrail.points[from.segmentIndex + 1],
-        fromTrail.routingLevel,
-      ),
-    ];
-    if (startNodes.any((node) => node == null)) return null;
+    final startNodes = _nodesAroundAnchor(from);
+    if (startNodes.isEmpty) return null;
     final targetEdges = <int, List<_Edge>>{};
     final directTargets = <_Edge>[];
     for (var index = 0; index < targets.length; index++) {
       final target = targets[index];
-      final trail = _network.trails[target.trailIndex];
       final goalId = startId + 1 + index;
-      for (final vertex in [target.segmentIndex, target.segmentIndex + 1]) {
-        final node = _nodeIndexOf(trail.points[vertex], trail.routingLevel);
-        if (node != null) {
-          targetEdges
-              .putIfAbsent(node, () => [])
-              .add(
-                _Edge(
-                  goalId,
-                  distance.metersBetween(_nodePoints[node], target.point),
-                ),
-              );
-        }
+      for (final node in _nodesAroundAnchor(target)) {
+        targetEdges
+            .putIfAbsent(node, () => [])
+            .add(
+              _Edge(
+                goalId,
+                distance.metersBetween(_nodePoints[node], target.point),
+              ),
+            );
       }
       if (target.trailIndex == from.trailIndex &&
           target.segmentIndex == from.segmentIndex) {
@@ -370,7 +586,7 @@ class TrailRouter {
         return [
           for (final start in startNodes)
             _Edge(
-              start!,
+              start,
               distance.metersBetween(from.point, _nodePoints[start]),
             ),
           ...directTargets,
