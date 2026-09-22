@@ -63,10 +63,12 @@ hosting remain proposals only.
   and empty-content startup races.
 
 Validation on 2026-09-22: all 28 focused map/control tests passed; the full
-VS Code runner reported 312 passes. Changed Dart files were formatted. Local
-whole-workspace formatting/analysis encountered separate download-test and
-download-screen edits; these are outside the release scope and left untouched.
-The committed source must pass hosted CI before tagging. No physical-device
+VS Code runner reported 312 passes after release-gate cleanup. Full formatting
+checked 101 files without changes and full analysis passed. The first hosted
+attempt exposed prior committed download-editor/test changes in `c55f53c`:
+an empty test file and an unused local blocked validation. Release preparation
+removed only those blockers, preserving that committed download behavior.
+The corrected snapshot must pass hosted CI before tagging. No physical-device
 validation or public v1.4.3 artifact verification has occurred yet.
 
 ### 2026-09-22 recenter zoom regression (released in v1.4.2)

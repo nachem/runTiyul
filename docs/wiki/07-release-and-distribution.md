@@ -42,10 +42,13 @@ The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
 
 [v1.4.3+13](releases/v1.4.3.md) is being prepared on 2026-09-22. The release
 changes the center-to-view icon to preserve zoom and adds a separate explicit
-zoom-to-fit control. Only the shared map widget, related tests, release metadata,
-and wiki changes belong to this release; unrelated local edits and the private
-backup remain excluded. All 28 focused map/control tests passed. Committed-source
-CI, platform builds, publication, and independent artifact checks are pending.
+zoom-to-fit control. The shared map widget, related tests, release metadata,
+and wiki are updated; the private backup remains excluded. Existing committed
+download-editor changes in `c55f53c` are retained. An empty test file and unused
+local from that commit were removed to resolve release validation blockers,
+without restoring or changing that editor's behavior. All 28 focused tests and
+312 full-suite tests pass; formatting checks all 101 Dart files and analysis
+is clean. Corrected-source hosted CI and public artifact checks are pending.
 
 ### 1.4.2 recenter hotfix publication
 

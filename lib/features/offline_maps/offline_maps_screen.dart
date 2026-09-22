@@ -592,7 +592,6 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
       (_currentRasterProvider?.isDevelopmentOsmOverride ?? false);
 
   Future<void> _handleLockedCurrentMapTap() async {
-    final active = widget.store.activeMapLayer;
     // if (!widget.store.canUnlockRasterProvider(active)) {
     //   ScaffoldMessenger.of(context).showSnackBar(
     //     SnackBar(
