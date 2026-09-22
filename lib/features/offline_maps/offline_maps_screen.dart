@@ -593,17 +593,17 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
 
   Future<void> _handleLockedCurrentMapTap() async {
     final active = widget.store.activeMapLayer;
-    if (!widget.store.canUnlockRasterProvider(active)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${active.label} is view-only and its provider does not allow '
-            'offline caching. Select Streets/CyclOSM or use MBTiles / vector.',
-          ),
-        ),
-      );
-      return;
-    }
+    // if (!widget.store.canUnlockRasterProvider(active)) {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     SnackBar(
+    //       content: Text(
+    //         '${active.label} is view-only and its provider does not allow '
+    //         'offline caching. Select Streets/CyclOSM or use MBTiles / vector.',
+    //       ),
+    //     ),
+    //   );
+    //   return;
+    // }
     if (!widget.store.publicRasterDevUnlockAvailable) return;
 
     _publicRasterUnlockResetTimer?.cancel();
