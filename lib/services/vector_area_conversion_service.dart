@@ -93,7 +93,12 @@ class VectorAreaConversionService {
     } on Object catch (error) {
       firstError ??= error;
     } finally {
-      await tileSource?.close();
+      try {
+        await tileSource?.close();
+      } on Object catch (error) {
+        firstError ??= error;
+      }
+      terrainBaker.reset();
     }
 
     if (_cancelled.contains(area.id)) {
@@ -127,9 +132,12 @@ class VectorAreaConversionService {
       coordinate.x,
       coordinate.y,
     );
-    // Re-render even when an older converted tile exists: the render style now
-    // includes baked topography, and retaining a pre-topography PNG would leave
-    // overlapping or resumed areas visually inconsistent.
+    // OFF-005: resume reuses completed tiles instead of restarting expensive
+    // rendering and terrain requests. A style refresh requires removing the
+    // old area first; normal resume must preserve completed work.
+    if (await file.exists() && await file.length() > 0) {
+      return _attachTile(area, coordinate, namespace, file);
+    }
     Uint8List png;
     final sourceMax = source.maxZoom;
     if (coordinate.z <= sourceMax) {
@@ -165,9 +173,17 @@ class VectorAreaConversionService {
     await file.parent.create(recursive: true);
     final temporary = File('${file.path}.part');
     await temporary.writeAsBytes(png, flush: true);
-    if (await file.exists()) await file.delete();
     await temporary.rename(file.path);
 
+    return _attachTile(area, coordinate, namespace, file);
+  }
+
+  Future<int> _attachTile(
+    OfflineArea area,
+    TileCoordinate coordinate,
+    String namespace,
+    File file,
+  ) async {
     final length = await file.length();
     await repository.attachTile(
       areaId: area.id,

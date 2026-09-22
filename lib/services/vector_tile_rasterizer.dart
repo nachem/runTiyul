@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:vector_tile_renderer/vector_tile_renderer.dart';
 
+import '../core/graphics/render_png.dart';
 import 'map_render_theme.dart';
 
 /// Converts a single Mapbox Vector Tile (MVT) into a raster PNG on the device.
@@ -47,17 +48,20 @@ class VectorTileRasterizer {
         : Uint8List.fromList(mvtBytes);
     final vectorTile = _reader.read(bytes);
     final tile = _factory.create(vectorTile);
-    final renderer = ImageRenderer(theme: theme, scale: scale.toDouble());
-    final image = await renderer.render(
-      TileSource(tileset: Tileset({_sourceId: tile})),
-      zoom: z.toDouble(),
-      zoomScaleFactor: 1,
+    return renderPng(
+      width: scale * _tileSize,
+      height: scale * _tileSize,
+      draw: (canvas) {
+        canvas.scale(scale.toDouble());
+        Renderer(theme: theme).render(
+          canvas,
+          TileSource(tileset: Tileset({_sourceId: tile})),
+          zoom: z.toDouble(),
+          zoomScaleFactor: 1,
+          rotation: 0,
+        );
+      },
     );
-    try {
-      return await image.toPng();
-    } finally {
-      image.dispose();
-    }
   }
 
   /// Rasterizes [mvtBytes] — a tile at [sourceZ]/[sourceX]/[sourceY] — into the
@@ -87,29 +91,24 @@ class VectorTileRasterizer {
     final tile = _factory.create(_reader.read(bytes));
     final tileSource = TileSource(tileset: Tileset({_sourceId: tile}));
 
-    final recorder = ui.PictureRecorder();
     final size = (scale * _tileSize).toDouble();
     final rect = ui.Rect.fromLTWH(0, 0, size, size);
-    final canvas = ui.Canvas(recorder, rect);
-    canvas.clipRect(rect);
-    // Retina/output scale, then the overzoom scale into the child's sub-square.
-    canvas.scale(scale.toDouble() * factor);
-    canvas.translate(-subX * sub, -subY * sub);
-    Renderer(theme: theme).render(
-      canvas,
-      tileSource,
-      zoomScaleFactor: factor,
-      zoom: targetZ.toDouble(),
-      rotation: 0,
+    return renderPng(
+      width: size.floor(),
+      height: size.floor(),
+      draw: (canvas) {
+        canvas.clipRect(rect);
+        // Retina/output scale, then the overzoom scale into the child's sub-square.
+        canvas.scale(scale.toDouble() * factor);
+        canvas.translate(-subX * sub, -subY * sub);
+        Renderer(theme: theme).render(
+          canvas,
+          tileSource,
+          zoomScaleFactor: factor,
+          zoom: targetZ.toDouble(),
+          rotation: 0,
+        );
+      },
     );
-    final image = await recorder.endRecording().toImage(
-      size.floor(),
-      size.floor(),
-    );
-    try {
-      return await image.toPng();
-    } finally {
-      image.dispose();
-    }
   }
 }

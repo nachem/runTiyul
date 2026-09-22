@@ -366,13 +366,16 @@ class NavigationMonitor {
     double? routeRemaining;
     if (route.length >= 2 && userProjection != null) {
       final projectedProgress = userAlong!;
-      if (projectedProgress > _maxRouteProgressMeters) {
+      if (distanceToRoute! <= config.offRouteMeters &&
+          projectedProgress > _maxRouteProgressMeters) {
         _maxRouteProgressMeters = projectedProgress;
       }
       final routeLength = distance.pathLengthMeters(route);
       routeCompleted = _maxRouteProgressMeters.clamp(0, routeLength);
       routeRemaining = (routeLength - routeCompleted).clamp(0, routeLength);
-      if (config.progressEnabled && !_offRouteActive) {
+      if (config.progressEnabled &&
+          !_offRouteActive &&
+          distanceToRoute <= config.offRouteMeters) {
         if (config.progressIntervalMode == ProgressIntervalMode.distance) {
           final interval = config.progressDistanceMeters;
           _nextProgressMeters ??=

@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-08-20<br>
+Last reviewed: 2026-09-22<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -32,41 +32,69 @@ instructions are mandatory for all future agents.
 
 | Area | Status |
 | --- | --- |
-| Flutter Android app | Implemented; built and exercised on Android 14 emulator |
+| Flutter Android app | Implemented; `1.4.1+11` permanently signed and artifact-verified locally on 2026-09-22, not device-installed. Earlier `1.4.0+10` was installed in place and cold-launched on a Pixel 10; Android 14 emulator verification also exists. |
 | Flutter iOS app | Configured; not built or runtime verified |
 | Application navigation | Implemented with five Material 3 destinations; Back returns through pushed screens and destination history, and only root Map allows app exit |
 | App version awareness | About displays package-derived version/build metadata; a changed build is detected from local SQLite state and announced once. Analyzer/unit/widget-tested; real two-APK upgrade remains device-unverified |
-| Online map | Implemented with provider abstraction, source-accurate attribution, and a base-layer switch: streets, CyclOSM topographic/cycle raster (provider-baked contours/hillshade; no separate elevation request), and online-only Esri satellite/orthophoto; online raster labels stay in each provider's baked-in language |
-| Map controls/source modes | Zoom, fit/reset, GPS recenter, show/hide saved trails, always-available Offline discovery, a persisted base-layer picker on every map surface, and auto-fit; route view/edit panels honor the bottom safe area; a content-less map opens centered on the current location at neighborhood zoom; Auto layers live online tiles on top of saved maps from any persisted provider, and offline mode shares the online zoom range (zoom-out below downloaded minimum; zoom-in overzooms to z19) |
+| Online map | Streets, CyclOSM, Topographic (OpenTopoMap), and Satellite are independent persisted choices. Topographic remains view-only by default, overzooms native z17 through z19, and makes no separate elevation requests. No per-tile fallback; current provider availability was not probed. |
+| Vector comparison overlay | Independent polyline toggle on every map; configured vector roads/trails and restricted ways, z14+ only, bounded/debounced/cancellable loads with source attribution. Offline is cache/local-only. Analyzer/unit/widget-tested; real raster/vector comparison remains device-unverified. |
+| Dense route editing and matching | Sparse controls preserve full route geometry; local connected Move/Delete, inserted controls, lossless mode switching, and whole-edit Undo. Matching rejects partial/distant routes, separates nearby/grade-separated ways, honors available access tags, and ignores stale results. Full-coordinate storage and GPX metadata preservation remain; display-vector topology omissions are documented. |
+| Forward recovery | Bounded multi-target shortest-path search with initial forward constraint; off-route progress stays fixed, recovery trims/replans with movement and shows a direction arrow. Shared bounded map-way cache supports local/offline data. Synthetic-GPS-tested; outdoor direction/access, device performance, and guaranteed offline routing coverage remain unverified. |
+| Stability review (2026-09-06) | Serialized area downloads/storage mutations, duplicate-resume protection, cancel/drain before edit/delete, queued-pause controls, larger-plan resume, converted-tile reuse, explicit vector HTTP errors/retries, native graphics cleanup, preserved route/activity links, coalesced database open, startup retry, and Android data-sync timeout stop are implemented and regression-tested. Reported phone crash remains unreproduced; no device was connected. Signing identity and schema v2 are unchanged. |
+| Map controls/source modes | Zoom, fit/reset, zoom-preserving GPS recenter, show/hide saved trails, always-available Offline discovery, a persisted base-layer picker on every map surface, and auto-fit; route view/edit panels honor the bottom safe area; a content-less map opens centered on the current location at neighborhood zoom; Auto layers live online tiles on top of saved maps from any persisted provider, and offline mode shares the online zoom range (zoom-out below downloaded minimum; zoom-in overzooms to z19). **Show on map** switches to Offline only for the downloaded-area preview and restores the prior source when it closes. |
 | Trail map integration | All in-view trails render as dashed lines; route taps open the primary map with full controls and fit the whole trail; realtime recording receives all saved-route overlays, while the selected navigation route remains visible independently of the saved-trails toggle |
 | GPX route import | Implemented and parser tested; native picker not emulator verified |
-| GPS activity recording | Implemented; emulator permission/timer/lifecycle verified |
+| GPS activity recording | Delayed fixes use elapsed-time-aware plausibility, five-minute gaps start a zero-distance segment, and stream failure durably pauses recording with an error. Analyzer/unit/SQLite-workflow-tested; Android Battery Saver and background behavior remain physical-device unverified. |
 | Visual route navigation | Trail-follow creation and connected whole-route snapping for manual/GPX routes; bounded junction-artifact cleanup; strict mapped-way forward recovery; exact-angle advance/apex, U-turn, consecutive-turn, and overshoot-tolerant guidance; monotonic distance/time progress; Tone + voice/Voice/Tones/Haptics modes; and audio-focus release are implemented and analyzer/unit/widget-tested. Live recovery geometry, heading, camera, audio/media, and background behavior remain physical-device unverified; visual progress percentage remains. |
-| Recording map tracking | Persisted Follow position and North up / Running direction controls use quality-filtered course and atomic camera updates; analyzer/unit/widget-tested, not physical-device verified |
+| Recording map tracking | Persisted Follow position and North up / Running direction controls use quality-filtered course and atomic, zoom-preserving camera updates. One-finger pan disables Follow; pinch/double-tap zoom and rotation retain it. Analyzer/unit/widget-tested, not physical-device verified. |
 | Route creation performance | Zoomed-out Follow trails taps load bounded local z14 data; distant non-overlapping taps are rejected immediately, and disconnected paths are never committed as straight legs. Nearby networks expand without re-snapping old anchors, graphs build lazily, only the newest leg is routed, shortest-path search uses a priority queue, and rendering simplifies a copy while preserving full saved geometry. Analyzer/unit-tested; long-route physical-device stress testing remains. |
 | Activity history | Implemented and emulator verified |
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
+| Next release | [v1.4.1+11](releases/v1.4.1.md) publication in progress on 2026-09-22. Earlier local Android APK identity/signature verified; public artifacts will be rebuilt from the tagged commit, including raster pacing/cooldowns. No device installation performed. |
 | Latest published release | `v1.4.0+10` published 2026-08-20 with forward mapped-way recovery, precise maneuver guidance, route cleanup/snapping, Back history, and recording map tracking; public APK/IPA checksums, identity/certificate, provenance, and stable latest URLs verify. iOS sideload/runtime and new navigation behavior remain physical-device unverified |
 | Release workflow | Run `32322574702` passed metadata, Android permanent-signature/identity verification, unsigned iOS build, checksums, APK+IPA provenance, and publication for `v1.4.0`; `v1.2.1` remains an unpublished tag with no artifacts |
-| Android update compatibility | `v1.4.0` retains the `v1.2.2` permanent certificate and increases `versionCode` to 10, enabling an in-place update; physical data-preservation verification remains. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
-| Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation permanently unlocks those two providers on that device. Satellite/arbitrary view-only layers cannot be unlocked. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
+| Android update compatibility | `v1.4.0` retains the `v1.2.2` permanent certificate. On 2026-09-04, a locally rebuilt, matching-signed `1.4.0+10` APK replaced the installed `1.4.0+10` app on a Pixel 10 with `pm install -r`; Android preserved the original install timestamp and recorded a new update timestamp. A true cross-version upgrade and manual inspection of retained routes/maps remain unverified. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
+| Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation unlocks eligible sources on that device. Topographic/Satellite remain view-only unless a separately authorized internal build explicitly enables `ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS`; arbitrary providers remain excluded. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
 | Offline tile rendering | Main-map bounds preview/edit and downloaded zoom constraints implemented; zoom-in overzooms saved tiles past the downloaded maximum. Saved tiles use an ordered, area-aware renderer, and provider/format namespaces prevent collisions. Offline-area bounding boxes remain visible as colored outlines but have fully transparent fills, so overlapping areas do not tint the map. Preview/auto-fit floor at the downloaded minimum (`offlineAwareFitZoom`), and a progress-independent map key prevents in-progress downloads from recreating the map controls |
 | Offline storage management | Implemented for per-area/total bytes and overlap-safe delete, with per-area source chips and a details popup; the saved-areas list is drag-to-reorder and the order both persists and drives which area renders on top |
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
-| Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + hillshade (z13 parent reused for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
+| Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + subdued hillshade (z13 parent reused with progressively reduced overlay opacity for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
 | Open-source project health | Contribution, conduct, support, privacy, and security policies; CODEOWNERS; issue/PR templates; Dependabot; SHA-pinned Actions; and version-pinned PR/release workflows are configured. Private vulnerability reporting, dependency alerts/security updates, secret scanning, and push protection are enabled. Push CI and Pages pass; PR dependency review/provenance remain unexercised and `main` is not protected |
-| Automated validation | On 2026-08-19, changed-Dart formatting and `flutter analyze --no-pub` passed, the full VS Code Flutter test runner passed all 171 tests, CRLF-aware diff validation passed, and the `1.4.0+10` debug APK built with verified package/version/label. On 2026-08-20, CI run `32322573390`, CodeQL run `32322572632`, and release run `32322574702` passed; public APK/IPA checksums, Android identity/certificate, both provenance attestations, and stable latest URLs were independently verified. |
+| Automated validation | On 2026-09-22, final pre-publication checks passed all 305 tests, 102-file formatting, `flutter analyze --no-pub`, release metadata, all 94 local Markdown targets, and whitespace. Earlier local `1.4.1+11` Android APK identity/signature verification passed; hosted artifact verification is pending. No device install, Battery Saver/background run, airplane-mode run, or iOS runtime validation was performed. |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
 
+Development raster-download hardening (2026-09-22): current-map downloads now
+use provider-specific pacing and batch breaks, shared persisted `Retry-After`
+cooldowns, interruptible waits/retries, and resumable provider-requested pauses.
+Development defaults use one worker; permission gates remain unchanged. All
+305 tests and the analyzer passed; no live-provider or device validation was
+performed for this change. The gate does not cover interactive browsing or
+vector/terrain requests. See the
+[implementation and evidence](02-implementation-status.md#2026-09-22-development-raster-download-hardening).
+
 ## Current implementation priority
+
+Routing verification gate: on a physical device, compare vector overlays with
+the problematic raster routes, test sparse-control edits/save/reload, and check
+forward recovery with real heading and trail access. Display-vector maps may
+omit routable paths/topology/access metadata; do not claim a complete routing
+engine or guaranteed offline coverage from the bounded opportunistic cache.
+
+Immediate stability gate: connect the affected phone and reproduce the reported
+crash on its existing signed installation before claiming a root cause. Inspect
+targeted crash logs; verify download pause/resume/edit/delete, long terrain
+conversion, Android background timeout, and retained routes/maps with a
+matching-signed update. Do not uninstall or clear local data. The debug artifact
+is not an in-place update for the permanent-signed release.
 
 1. Verify topographic vector conversion with real regional data on a device:
   compare against CyclOSM, inspect contour labels/hillshade and z13 parent
   overzoom, and measure conversion speed, memory, battery, and final storage.
-2. Verify CyclOSM online selection and small debug-only offline download on a
-  device while confirming no separate Terrarium request occurs.
+2. Verify independent Streets, CyclOSM, and OpenTopoMap online selection,
+  including Topographic z18/z19 overzoom, plus a small development-only raster
+  download while confirming no separate Terrarium request occurs.
 3. Verify background recording/downloads and navigation on physical Android and
   iOS devices: mapped forward recovery with no backtracking, exact
   advance/apex/consecutive/U-turn prompts, 25 m overshoot grace, Follow position

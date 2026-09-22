@@ -4,10 +4,12 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/geo/distance.dart';
 import '../core/geo/geo_bounds.dart';
+import '../core/geo/polyline_snap.dart';
 import '../core/geo/tile_math.dart';
 import 'route_snapper.dart';
 import 'trail_extractor.dart';
 import 'trail_network.dart';
+import 'trail_network_cache.dart';
 import 'trail_router.dart';
 import 'vector_tile_source.dart';
 
@@ -17,6 +19,7 @@ class RouteTrailResult {
     required this.snapped,
     required this.network,
     required this.changed,
+    this.matched = true,
   });
 
   /// The route after snapping (equal to the input when nothing was snapped).
@@ -27,6 +30,21 @@ class RouteTrailResult {
 
   /// Whether snapping changed the route.
   final bool changed;
+  final bool matched;
+}
+
+class _MatchState {
+  const _MatchState(
+    this.anchor,
+    this.cost, {
+    this.previous,
+    this.leg = const [],
+  });
+
+  final TrailAnchor anchor;
+  final double cost;
+  final _MatchState? previous;
+  final List<LatLng> leg;
 }
 
 /// Downloads the minimal vector data covering a route, extracts the trail
@@ -41,13 +59,16 @@ class RouteTrailBuilder {
     this.extractor = const TrailExtractor(),
     this.snapper = const RouteSnapper(),
     this.distance = const GeoDistance(),
+    TrailNetworkCache? cache,
     Future<VectorTileSource> Function(String source)? openSource,
-  }) : _openSource = openSource ?? _defaultOpenSource;
+  }) : cache = cache ?? TrailNetworkCache(),
+       _openSource = openSource ?? _defaultOpenSource;
 
   final int zoom;
   final TrailExtractor extractor;
   final RouteSnapper snapper;
   final GeoDistance distance;
+  final TrailNetworkCache cache;
   final Future<VectorTileSource> Function(String source) _openSource;
 
   static Future<VectorTileSource> _defaultOpenSource(String source) async {
@@ -175,24 +196,17 @@ class RouteTrailBuilder {
   /// the vector source at [sourceUrl].
   Future<TrailNetwork> buildNetwork(
     List<LatLng> route,
-    String sourceUrl,
-  ) async {
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
     if (route.length < 2 || sourceUrl.isEmpty) return const TrailNetwork([]);
-    final source = await _openSource(sourceUrl);
-    try {
-      final trails = <TrailPolyline>[];
-      for (final tile in tilesForRoute(route)) {
-        if (tile.z < source.minZoom || tile.z > source.maxZoom) continue;
-        final bytes = await source.readTile(tile.z, tile.x, tile.y);
-        if (bytes == null || bytes.isEmpty) continue;
-        trails.addAll(
-          extractor.extractFromBytes(bytes, tile.z, tile.x, tile.y),
-        );
-      }
-      return TrailNetwork(trails);
-    } finally {
-      await source.close();
+    final tiles = tilesForRoute(route);
+    if (tiles.length > 256) {
+      throw StateError(
+        'Route exceeds the local routing-data limit. Split it into shorter routes.',
+      );
     }
+    return _readNetwork(tiles, sourceUrl, allowNetwork: allowNetwork);
   }
 
   /// Builds the trail network covering [bounds] by reading its covering tiles
@@ -200,44 +214,62 @@ class RouteTrailBuilder {
   /// building over the currently-viewed map area.
   Future<TrailNetwork> networkForBounds(
     GeoBounds bounds,
-    String sourceUrl,
-  ) async {
-    if (sourceUrl.isEmpty) return const TrailNetwork([]);
-    final source = await _openSource(sourceUrl);
-    try {
-      final trails = <TrailPolyline>[];
-      for (final tile in tilesForBounds(bounds)) {
-        if (tile.z < source.minZoom || tile.z > source.maxZoom) continue;
-        final bytes = await source.readTile(tile.z, tile.x, tile.y);
-        if (bytes == null || bytes.isEmpty) continue;
-        trails.addAll(
-          extractor.extractFromBytes(bytes, tile.z, tile.x, tile.y),
-        );
-      }
-      return TrailNetwork(trails);
-    } finally {
-      await source.close();
-    }
-  }
+    String sourceUrl, {
+    bool allowNetwork = true,
+    bool Function()? isCancelled,
+  }) => _readNetwork(
+    tilesForBounds(bounds),
+    sourceUrl,
+    allowNetwork: allowNetwork,
+    isCancelled: isCancelled,
+  );
 
   /// Builds a small trail network around [point]. Route editing uses this as
   /// an on-demand fallback when a tap falls outside the viewport network.
-  Future<TrailNetwork> networkNearPoint(LatLng point, String sourceUrl) async {
+  Future<TrailNetwork> networkNearPoint(
+    LatLng point,
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) => _readNetwork(
+    tilesNearPoint(point),
+    sourceUrl,
+    allowNetwork: allowNetwork,
+  );
+
+  Future<TrailNetwork> _readNetwork(
+    List<TileCoordinate> tiles,
+    String sourceUrl, {
+    required bool allowNetwork,
+    bool Function()? isCancelled,
+  }) async {
     if (sourceUrl.isEmpty) return const TrailNetwork([]);
-    final source = await _openSource(sourceUrl);
+    VectorTileSource? source;
+    final classes = extractor.trailClasses.toList()..sort();
+    final cacheSource = 'routing-v2|${classes.join(',')}|$sourceUrl';
+    final uri = Uri.tryParse(sourceUrl);
+    final remote = uri?.scheme == 'http' || uri?.scheme == 'https';
     try {
       final trails = <TrailPolyline>[];
-      for (final tile in tilesNearPoint(point)) {
+      for (final tile in tiles) {
+        if (isCancelled?.call() == true) break;
+        final cached = await cache.read(cacheSource, tile);
+        if (cached != null) {
+          trails.addAll(cached);
+          continue;
+        }
+        if ((!allowNetwork && remote) || isCancelled?.call() == true) continue;
+        source ??= await _openSource(sourceUrl);
         if (tile.z < source.minZoom || tile.z > source.maxZoom) continue;
         final bytes = await source.readTile(tile.z, tile.x, tile.y);
-        if (bytes == null || bytes.isEmpty) continue;
-        trails.addAll(
-          extractor.extractFromBytes(bytes, tile.z, tile.x, tile.y),
-        );
+        final extracted = bytes == null || bytes.isEmpty
+            ? <TrailPolyline>[]
+            : extractor.extractFromBytes(bytes, tile.z, tile.x, tile.y);
+        await cache.write(cacheSource, tile, extracted);
+        trails.addAll(extracted);
       }
-      return TrailNetwork(trails);
+      return const TrailNetwork([]).merge(TrailNetwork(trails));
     } finally {
-      await source.close();
+      await source?.close();
     }
   }
 
@@ -245,46 +277,131 @@ class RouteTrailBuilder {
   /// unchanged when no trails are found nearby.
   Future<RouteTrailResult> snapToTrails(
     List<LatLng> route,
-    String sourceUrl,
-  ) async {
-    final network = await buildNetwork(route, sourceUrl);
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
+    final network = await buildNetwork(
+      route,
+      sourceUrl,
+      allowNetwork: allowNetwork,
+    );
     if (network.isEmpty) {
-      return RouteTrailResult(snapped: route, network: network, changed: false);
+      return RouteTrailResult(
+        snapped: route,
+        network: network,
+        changed: false,
+        matched: false,
+      );
     }
-    // First pass: pull each point onto the nearest way with hysteresis.
-    final snapped = snapper.snap(route, network);
-    // Second pass: rebuild the stitched line as a path that follows the
-    // connected trail/road graph end-to-end, so the saved route stays entirely
-    // on real ways and any gap where it left the network is bridged.
-    final refined = refineOntoNetwork(snapped, network);
+    final refined = matchOnNetwork(route, network);
     return RouteTrailResult(
-      snapped: refined,
+      snapped: refined ?? route,
       network: network,
-      changed: _differs(route, refined),
+      changed: refined != null && _differs(route, refined),
+      matched: refined != null,
     );
   }
 
-  /// Rebuilds [route] as a path that follows the connected trail/road graph in
-  /// [network] end-to-end. Each point is snapped onto a way — preferring the
-  /// previous point's category (trail vs road) so the path stays on one kind of
-  /// way — and consecutive anchors are joined along the network, which bridges
-  /// any stretch that left it by routing between the nearest on-network points.
-  /// Returns [route] unchanged when the network cannot support a path.
-  List<LatLng> refineOntoNetwork(List<LatLng> route, TrailNetwork network) {
-    if (route.length < 2 || network.isEmpty) return route;
+  /// RTE-011: every observation must have a connected, nearby mapped match.
+  /// Failure preserves the complete input, never a partially snapped line.
+  List<LatLng> refineOntoNetwork(List<LatLng> route, TrailNetwork network) =>
+      matchOnNetwork(route, network) ?? route;
+
+  List<LatLng>? matchOnNetwork(List<LatLng> route, TrailNetwork network) {
+    if (route.length < 2 || network.isEmpty) return null;
     final router = TrailRouter(network);
-    if (router.isEmpty) return route;
-    final anchors = <TrailAnchor>[];
-    WayCategory? previous;
-    for (final point in route) {
-      final anchor = router.snap(point, preferCategory: previous);
-      if (anchor == null) continue; // Off-network: bridged by the graph route.
-      anchors.add(anchor);
-      previous = anchor.category;
+    final observations = <int>[0];
+    var accumulated = 0.0;
+    for (var index = 1; index < route.length; index++) {
+      accumulated += distance.metersBetween(route[index - 1], route[index]);
+      if (accumulated >= 20 || index == route.length - 1) {
+        observations.add(index);
+        accumulated = 0;
+      }
     }
-    if (anchors.length < 2) return route;
-    final routed = router.buildConnectedRoute(anchors);
-    return routed == null || routed.length < 2 ? route : routed;
+    var states = [
+      for (final anchor in router.snapCandidates(route.first))
+        _MatchState(anchor, anchor.distanceMeters),
+    ];
+    for (
+      var observation = 1;
+      observation < observations.length;
+      observation++
+    ) {
+      if (states.isEmpty) return null;
+      final input = route.sublist(
+        observations[observation - 1],
+        observations[observation] + 1,
+      );
+      final inputLength = distance.pathLengthMeters(input);
+      final nextStates = <_MatchState>[];
+      for (final anchor in router.snapCandidates(input.last)) {
+        _MatchState? best;
+        for (final previous in states) {
+          final leg = router.buildConnectedLeg(previous.anchor, anchor);
+          if (leg == null || !_withinMatchingCorridor(leg, input)) continue;
+          final length = distance.pathLengthMeters(leg);
+          if (length > inputLength * 3 + 40) continue;
+          final cost =
+              previous.cost +
+              anchor.distanceMeters +
+              (length - inputLength).abs();
+          if (best == null || cost < best.cost) {
+            best = _MatchState(anchor, cost, previous: previous, leg: leg);
+          }
+        }
+        if (best != null) nextStates.add(best);
+      }
+      states = nextStates;
+    }
+    if (states.isEmpty) return null;
+    states.sort((left, right) => left.cost.compareTo(right.cost));
+    final legs = <List<LatLng>>[];
+    for (
+      _MatchState? current = states.first;
+      current?.previous != null;
+      current = current.previous
+    ) {
+      legs.add(current!.leg);
+    }
+    final result = <LatLng>[];
+    for (final leg in legs.reversed) {
+      for (final point in leg) {
+        if (result.isEmpty ||
+            distance.metersBetween(result.last, point) > 0.01) {
+          result.add(point);
+        }
+      }
+    }
+    return result.length < 2 ? null : result;
+  }
+
+  bool _withinMatchingCorridor(List<LatLng> leg, List<LatLng> input) {
+    const maxDeviationMeters = 40.0;
+    for (final point in input) {
+      if ((nearestOnPolyline(point, leg)?.distanceMeters ?? double.infinity) >
+          maxDeviationMeters) {
+        return false;
+      }
+    }
+    for (var index = 1; index < leg.length; index++) {
+      final from = leg[index - 1];
+      final to = leg[index];
+      final steps = math.max(1, (distance.metersBetween(from, to) / 20).ceil());
+      for (var step = 0; step <= steps; step++) {
+        final fraction = step / steps;
+        final point = LatLng(
+          from.latitude + (to.latitude - from.latitude) * fraction,
+          from.longitude + (to.longitude - from.longitude) * fraction,
+        );
+        if ((nearestOnPolyline(point, input)?.distanceMeters ??
+                double.infinity) >
+            maxDeviationMeters) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   bool _differs(List<LatLng> a, List<LatLng> b) {

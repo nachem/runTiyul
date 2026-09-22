@@ -10,6 +10,8 @@ import '../../core/units/formatters.dart';
 import '../../models/trail_route.dart';
 import '../../services/trail_network.dart';
 import '../../services/trail_router.dart';
+import '../../services/tile_store.dart';
+import 'route_editor_draft.dart';
 import '../map/trail_map.dart';
 
 class RoutesScreen extends StatelessWidget {
@@ -167,7 +169,9 @@ class ManualRouteEditor extends StatefulWidget {
 
 class _ManualRouteEditorState extends State<ManualRouteEditor> {
   final _nameController = TextEditingController();
-  final List<LatLng> _points = [];
+  RouteEditorDraft _draft = RouteEditorDraft(const []);
+  final List<RouteEditorDraft> _undo = [];
+  List<LatLng> get _points => _draft.points;
   var _saving = false;
   late bool _snap;
   int? _selected;
@@ -175,10 +179,8 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
 
   // Follow-trails mode: tap real trails and let the route follow them.
   var _followTrails = false;
-  final List<TrailAnchor> _followAnchors = [];
   TrailNetwork _trailNetwork = const TrailNetwork([]);
   TrailRouter? _trailRouter;
-  List<List<LatLng>> _trailLines = const [];
   var _loadingTrails = false;
   String? _trailError;
   GeoBounds? _lastBounds;
@@ -186,10 +188,13 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
   @override
   void initState() {
     super.initState();
-    _snap = widget.store.snapRoutesToTrails;
+    _snap = widget.initialRoute == null && widget.store.snapRoutesToTrails;
     final initial = widget.initialRoute;
     if (initial != null) {
-      _points.addAll(initial.points.map((point) => point.latLng));
+      _draft = RouteEditorDraft(
+        initial.points.map((point) => point.latLng).toList(),
+      );
+      _followTrails = widget.store.usesVectorSource;
       _nameController.text = initial.name;
     } else {
       _nameController.text = 'Route ${widget.store.routes.length + 1}';
@@ -204,61 +209,28 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
     super.dispose();
   }
 
-  /// The points shown as editable markers for the current mode: the drawn
-  /// checkpoints, or the trail anchors when following trails.
-  List<LatLng> get _activeMarkers => _followTrails
-      ? [for (final anchor in _followAnchors) anchor.point]
-      : _points;
-
-  TrailNetwork _mergeTrailNetwork(TrailNetwork incoming) {
-    final trails = <TrailPolyline>[];
-    final keys = <String>{};
-    for (final trail in [..._trailNetwork.trails, ...incoming.trails]) {
-      final first = trail.points.first;
-      final last = trail.points.last;
-      final key =
-          '${trail.kind}|${trail.points.length}|'
-          '${first.latitude},${first.longitude}|'
-          '${last.latitude},${last.longitude}';
-      if (keys.add(key)) trails.add(trail);
-    }
-    return TrailNetwork(trails);
-  }
+  List<LatLng> get _activeMarkers => _draft.controls;
 
   void _setFollowTrails(bool value) {
-    if (value == _followTrails) return;
-    // The points the user has placed, independent of the current mode: the
-    // trail anchors in follow mode, the free waypoints otherwise.
-    final placed = _followTrails
-        ? [for (final anchor in _followAnchors) anchor.point]
-        : List<LatLng>.from(_points);
+    if (value == _followTrails || _loadingTrails || _saving) return;
     setState(() {
       _followTrails = value;
       _selected = null;
       _moving = false;
       _trailError = null;
-      // Keep the placed points across the switch so the route is not reset;
-      // only how new points are added (free vs snapped) changes.
-      _followAnchors.clear();
-      _points
-        ..clear()
-        ..addAll(placed);
     });
-    // Entering follow mode: load the trail network and snap the carried-over
-    // points onto it as anchors so the existing route is kept, not cleared.
-    if (value && placed.isNotEmpty) {
-      unawaited(_loadTrails(adoptPoints: placed));
-    }
+    if (value) unawaited(_loadTrails());
   }
 
-  Future<void> _loadTrails({List<LatLng> adoptPoints = const []}) async {
+  Future<void> _loadTrails({LatLng? near}) async {
+    if (_loadingTrails) return;
     final source = widget.store.vectorSourceUrl;
     final bounds = _lastBounds;
     if (source.isEmpty) {
       setState(() => _trailError = 'No trail data source configured');
       return;
     }
-    if (bounds == null) {
+    if (bounds == null && near == null) {
       setState(() => _trailError = 'Move the map, then reload trails');
       return;
     }
@@ -267,51 +239,29 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
       _trailError = null;
     });
     try {
-      final network = await widget.store.routeTrailBuilder.networkForBounds(
-        bounds,
-        source,
-      );
+      final allowNetwork = widget.store.mapTileMode != MapTileMode.offline;
+      final network = near == null
+          ? await widget.store.routeTrailBuilder.networkForBounds(
+              bounds!,
+              source,
+              allowNetwork: allowNetwork,
+            )
+          : await widget.store.routeTrailBuilder.networkNearPoint(
+              near,
+              source,
+              allowNetwork: allowNetwork,
+            );
       if (!mounted) return;
-      final merged = _mergeTrailNetwork(network);
+      final merged = _trailNetwork.merge(network);
       final router = TrailRouter(merged);
-      // Snap any carried-over waypoints onto the freshly loaded network,
-      // keeping each on the same kind of way as the previous one.
-      final adopted = <TrailAnchor>[];
-      if (!merged.isEmpty && adoptPoints.isNotEmpty) {
-        for (final point in adoptPoints) {
-          final anchor = router.snap(
-            point,
-            preferCategory: adopted.isEmpty ? null : adopted.last.category,
-          );
-          if (anchor == null) continue;
-          if (adopted.isNotEmpty &&
-              router.buildConnectedLeg(adopted.last, anchor) == null) {
-            break;
-          }
-          adopted.add(anchor);
-        }
-      }
-      final adoptedRoute = adopted.isEmpty
-          ? const <LatLng>[]
-          : router.buildConnectedRoute(adopted)!;
       setState(() {
         _trailNetwork = merged;
         _trailRouter = router;
-        _trailLines = [for (final trail in merged.trails) trail.points];
         _loadingTrails = false;
         if (merged.isEmpty) {
-          _trailError = 'No trails found in this area';
-        } else if (adoptPoints.isNotEmpty) {
-          _followAnchors
-            ..clear()
-            ..addAll(adopted);
-          _points
-            ..clear()
-            ..addAll(adoptedRoute);
-          if (adopted.length < adoptPoints.length) {
-            _trailError =
-                'Some points were not connected. Add closer trail points';
-          }
+          _trailError = allowNetwork
+              ? 'No mapped ways found here'
+              : 'No cached mapped ways here';
         }
       });
     } on Object {
@@ -323,102 +273,91 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
     }
   }
 
-  Future<void> _addFollowAnchor(LatLng point) async {
-    if (_loadingTrails) return;
-    var router = _trailRouter;
-    // Keep a new waypoint on the same kind of way (trail vs road) as the one it
-    // connects to when it sits near both.
-    final previousCategory = _followAnchors.isEmpty
-        ? null
-        : _followAnchors.last.category;
-    var anchor = router?.snap(
-      point,
-      maxMeters: 40,
-      preferCategory: previousCategory,
-    );
-    if (anchor == null) {
-      final previousAnchor = _followAnchors.lastOrNull;
-      if (previousAnchor != null &&
-          !widget.store.routeTrailBuilder.canLoadInteractiveLeg(
-            previousAnchor.point,
+  Future<void> _editAt(LatLng point) async {
+    if (_loadingTrails || _saving) return;
+    final original = _draft;
+    final selected = _moving ? _selected : null;
+    if (_followTrails &&
+        selected == null &&
+        _points.isNotEmpty &&
+        !widget.store.routeTrailBuilder.canLoadInteractiveLeg(
+          _points.last,
+          point,
+        )) {
+      setState(
+        () => _trailError =
+            'Point is too far away. Add a closer trail point first',
+      );
+      return;
+    }
+    RouteEditorDraft? edit() => selected == null
+        ? original.append(
             point,
-          )) {
-        setState(() {
-          _trailError = 'Point is too far away. Add a closer trail point first';
-        });
-        return;
-      }
-      setState(() {
-        _loadingTrails = true;
-        _trailError = null;
-      });
-      try {
-        final local = await widget.store.routeTrailBuilder.networkNearPoint(
-          point,
-          widget.store.vectorSourceUrl,
-        );
-        if (!mounted) return;
-        final merged = _mergeTrailNetwork(local);
-        router = TrailRouter(merged);
-        anchor = router.snap(
-          point,
-          maxMeters: 40,
-          preferCategory: previousCategory,
-        );
-        setState(() {
-          _trailNetwork = merged;
-          _trailRouter = router;
-          _trailLines = [for (final trail in merged.trails) trail.points];
-          _loadingTrails = false;
-        });
-      } on Object {
-        if (!mounted) return;
-        setState(() {
-          _loadingTrails = false;
-          _trailError = 'Could not load trails near that point';
-        });
-        return;
-      }
+            router: _trailRouter,
+            followTrails: _followTrails,
+          )
+        : original.moveControl(
+            selected,
+            point,
+            router: _trailRouter,
+            followTrails: _followTrails,
+          );
+    var result = edit();
+    if (_followTrails && result == null) {
+      await _loadTrails(near: point);
+      if (!mounted || !identical(original, _draft)) return;
+      result = edit();
     }
-    final anchorToAdd = anchor;
-    if (anchorToAdd == null) {
-      setState(() => _trailError = 'Tap on or near a trail');
-      return;
-    }
-    final previousAnchor = _followAnchors.lastOrNull;
-    final newLeg = previousAnchor == null
-        ? <LatLng>[anchorToAdd.point]
-        : router?.buildConnectedLeg(previousAnchor, anchorToAdd);
-    if (newLeg == null) {
-      setState(() {
-        _trailError =
-            'No connected trail path found. Add a closer trail point first';
-      });
-      return;
-    }
+    _applyEdit(result);
+  }
+
+  void _applyEdit(RouteEditorDraft? result) {
+    if (!mounted) return;
     setState(() {
-      _followAnchors.add(anchorToAdd);
-      if (_points.isEmpty) {
-        _points.addAll(newLeg);
-      } else {
-        _points.addAll(newLeg.skip(1));
+      if (result == null) {
+        _trailError =
+            'No connected mapped path for this edit. Route unchanged.';
+        return;
       }
+      _undo.add(_draft);
+      if (_undo.length > 30) _undo.removeAt(0);
+      _draft = result;
       _selected = null;
       _moving = false;
       _trailError = null;
     });
   }
 
-  void _rebuildFollowRoute() {
-    final router = _trailRouter;
-    final routed = router?.buildConnectedRoute(_followAnchors);
-    if (router != null && routed == null) {
-      _trailError = 'Trail points are no longer connected';
+  Future<void> _deleteControl() async {
+    final selected = _selected;
+    if (selected == null || _loadingTrails || _saving) return;
+    if (_followTrails && _trailRouter == null) {
+      await _loadTrails(near: _activeMarkers[selected]);
+    }
+    if (!mounted) return;
+    _applyEdit(
+      _draft.removeControl(
+        selected,
+        router: _trailRouter,
+        followTrails: _followTrails,
+      ),
+    );
+  }
+
+  void _selectAt(LatLng point) {
+    if (_loadingTrails || _saving) return;
+    final nearest = _nearestWaypoint(point);
+    if (nearest != null) {
+      setState(() {
+        _selected = nearest;
+        _moving = false;
+      });
       return;
     }
-    _points
-      ..clear()
-      ..addAll(routed ?? [for (final anchor in _followAnchors) anchor.point]);
+    final inserted = _draft.insertControl(point);
+    if (inserted == null) return;
+    _applyEdit(inserted.draft);
+    setState(() => _selected = inserted.control);
   }
 
   int? _nearestWaypoint(LatLng target) {
@@ -434,7 +373,7 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
         bestIndex = i;
       }
     }
-    return bestIndex;
+    return bestMeters <= 25 ? bestIndex : null;
   }
 
   @override
@@ -446,22 +385,14 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
         ),
         actions: [
           IconButton(
-            onPressed:
-                (_followTrails ? _followAnchors.isEmpty : _points.isEmpty)
+            onPressed: (_undo.isEmpty || _loadingTrails || _saving)
                 ? null
                 : () => setState(() {
-                    if (_followTrails) {
-                      if (_followAnchors.isNotEmpty) {
-                        _followAnchors.removeLast();
-                      }
-                      _rebuildFollowRoute();
-                    } else {
-                      _points.removeLast();
-                    }
+                    _draft = _undo.removeLast();
                     _selected = null;
                     _moving = false;
                   }),
-            tooltip: 'Undo last point',
+            tooltip: 'Undo route edit',
             icon: const Icon(Icons.undo),
           ),
         ],
@@ -504,10 +435,11 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                       ),
                     ],
                     selected: {_followTrails},
-                    onSelectionChanged: (selection) =>
-                        _setFollowTrails(selection.first),
+                    onSelectionChanged: _loadingTrails || _saving
+                        ? null
+                        : (selection) => _setFollowTrails(selection.first),
                   ),
-                  if (_followTrails)
+                  if (_followTrails || _trailError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Row(
@@ -517,7 +449,7 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                               _loadingTrails
                                   ? 'Loading trails\u2026'
                                   : (_trailError ??
-                                        'Tap trails to build the route'),
+                                        '${_trailNetwork.trails.length} mapped ways'),
                               style: Theme.of(context).textTheme.bodySmall,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -539,31 +471,22 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
               child: TrailMap(
                 store: widget.store,
                 waypoints: _points,
-                waypointMarkers: _followTrails ? _activeMarkers : null,
-                trailOverlay: _followTrails ? _trailLines : const [],
+                waypointMarkers: _activeMarkers,
+                onWaypointTap: (index) {
+                  if (_loadingTrails || _saving) return;
+                  setState(() {
+                    _selected = index;
+                    _moving = false;
+                  });
+                },
                 highlightedWaypoint: _selected,
                 initialCenter: widget.store.currentLocation,
                 initialZoom: widget.initialRoute == null ? 16 : null,
                 autoFit: widget.initialRoute != null,
                 refitOnContentChange: false,
                 onVisibleBoundsChanged: (bounds) => _lastBounds = bounds,
-                onTap: (point) {
-                  if (_followTrails) {
-                    unawaited(_addFollowAnchor(point));
-                    return;
-                  }
-                  setState(() {
-                    final selected = _selected;
-                    if (_moving && selected != null) {
-                      _points[selected] = point;
-                      _moving = false;
-                    } else {
-                      _points.add(point);
-                    }
-                  });
-                },
-                onLongPress: (point) =>
-                    setState(() => _selected = _nearestWaypoint(point)),
+                onTap: (point) => unawaited(_editAt(point)),
+                onLongPress: _selectAt,
                 showControls: true,
               ),
             ),
@@ -587,26 +510,17 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (!_followTrails)
-                        TextButton.icon(
-                          onPressed: () => setState(() => _moving = true),
-                          icon: const Icon(Icons.open_with),
-                          label: const Text('Move'),
-                        ),
                       TextButton.icon(
-                        onPressed: () => setState(() {
-                          final selected = _selected!;
-                          if (_followTrails) {
-                            if (selected < _followAnchors.length) {
-                              _followAnchors.removeAt(selected);
-                            }
-                            _rebuildFollowRoute();
-                          } else {
-                            _points.removeAt(selected);
-                          }
-                          _selected = null;
-                          _moving = false;
-                        }),
+                        onPressed: _loadingTrails || _saving
+                            ? null
+                            : () => setState(() => _moving = true),
+                        icon: const Icon(Icons.open_with),
+                        label: const Text('Move'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _loadingTrails || _saving
+                            ? null
+                            : () => unawaited(_deleteControl()),
                         icon: const Icon(Icons.delete_outline),
                         label: const Text('Delete'),
                       ),
@@ -635,32 +549,32 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Text(
-                      _followTrails
-                          ? '${_followAnchors.length} trail points'
-                          : '${_points.length} waypoints',
-                    ),
-                  ),
+                  Expanded(child: Text('${_activeMarkers.length} controls')),
                   FilledButton.icon(
                     onPressed:
                         _saving ||
+                            _loadingTrails ||
                             _points.length < 2 ||
                             _nameController.text.trim().isEmpty
                         ? null
                         : () async {
                             setState(() => _saving = true);
-                            await widget.store.setSnapRoutesToTrails(_snap);
                             final initial = widget.initialRoute;
                             final saved = initial == null
                                 ? await widget.store.saveManualRoute(
                                     _nameController.text,
                                     _points,
+                                    snapToTrailsOverride:
+                                        _snap && !_followTrails,
+                                    preserveGeometry: true,
                                   )
                                 : await widget.store.updateManualRoute(
                                     initial,
                                     _nameController.text,
                                     _points,
+                                    snapToTrailsOverride:
+                                        _snap && !_followTrails,
+                                    preserveGeometry: true,
                                   );
                             if (!context.mounted) return;
                             if (saved) {
@@ -884,9 +798,9 @@ class _SnapToTrailsButtonState extends State<_SnapToTrailsButton> {
     setState(() => _snapping = false);
     final message = switch (outcome) {
       RouteSnapOutcome.updated => 'Route aligned to recognized trails.',
-      RouteSnapOutcome.unchanged => 'Route already follows recognized trails.',
+      RouteSnapOutcome.unchanged => 'Route unchanged.',
       RouteSnapOutcome.unavailable =>
-        'Configure a vector map source before snapping routes.',
+        'No complete nearby mapped match. Route unchanged.',
       RouteSnapOutcome.failed => 'Route could not be snapped to trails.',
     };
     ScaffoldMessenger.of(

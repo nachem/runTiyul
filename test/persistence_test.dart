@@ -7,6 +7,7 @@ import 'package:trail_runner/core/geo/geo_bounds.dart';
 import 'package:trail_runner/data/app_database.dart';
 import 'package:trail_runner/data/app_repository.dart';
 import 'package:trail_runner/models/offline_area.dart';
+import 'package:trail_runner/models/run_activity.dart';
 import 'package:trail_runner/models/trail_route.dart';
 import 'package:trail_runner/services/map_provider.dart';
 import 'package:trail_runner/services/tile_store.dart';
@@ -25,6 +26,93 @@ void main() {
   });
 
   tearDown(() => database.close());
+
+  test('concurrent first database access returns one open database', () async {
+    final opened = await Future.wait(
+      List.generate(20, (_) => database.database),
+    );
+    expect(opened.every((db) => identical(db, opened.first)), isTrue);
+    expect(
+      (await opened.first.rawQuery('PRAGMA foreign_keys')).single.values.single,
+      1,
+    );
+  });
+
+  test('editing a route preserves activity references', () async {
+    final now = DateTime.utc(2026, 9, 6);
+    final route = TrailRoute(
+      id: 'linked-route',
+      name: 'Before',
+      source: RouteSource.manual,
+      createdAt: now,
+      updatedAt: now,
+      points: const [
+        RoutePoint(latitude: 1, longitude: 1),
+        RoutePoint(latitude: 2, longitude: 2),
+      ],
+    );
+    await repository.saveRoute(route);
+    await repository.createActivity(
+      RunActivity(
+        id: 'linked-run',
+        routeId: route.id,
+        status: ActivityStatus.completed,
+        startedAt: now,
+        elapsed: Duration.zero,
+        distanceMeters: 0,
+        elevationGainMeters: 0,
+        samples: const [],
+      ),
+    );
+    await repository.saveRoute(
+      TrailRoute(
+        id: route.id,
+        name: 'After',
+        source: route.source,
+        createdAt: route.createdAt,
+        updatedAt: now,
+        points: route.points,
+      ),
+    );
+    expect((await repository.loadActivities()).single.routeId, route.id);
+    await repository.deleteRoute(route.id);
+    expect((await repository.loadActivities()).single.routeId, isNull);
+  });
+
+  test(
+    'CyclOSM and Topographic remain independent persistent layers',
+    () async {
+      final directory = await Directory.systemTemp.createTemp('layer_choice');
+      final store = await AppStore.forTesting(
+        repository: repository,
+        tileStore: await TileStore.at(directory),
+        mapProvider: MapProviderConfig.fromEnvironment(),
+      );
+      addTearDown(() async {
+        store.dispose();
+        await directory.delete(recursive: true);
+      });
+      expect(
+        store.baseLayers.map((layer) => layer.id),
+        containsAll([
+          'openstreetmap-standard',
+          'cyclosm',
+          'opentopomap',
+          'esri-world-imagery',
+        ]),
+      );
+      expect(
+        store.rasterDownloadProviders.map((layer) => layer.id).toSet().length,
+        store.rasterDownloadProviders.length,
+      );
+      for (final id in ['cyclosm', 'opentopomap']) {
+        await store.setActiveMapLayer(id);
+        await store.reload();
+        expect(store.activeMapLayer.id, id);
+        expect(store.activeMapLayer.onlineFallbackUrlTemplate, isNull);
+      }
+    },
+  );
 
   test('schema persists and cascades route points', () async {
     final now = DateTime.utc(2026, 7, 14);
@@ -179,6 +267,83 @@ void main() {
 
     expect(restored.mapTileMode, MapTileMode.online);
   });
+
+  test(
+    'offline area preview restores without persisting Offline mode',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'trail_runner_tiles',
+      );
+      final tileStore = await TileStore.at(directory);
+      final store = await AppStore.forTesting(
+        repository: repository,
+        tileStore: tileStore,
+        mapProvider: const MapProviderConfig(
+          id: 'test',
+          urlTemplate: 'https://example.invalid/{z}/{x}/{y}.png',
+          attribution: 'Test',
+          offlineDownloadsAllowed: false,
+          isDevelopmentOsmOverride: false,
+        ),
+      );
+      final now = DateTime.utc(2026, 9, 4);
+      final area = OfflineArea(
+        id: 'area-preview',
+        name: 'Preview',
+        bounds: const GeoBounds(
+          north: 31.8,
+          south: 31.7,
+          east: 35.3,
+          west: 35.2,
+        ),
+        minZoom: 12,
+        maxZoom: 13,
+        providerId: 'test',
+        status: OfflineAreaStatus.complete,
+        totalTiles: 1,
+        completedTiles: 1,
+        actualBytes: 1024,
+        createdAt: now,
+        updatedAt: now,
+      );
+
+      expect(store.mapTileMode, MapTileMode.auto);
+      store.previewOfflineArea(area);
+      expect(store.mapTileMode, MapTileMode.offline);
+      expect(store.focusedOfflineArea, same(area));
+
+      store.focusOfflineArea(null);
+      expect(store.mapTileMode, MapTileMode.auto);
+      expect(store.focusedOfflineArea, isNull);
+
+      await repository.saveOfflineArea(area);
+      await store.reload();
+      store.previewOfflineArea(store.offlineAreas.single);
+      await store.deleteOfflineArea(store.offlineAreas.single);
+      expect(store.mapTileMode, MapTileMode.auto);
+      expect(store.focusedOfflineArea, isNull);
+
+      store.previewOfflineArea(area);
+      store.dispose();
+      final restored = await AppStore.forTesting(
+        repository: repository,
+        tileStore: tileStore,
+        mapProvider: const MapProviderConfig(
+          id: 'test',
+          urlTemplate: 'https://example.invalid/{z}/{x}/{y}.png',
+          attribution: 'Test',
+          offlineDownloadsAllowed: false,
+          isDevelopmentOsmOverride: false,
+        ),
+      );
+      addTearDown(() async {
+        restored.dispose();
+        await directory.delete(recursive: true);
+      });
+
+      expect(restored.mapTileMode, MapTileMode.auto);
+    },
+  );
 
   test(
     'editing offline bounds removes only obsolete tile references',

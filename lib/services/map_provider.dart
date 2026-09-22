@@ -1,5 +1,43 @@
 import 'package:flutter/foundation.dart';
 
+class RasterDownloadPolicy {
+  const RasterDownloadPolicy({
+    this.maxConcurrentRequests = 4,
+    this.minimumRequestInterval = const Duration(milliseconds: 250),
+    this.requestsPerBatch = 40,
+    this.batchPause = const Duration(seconds: 5),
+    this.retryBaseDelay = const Duration(seconds: 1),
+    this.rateLimitBaseDelay = const Duration(seconds: 30),
+    this.maxAutomaticWait = const Duration(minutes: 2),
+  }) : assert(maxConcurrentRequests > 0 && maxConcurrentRequests <= 4),
+       assert(requestsPerBatch > 0);
+
+  static const development = RasterDownloadPolicy(
+    maxConcurrentRequests: 1,
+    minimumRequestInterval: Duration(milliseconds: 500),
+    requestsPerBatch: 20,
+    batchPause: Duration(seconds: 10),
+  );
+
+  final int maxConcurrentRequests;
+  final Duration minimumRequestInterval;
+  final int requestsPerBatch;
+  final Duration batchPause;
+  final Duration retryBaseDelay;
+  final Duration rateLimitBaseDelay;
+  final Duration maxAutomaticWait;
+
+  Duration minimumDuration(int requests) {
+    if (requests <= 1) return Duration.zero;
+    final intervals = requests - 1;
+    final pauses = intervals ~/ requestsPerBatch;
+    final pause = batchPause > minimumRequestInterval
+        ? batchPause
+        : minimumRequestInterval;
+    return minimumRequestInterval * (intervals - pauses) + pause * pauses;
+  }
+}
+
 class MapProviderConfig {
   const MapProviderConfig({
     required this.id,
@@ -9,6 +47,11 @@ class MapProviderConfig {
     required this.isDevelopmentOsmOverride,
     this.label = 'Map',
     this.vectorSourceUrl = '',
+    this.onlineFallbackUrlTemplate,
+    this.onlineFallbackAttribution,
+    this.authorizedDebugDownloadsOnly = false,
+    this.maxNativeZoom = 19,
+    this._downloadPolicy,
   });
 
   final String id;
@@ -20,6 +63,21 @@ class MapProviderConfig {
   final String attribution;
   final bool offlineDownloadsAllowed;
   final bool isDevelopmentOsmOverride;
+  final String? onlineFallbackUrlTemplate;
+  final String? onlineFallbackAttribution;
+  final bool authorizedDebugDownloadsOnly;
+  final int maxNativeZoom;
+  final RasterDownloadPolicy? _downloadPolicy;
+
+  RasterDownloadPolicy get downloadPolicy =>
+      _downloadPolicy ??
+      (isDevelopmentOsmOverride
+          ? RasterDownloadPolicy.development
+          : const RasterDownloadPolicy());
+
+  /// Attribution for interactive display, including any online-only fallback.
+  String get onlineAttribution =>
+      [attribution, ?onlineFallbackAttribution].join(' \u2022 ');
 
   /// Whether this APK includes the on-device developer unlock for public raster
   /// downloads. This repository intentionally defaults the capability on; a
@@ -30,6 +88,12 @@ class MapProviderConfig {
     'ALLOW_PUBLIC_RASTER_DEV_UNLOCK',
     defaultValue: true,
   );
+
+  /// Enables providers covered by a separate development/offline permission
+  /// grant. It is deliberately disabled unless the special build explicitly
+  /// opts in; the normal public-service unlock does not imply this permission.
+  static const bool authorizedViewRasterDevUnlockCompiled =
+      bool.fromEnvironment('ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS');
 
   /// URL (or local file path) of a vector MBTiles archive (OpenMapTiles schema)
   /// to build offline areas from. Empty means the per-tile raster downloader is
@@ -59,6 +123,11 @@ class MapProviderConfig {
     offlineDownloadsAllowed: true,
     isDevelopmentOsmOverride: true,
     vectorSourceUrl: vectorSourceUrl,
+    onlineFallbackUrlTemplate: onlineFallbackUrlTemplate,
+    onlineFallbackAttribution: onlineFallbackAttribution,
+    authorizedDebugDownloadsOnly: authorizedDebugDownloadsOnly,
+    maxNativeZoom: maxNativeZoom,
+    downloadPolicy: _downloadPolicy,
   );
 
   static MapProviderConfig fromEnvironment() {
@@ -129,12 +198,28 @@ class MapProviderConfig {
         'Community',
     offlineDownloadsAllowed: false,
     isDevelopmentOsmOverride: false,
+    authorizedDebugDownloadsOnly: true,
   );
 
   /// Additional online-only base layers the user can switch to for viewing.
   /// These are display-only imagery/basemap sources whose terms permit
   /// interactive display with attribution but not bulk offline download.
   static const List<MapProviderConfig> onlineImageryLayers = [esriWorldImagery];
+
+  /// Stable online topographic display backed directly by OpenTopoMap.
+  ///
+  /// This is intentionally view-only. OpenTopoMap's public interactive tile
+  /// service must not be used for bulk/offline downloads.
+  static const MapProviderConfig openTopoMap = MapProviderConfig(
+    id: 'opentopomap',
+    label: 'Topographic',
+    maxNativeZoom: 17,
+    urlTemplate: 'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+    attribution: 'OpenTopoMap (CC-BY-SA), OpenStreetMap contributors, SRTM',
+    offlineDownloadsAllowed: false,
+    isDevelopmentOsmOverride: false,
+    authorizedDebugDownloadsOnly: true,
+  );
 
   /// Free Terrarium-encoded elevation ("terrain-RGB") tiles from the AWS Open
   /// Data "Terrain Tiles" set. Every pixel encodes height, so the app derives
@@ -171,8 +256,9 @@ class MapProviderConfig {
     );
   }
 
-  /// CyclOSM raster tiles with cycle cartography, contour lines, and hillshade
-  /// already baked in, so online viewing never fetches separate elevation data.
+  /// CyclOSM cycle cartography, independently selectable alongside
+  /// [openTopoMap]. Neither layer is a per-tile fallback for the other, so a
+  /// provider outage does not disable caching or delay the selected source.
   ///
   /// CyclOSM's public service is for interactive use, not a production bulk
   /// download backend. Small raster downloads are therefore enabled only by the

@@ -3,31 +3,80 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trail_runner/services/trail_extractor.dart';
 import 'package:vector_tile/vector_tile.dart';
 
-VectorTile _syntheticTile({required String klass}) {
+VectorTile _syntheticTile({
+  required String klass,
+  Map<String, VectorTileValue> attributes = const {},
+}) {
   final value = VectorTileValue(stringValue: klass);
+  final keys = ['class', ...attributes.keys];
+  final values = [value, ...attributes.values];
   // MoveTo(2048,2048) then LineTo(+0,+512): a short line near the tile center.
   // Command ints: MoveTo=9, LineTo=10; params are zig-zag encoded.
   final feature = VectorTileFeature(
     id: Int64(1),
-    tags: [0, 0],
+    tags: [
+      for (var index = 0; index < keys.length; index++) ...[index, index],
+    ],
     type: VectorTileGeomType.LINESTRING,
     geometryList: [9, 4096, 4096, 10, 0, 1024],
     extent: 4096,
-    keys: ['class'],
-    values: [value],
+    keys: keys,
+    values: values,
   );
   final layer = VectorTileLayer(
     name: 'transportation',
     extent: 4096,
     version: 2,
-    keys: ['class'],
-    values: [value],
+    keys: keys,
+    values: values,
     features: [feature],
   );
   return VectorTile(layers: [layer]);
 }
 
 void main() {
+  test('RTE-011 retains grade and foot-access restrictions for routing', () {
+    const extractor = TrailExtractor(
+      trailClasses: TrailExtractor.trailAndRoadClasses,
+    );
+    final bridge = extractor
+        .extractFromTile(
+          _syntheticTile(
+            klass: 'path',
+            attributes: {
+              'brunnel': VectorTileValue(stringValue: 'bridge'),
+              'layer': VectorTileValue(intValue: Int64(1)),
+              'foot': VectorTileValue(stringValue: 'no'),
+            },
+          ),
+          14,
+          8192,
+          8192,
+        )
+        .single;
+    expect(bridge.structure, 'bridge');
+    expect(bridge.level, 1);
+    expect(bridge.routable, isFalse);
+    for (final kind in ['motorway', 'trunk']) {
+      final road = extractor
+          .extractFromTile(_syntheticTile(klass: kind), 14, 8192, 8192)
+          .single;
+      expect(road.routable, isFalse);
+    }
+    final allowed = extractor
+        .extractFromTile(
+          _syntheticTile(
+            klass: 'trunk',
+            attributes: {'foot': VectorTileValue(stringValue: 'yes')},
+          ),
+          14,
+          8192,
+          8192,
+        )
+        .single;
+    expect(allowed.routable, isTrue);
+  });
+
   test('extracts a path trail and projects to correct lat/lng order', () {
     // Tile z=2, x=3, y=0 covers roughly lon [90,180], lat [66.5,85.05].
     final trails = const TrailExtractor().extractFromTile(

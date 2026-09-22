@@ -99,4 +99,24 @@ void main() {
     expect(await store.enablePublicRasterDevDownloads(), isFalse);
     expect(store.publicRasterDevDownloadsUnlocked, isFalse);
   });
+
+  test('explicit authorized capability promotes topo and satellite', () async {
+    final store = await AppStore.forTesting(
+      repository: repository,
+      tileStore: tileStore,
+      mapProvider: _lockedOsm,
+      publicRasterDevUnlockCompiled: true,
+      authorizedViewRasterDevUnlockCompiled: true,
+    );
+    addTearDown(store.dispose);
+
+    expect(await store.enablePublicRasterDevDownloads(), isTrue);
+    expect(
+      store.rasterDownloadProviders.map((provider) => provider.id),
+      containsAll([
+        MapProviderConfig.openTopoMap.id,
+        MapProviderConfig.esriWorldImagery.id,
+      ]),
+    );
+  });
 }

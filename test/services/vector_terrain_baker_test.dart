@@ -57,6 +57,18 @@ Future<Uint8List> _terrariumPng() => _png(32, 32, (pixels) {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('terrain overlay fades when a z13 parent is enlarged', () {
+    expect(TerrariumVectorTerrainBaker.overlayOpacityForZoomDelta(0), 0.38);
+    expect(
+      TerrariumVectorTerrainBaker.overlayOpacityForZoomDelta(1),
+      closeTo(0.2687, 0.0001),
+    );
+    expect(
+      TerrariumVectorTerrainBaker.overlayOpacityForZoomDelta(3),
+      closeTo(0.1344, 0.0001),
+    );
+  });
+
   test('does not request terrain below the topographic zoom floor', () async {
     final base = await _basePng();
     var requests = 0;

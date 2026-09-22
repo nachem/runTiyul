@@ -8,7 +8,6 @@ import '../features/map/map_screen.dart';
 import '../features/offline_maps/offline_maps_screen.dart';
 import '../features/recording/record_screen.dart';
 import '../features/routes/routes_screen.dart';
-import '../services/tile_store.dart';
 import 'app_store.dart';
 
 class TrailRunnerApp extends StatelessWidget {
@@ -148,8 +147,7 @@ class _AppShellState extends State<AppShell> with WidgetsBindingObserver {
           OfflineMapsScreen(
             store: widget.store,
             onPreview: (area) {
-              widget.store.focusOfflineArea(area);
-              unawaited(widget.store.setMapTileMode(MapTileMode.offline));
+              widget.store.previewOfflineArea(area);
               _selectDestination(0);
             },
           ),

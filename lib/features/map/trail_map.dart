@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../app/app_store.dart';
+import '../../core/geo/distance.dart';
 import '../../core/geo/geo_bounds.dart';
 import '../../core/geo/polyline_simplifier.dart';
 import '../../models/map_tracking.dart';
@@ -12,6 +14,8 @@ import '../../models/offline_area.dart';
 import '../../models/trail_route.dart';
 import '../../services/map_provider.dart';
 import '../../services/tile_store.dart';
+import '../../services/trail_extractor.dart';
+import 'vector_way_overlay_controller.dart';
 
 class TrailMap extends StatefulWidget {
   const TrailMap({
@@ -29,6 +33,7 @@ class TrailMap extends StatefulWidget {
     this.highlightedWaypoint,
     this.trailOverlay = const [],
     this.waypointMarkers,
+    this.onWaypointTap,
     this.onVisibleBoundsChanged,
     this.offlineOnly = false,
     this.initialCenter,
@@ -72,6 +77,7 @@ class TrailMap extends StatefulWidget {
   /// When set, these are shown as the numbered markers instead of [waypoints],
   /// so the route line and its editable anchors can differ.
   final List<LatLng>? waypointMarkers;
+  final ValueChanged<int>? onWaypointTap;
 
   /// Reports the map's visible bounds as the camera settles, so callers can
   /// load data (such as trails) for the area in view.
@@ -106,6 +112,8 @@ class TrailMap extends StatefulWidget {
 }
 
 class _TrailMapState extends State<TrailMap> {
+  late final VectorWayOverlayController _vectorOverlay;
+  GeoBounds? _visibleBounds;
   late final MapController _controller;
   late LatLng _cameraCenter;
   late double _cameraZoom;
@@ -116,6 +124,7 @@ class _TrailMapState extends State<TrailMap> {
   double? _lastTrackingCourse;
   bool? _lastFollowCurrentLocation;
   MapOrientationMode? _lastOrientationMode;
+  bool _followCancellationPending = false;
 
   /// Neighborhood-level zoom used when the map opens centered on the runner's
   /// current position.
@@ -162,6 +171,8 @@ class _TrailMapState extends State<TrailMap> {
   void initState() {
     super.initState();
     _controller = MapController();
+    _vectorOverlay = VectorWayOverlayController(widget.store.routeTrailBuilder)
+      ..addListener(_vectorOverlayChanged);
     _cameraCenter = _defaultCenter;
     _cameraZoom = _defaultZoom;
     _renderZoom = _cameraZoom;
@@ -190,6 +201,9 @@ class _TrailMapState extends State<TrailMap> {
   @override
   void didUpdateWidget(covariant TrailMap oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.followCurrentLocation == false) {
+      _followCancellationPending = false;
+    }
     _offlineCoverageAvailable = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
     if (_trackingStateChanged) {
       _rememberTrackingState();
@@ -198,6 +212,26 @@ class _TrailMapState extends State<TrailMap> {
       });
     }
     _maybeAutoFit();
+    if (_vectorOverlay.enabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refreshVectorOverlay();
+      });
+    }
+  }
+
+  void _vectorOverlayChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _refreshVectorOverlay() {
+    final bounds = _visibleBounds;
+    if (bounds == null) return;
+    _vectorOverlay.update(
+      bounds: bounds,
+      zoom: _cameraZoom,
+      source: widget.store.vectorSourceUrl,
+      allowNetwork: _tileMode != MapTileMode.offline,
+    );
   }
 
   bool get _hasTrackingControls =>
@@ -220,13 +254,13 @@ class _TrailMapState extends State<TrailMap> {
     _lastOrientationMode = widget.orientationMode;
   }
 
-  void _syncTrackingCamera() {
+  void _syncTrackingCamera({bool? followCurrentLocation}) {
     if (!_hasTrackingControls) return;
     final camera = _controller.camera;
     final location = widget.store.currentLocation;
-    final center = widget.followCurrentLocation == true && location != null
-        ? location
-        : camera.center;
+    final shouldFollow =
+        followCurrentLocation ?? widget.followCurrentLocation == true;
+    final center = shouldFollow && location != null ? location : camera.center;
     final rotation = widget.orientationMode == MapOrientationMode.courseUp
         ? mapRotationForCourse(widget.courseDegrees)
         : 0.0;
@@ -296,9 +330,12 @@ class _TrailMapState extends State<TrailMap> {
             ? widget.store.mapProvider.attribution
             : savedAttributions.join(' \u2022 ');
       case MapTileMode.online:
-        return activeLayer.attribution;
+        return activeLayer.onlineAttribution;
       case MapTileMode.auto:
-        return {activeLayer.attribution, ...savedAttributions}.join(' \u2022 ');
+        return {
+          activeLayer.onlineAttribution,
+          ...savedAttributions,
+        }.join(' \u2022 ');
     }
   }
 
@@ -358,17 +395,9 @@ class _TrailMapState extends State<TrailMap> {
   }
 
   void _updateCamera(MapCamera camera, bool hasGesture) {
-    if (hasGesture) {
-      _userInteracted = true;
-      if (widget.followCurrentLocation == true) {
-        widget.onFollowCurrentLocationChanged?.call(false);
-      }
-      if (_hasTrackingControls) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _syncTrackingCamera();
-        });
-      }
-    }
+    final markersMoved =
+        widget.waypointMarkers != null && camera.center != _cameraCenter;
+    if (hasGesture) _userInteracted = true;
     final zoomChanged = (_cameraZoom - camera.zoom).abs() > 0.001;
     _cameraCenter = camera.center;
     _cameraZoom = camera.zoom;
@@ -377,25 +406,44 @@ class _TrailMapState extends State<TrailMap> {
     final available = _hasOfflineCoverage(_cameraCenter, _cameraZoom);
     if ((available != _offlineCoverageAvailable ||
             (_tileMode == MapTileMode.offline && zoomChanged) ||
-            renderZoomChanged) &&
+            renderZoomChanged ||
+            markersMoved) &&
         mounted) {
       setState(() => _offlineCoverageAvailable = available);
     }
     _reportVisibleBounds(camera);
   }
 
+  void _handleMapEvent(MapEvent event) {
+    if (!_hasTrackingControls) return;
+    final stopFollowing = mapEventStopsLocationFollow(event.source);
+    if (stopFollowing && widget.followCurrentLocation == true) {
+      _followCancellationPending = true;
+      widget.onFollowCurrentLocationChanged?.call(false);
+    }
+    if (event is MapEventMoveEnd ||
+        event is MapEventRotateEnd ||
+        event is MapEventDoubleTapZoomEnd) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _syncTrackingCamera(
+            followCurrentLocation: _followCancellationPending ? false : null,
+          );
+        }
+      });
+    }
+  }
+
   void _reportVisibleBounds([MapCamera? camera]) {
-    final onBounds = widget.onVisibleBoundsChanged;
-    if (onBounds == null) return;
     final bounds = (camera ?? _controller.camera).visibleBounds;
-    onBounds(
-      GeoBounds(
-        north: bounds.north,
-        south: bounds.south,
-        east: bounds.east,
-        west: bounds.west,
-      ),
+    _visibleBounds = GeoBounds(
+      north: bounds.north,
+      south: bounds.south,
+      east: bounds.east,
+      west: bounds.west,
     );
+    widget.onVisibleBoundsChanged?.call(_visibleBounds!);
+    if (_vectorOverlay.enabled) _refreshVectorOverlay();
   }
 
   void _zoomBy(double delta) {
@@ -412,7 +460,9 @@ class _TrailMapState extends State<TrailMap> {
     await widget.store.locate();
     if (!mounted) return;
     final location = widget.store.currentLocation;
-    if (location != null) _controller.move(location, _locationZoom);
+    if (location != null) {
+      _controller.move(location, _controller.camera.zoom);
+    }
   }
 
   /// Obtains a location fix if one is not already known and centers the camera
@@ -435,6 +485,7 @@ class _TrailMapState extends State<TrailMap> {
     // activity, and area editors) reflect the new source immediately. The
     // shell rebuilds its own pages through its store listener.
     setState(() {});
+    _refreshVectorOverlay();
     if (mode != MapTileMode.offline) return;
     _fitOfflineAreas();
   }
@@ -547,11 +598,15 @@ class _TrailMapState extends State<TrailMap> {
         '-${onlineProvider.id}',
       ),
       urlTemplate: onlineProvider.urlTemplate,
+      fallbackUrl: onlineProvider.onlineFallbackUrlTemplate,
+      maxNativeZoom: onlineProvider.maxNativeZoom,
       userAgentPackageName: 'com.bernoulli.trailrunner.trail_runner',
-      tileProvider: OfflineFirstTileProvider(
-        store: widget.store.tileStore,
-        config: onlineProvider,
-        mode: MapTileMode.online,
+      tileProvider: NetworkTileProvider(
+        headers: {
+          'User-Agent':
+              'RunTiyul/1.4 (com.bernoulli.trailrunner.trail_runner; '
+              '+https://github.com/nachem/runTiyul)',
+        },
       ),
       maxZoom: 19,
       // When a tile cannot be fetched (no connectivity), show nothing so the
@@ -586,6 +641,34 @@ class _TrailMapState extends State<TrailMap> {
 
     final routePoints = renderPoints(_routePoints);
     final markerPoints = widget.waypointMarkers ?? widget.waypoints;
+    final markerIndices = <int>[];
+    final markerSpacing =
+        renderingToleranceMeters(_cameraCenter.latitude, _cameraZoom) * 36;
+    if (widget.highlightedWaypoint case final selected?
+        when selected < markerPoints.length) {
+      markerIndices.add(selected);
+    }
+    for (
+      var index = 0;
+      index < markerPoints.length && markerIndices.length < 40;
+      index++
+    ) {
+      if (_visibleBounds != null &&
+          !_visibleBounds!.contains(markerPoints[index])) {
+        continue;
+      }
+      if (markerIndices.any(
+        (other) =>
+            const GeoDistance().metersBetween(
+              markerPoints[index],
+              markerPoints[other],
+            ) <
+            markerSpacing,
+      )) {
+        continue;
+      }
+      markerIndices.add(index);
+    }
     final otherRoutePoints = widget.routes
         .where((candidate) => candidate.id != widget.route?.id)
         .map(
@@ -618,11 +701,37 @@ class _TrailMapState extends State<TrailMap> {
                 ? null
                 : (_, point) => widget.onLongPress!(point),
             onPositionChanged: _updateCamera,
+            onMapEvent: _handleMapEvent,
             onMapReady: _reportVisibleBounds,
           ),
           children: [
             ..._buildTileLayers(offlineZoomRange),
-            if (widget.trailOverlay.isNotEmpty)
+            if (_vectorOverlay.visible && !_vectorOverlay.network.isEmpty)
+              PolylineLayer(
+                key: const ValueKey('vector-way-overlay'),
+                polylines: [
+                  for (final trail in _vectorOverlay.network.trails)
+                    Polyline(
+                      points: renderPoints(trail.points),
+                      color: !trail.routable
+                          ? Colors.grey.shade600
+                          : TrailExtractor.categoryOf(trail.kind) ==
+                                WayCategory.trail
+                          ? Colors.teal.shade800
+                          : Colors.blue.shade700,
+                      strokeWidth: _cameraZoom >= 16 ? 3 : 2,
+                      borderColor: Colors.white.withAlpha(210),
+                      borderStrokeWidth: 1,
+                      pattern:
+                          TrailExtractor.categoryOf(trail.kind) ==
+                              WayCategory.trail
+                          ? StrokePattern.dashed(segments: const [6, 4])
+                          : const StrokePattern.solid(),
+                    ),
+                ],
+              ),
+            if (widget.trailOverlay.isNotEmpty &&
+                _cameraZoom >= VectorWayOverlayController.minZoom)
               PolylineLayer(
                 polylines: [
                   for (final line in widget.trailOverlay)
@@ -731,19 +840,25 @@ class _TrailMapState extends State<TrailMap> {
             if (markerPoints.isNotEmpty)
               MarkerLayer(
                 markers: [
-                  for (var i = 0; i < markerPoints.length; i++)
+                  for (final i in markerIndices)
                     Marker(
                       point: markerPoints[i],
                       width: 40,
                       height: 40,
-                      child: CircleAvatar(
-                        backgroundColor: i == widget.highlightedWaypoint
-                            ? Theme.of(context).colorScheme.error
-                            : Theme.of(context).colorScheme.primary,
-                        foregroundColor: i == widget.highlightedWaypoint
-                            ? Theme.of(context).colorScheme.onError
-                            : Theme.of(context).colorScheme.onPrimary,
-                        child: Text('${i + 1}'),
+                      child: GestureDetector(
+                        key: ValueKey('route-control-$i'),
+                        onTap: widget.onWaypointTap == null
+                            ? null
+                            : () => widget.onWaypointTap!(i),
+                        child: CircleAvatar(
+                          backgroundColor: i == widget.highlightedWaypoint
+                              ? Theme.of(context).colorScheme.error
+                              : Theme.of(context).colorScheme.primary,
+                          foregroundColor: i == widget.highlightedWaypoint
+                              ? Theme.of(context).colorScheme.onError
+                              : Theme.of(context).colorScheme.onPrimary,
+                          child: Text('${i + 1}'),
+                        ),
                       ),
                     ),
                 ],
@@ -786,33 +901,105 @@ class _TrailMapState extends State<TrailMap> {
                   ),
                 ],
               ),
+            if (widget.recoveryPath.length > 1)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: widget.recoveryPath.first,
+                    width: 36,
+                    height: 36,
+                    child: Transform.rotate(
+                      angle:
+                          const GeoDistance().bearingDegrees(
+                            widget.recoveryPath.first,
+                            widget.recoveryPath.firstWhere(
+                              (point) =>
+                                  const GeoDistance().metersBetween(
+                                    widget.recoveryPath.first,
+                                    point,
+                                  ) >
+                                  3,
+                              orElse: () => widget.recoveryPath.last,
+                            ),
+                          ) *
+                          math.pi /
+                          180,
+                      child: Icon(
+                        Icons.navigation,
+                        color: Colors.teal.shade800,
+                        size: 32,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             RichAttributionWidget(
-              attributions: [TextSourceAttribution(_attributionText)],
+              attributions: [
+                TextSourceAttribution(_attributionText),
+                if (_vectorOverlay.visible && !_vectorOverlay.network.isEmpty)
+                  TextSourceAttribution(
+                    widget.store.vectorSourceUrl.contains('openfreemap.org')
+                        ? 'OpenFreeMap, OpenMapTiles, OpenStreetMap contributors'
+                        : 'Configured vector source',
+                  ),
+              ],
             ),
           ],
         ),
         if (widget.showControls)
           Positioned(
             top: widget.controlsTop,
+            bottom: 16,
             right: 16,
-            child: TrailMapControls(
-              mode: widget.store.mapTileMode,
-              layers: widget.store.baseLayers,
-              activeLayerId: widget.store.activeMapLayer.id,
-              onLayerSelected: (id) => unawaited(_selectMapLayer(id)),
-              offlineAvailable: _offlineCoverageAvailable,
-              trailsVisible: _showTrails,
-              onToggleTrails: () => setState(() => _showTrails = !_showTrails),
-              onModeSelected: (mode) => unawaited(_selectTileMode(mode)),
-              onZoomIn: _cameraZoom >= 19 ? null : () => _zoomBy(1),
-              onZoomOut: _cameraZoom <= 1 ? null : () => _zoomBy(-1),
-              onFitContent: _fitContent,
-              onCurrentLocation: _centerOnCurrentLocation,
-              followingCurrentLocation: widget.followCurrentLocation,
-              orientationMode: widget.orientationMode,
-              onFollowCurrentLocationChanged:
-                  widget.onFollowCurrentLocationChanged,
-              onOrientationModeChanged: widget.onOrientationModeChanged,
+            child: Align(
+              alignment: Alignment.topRight,
+              child: SingleChildScrollView(
+                child: TrailMapControls(
+                  mode: widget.store.mapTileMode,
+                  layers: widget.store.baseLayers,
+                  activeLayerId: widget.store.activeMapLayer.id,
+                  onLayerSelected: (id) => unawaited(_selectMapLayer(id)),
+                  offlineAvailable: _offlineCoverageAvailable,
+                  trailsVisible: _showTrails,
+                  onToggleTrails: () =>
+                      setState(() => _showTrails = !_showTrails),
+                  vectorWaysVisible: _vectorOverlay.enabled,
+                  onToggleVectorWays: () {
+                    _refreshVectorOverlay();
+                    _vectorOverlay.setEnabled(!_vectorOverlay.enabled);
+                  },
+                  onModeSelected: (mode) => unawaited(_selectTileMode(mode)),
+                  onZoomIn: _cameraZoom >= 19 ? null : () => _zoomBy(1),
+                  onZoomOut: _cameraZoom <= 1 ? null : () => _zoomBy(-1),
+                  onFitContent: _fitContent,
+                  onCurrentLocation: _centerOnCurrentLocation,
+                  followingCurrentLocation: widget.followCurrentLocation,
+                  orientationMode: widget.orientationMode,
+                  onFollowCurrentLocationChanged:
+                      widget.onFollowCurrentLocationChanged,
+                  onOrientationModeChanged: widget.onOrientationModeChanged,
+                ),
+              ),
+            ),
+          ),
+        if (_vectorOverlay.status case final status?)
+          Positioned(
+            left: 12,
+            right: 80,
+            bottom: 32,
+            child: IgnorePointer(
+              child: Material(
+                color: Theme.of(context).colorScheme.surface,
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    status,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall,
+                  ),
+                ),
+              ),
             ),
           ),
       ],
@@ -821,10 +1008,14 @@ class _TrailMapState extends State<TrailMap> {
 
   @override
   void dispose() {
+    _vectorOverlay.dispose();
     _controller.dispose();
     super.dispose();
   }
 }
+
+bool mapEventStopsLocationFollow(MapEventSource source) =>
+    source == MapEventSource.dragStart;
 
 class TrailMapControls extends StatelessWidget {
   const TrailMapControls({
@@ -836,6 +1027,8 @@ class TrailMapControls extends StatelessWidget {
     required this.offlineAvailable,
     required this.trailsVisible,
     required this.onToggleTrails,
+    this.vectorWaysVisible = false,
+    this.onToggleVectorWays,
     required this.onModeSelected,
     required this.onZoomIn,
     required this.onZoomOut,
@@ -854,6 +1047,8 @@ class TrailMapControls extends StatelessWidget {
   final bool offlineAvailable;
   final bool trailsVisible;
   final VoidCallback onToggleTrails;
+  final bool vectorWaysVisible;
+  final VoidCallback? onToggleVectorWays;
   final ValueChanged<MapTileMode> onModeSelected;
   final VoidCallback? onZoomIn;
   final VoidCallback? onZoomOut;
@@ -895,7 +1090,7 @@ class TrailMapControls extends StatelessWidget {
                       ),
                       title: Text(layer.label),
                       subtitle: Text(
-                        layer.attribution,
+                        layer.onlineAttribution,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -986,6 +1181,16 @@ class TrailMapControls extends StatelessWidget {
             tooltip: trailsVisible ? 'Hide saved trails' : 'Show saved trails',
             icon: Icon(trailsVisible ? Icons.layers : Icons.layers_clear),
           ),
+          if (onToggleVectorWays != null)
+            IconButton(
+              onPressed: onToggleVectorWays,
+              isSelected: vectorWaysVisible,
+              tooltip: vectorWaysVisible
+                  ? 'Hide vector roads and trails'
+                  : 'Show vector roads and trails',
+              icon: const Icon(Icons.polyline_outlined),
+              selectedIcon: const Icon(Icons.polyline),
+            ),
           IconButton(
             onPressed: onFitContent,
             tooltip: 'Fit current location and checkpoints',

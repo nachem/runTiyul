@@ -86,27 +86,26 @@ class _MinQueue {
 /// Builds a routable graph from a [TrailNetwork] so a route can *follow* real
 /// trails between tapped anchor points instead of cutting straight lines.
 ///
-/// Vertices are merged onto a small grid so trails that meet at a junction
-/// share a node, which lets a shortest-path search walk from one trail onto a
-/// connected one through the junction. This is what powers "tap a trail and the
-/// route follows it to the next junction (and beyond)".
+/// Only coincident vertices (within coordinate-rounding precision) share a
+/// node. Nearby ways must not become connected merely because they occupy the
+/// same few metres on the map.
 class TrailRouter {
   TrailRouter(
     this._network, {
-    this.nodeGridMeters = 6,
+    this.nodeGridMeters = 0.01,
     this.distance = const GeoDistance(),
   });
 
   final TrailNetwork _network;
 
-  /// Vertices closer than this are treated as the same graph node, merging the
-  /// shared endpoints of trails that meet at a junction.
+  /// Coordinate-rounding grid for shared vertices, not a proximity-based
+  /// junction radius. RTE-011 requires separate mapped ways to stay separate.
   final double nodeGridMeters;
 
   final GeoDistance distance;
 
   final List<LatLng> _nodePoints = [];
-  final Map<(int, int), int> _cellToNode = {};
+  final Map<(int, int, String), int> _cellToNode = {};
   final List<List<_Edge>> _adjacency = [];
   var _graphBuilt = false;
 
@@ -135,15 +134,28 @@ class TrailRouter {
         nodeGridMeters /
         (111320.0 * math.max(0.01, math.cos(referenceLat * math.pi / 180.0)));
 
+    final endpoints = <(int, int), Set<int>>{};
     for (final trail in _network.trails) {
+      if (!trail.routable) continue;
       final points = trail.points;
       for (var i = 0; i + 1 < points.length; i++) {
-        final a = _nodeFor(points[i]);
-        final b = _nodeFor(points[i + 1]);
+        final a = _nodeFor(points[i], trail.routingLevel);
+        final b = _nodeFor(points[i + 1], trail.routingLevel);
+        if (i == 0) endpoints.putIfAbsent(_cell(points[i]), () => {}).add(a);
+        if (i + 2 == points.length) {
+          endpoints.putIfAbsent(_cell(points[i + 1]), () => {}).add(b);
+        }
         if (a == b) continue;
         final weight = distance.metersBetween(points[i], points[i + 1]);
         _adjacency[a].add(_Edge(b, weight));
         _adjacency[b].add(_Edge(a, weight));
+      }
+    }
+    for (final nodes in endpoints.values) {
+      for (final from in nodes) {
+        for (final to in nodes) {
+          if (from != to) _adjacency[from].add(_Edge(to, 0));
+        }
       }
     }
   }
@@ -151,8 +163,9 @@ class TrailRouter {
   (int, int) _cell(LatLng point) =>
       ((point.latitude / _dLat).round(), (point.longitude / _dLon).round());
 
-  int _nodeFor(LatLng point) {
-    final cell = _cell(point);
+  int _nodeFor(LatLng point, String level) {
+    final position = _cell(point);
+    final cell = (position.$1, position.$2, level);
     final existing = _cellToNode[cell];
     if (existing != null) return existing;
     final id = _nodePoints.length;
@@ -162,24 +175,42 @@ class TrailRouter {
     return id;
   }
 
-  int? _nodeIndexOf(LatLng vertex) => _cellToNode[_cell(vertex)];
+  int? _nodeIndexOf(LatLng vertex, String level) {
+    final position = _cell(vertex);
+    return _cellToNode[(position.$1, position.$2, level)];
+  }
 
   /// The nearest point on any trail *line* within [maxMeters], or null. Uses
   /// segment projection so a query on a trail between vertices still snaps.
   ///
-  /// When [preferCategory] is set and the query is within [maxMeters] of a way
-  /// in that category, that way wins even if a way of another category is
-  /// closer. This keeps a built route on the same kind of way (a trail versus a
-  /// road) as its previous waypoint when a tap sits near both.
+  /// Category is only a near-tie breaker; an exact road tap must not jump to a
+  /// distant parallel path just because the preceding point was on a path.
   TrailAnchor? snap(
     LatLng query, {
     double maxMeters = 40,
     WayCategory? preferCategory,
   }) {
-    TrailAnchor? best;
-    TrailAnchor? preferred;
+    final candidates = snapCandidates(query, maxMeters: maxMeters);
+    if (candidates.isEmpty) return null;
+    final best = candidates.first;
+    final preferred = candidates
+        .where((anchor) => anchor.category == preferCategory)
+        .firstOrNull;
+    return preferred != null &&
+            preferred.distanceMeters <= best.distanceMeters + 6
+        ? preferred
+        : best;
+  }
+
+  List<TrailAnchor> snapCandidates(
+    LatLng query, {
+    double maxMeters = 40,
+    int limit = 6,
+  }) {
+    final candidates = <TrailAnchor>[];
     for (var i = 0; i < _network.trails.length; i++) {
       final trail = _network.trails[i];
+      if (!trail.routable) continue;
       final projection = nearestOnPolyline(
         query,
         trail.points,
@@ -193,17 +224,12 @@ class TrailRouter {
         category: TrailExtractor.categoryOf(trail.kind),
         distanceMeters: projection.distanceMeters,
       );
-      if (best == null || anchor.distanceMeters < best.distanceMeters) {
-        best = anchor;
-      }
-      if (preferCategory != null &&
-          anchor.category == preferCategory &&
-          (preferred == null ||
-              anchor.distanceMeters < preferred.distanceMeters)) {
-        preferred = anchor;
-      }
+      candidates.add(anchor);
     }
-    return preferred ?? best;
+    candidates.sort(
+      (left, right) => left.distanceMeters.compareTo(right.distanceMeters),
+    );
+    return candidates.take(limit).toList(growable: false);
   }
 
   /// Stitches [anchors] into a route that follows the trail network between
@@ -257,14 +283,15 @@ class TrailRouter {
   static const double _maxBridgeDetourSlackMeters = 40;
 
   List<LatLng>? _connectedLeg(TrailAnchor a, TrailAnchor b) {
-    if (a.trailIndex == b.trailIndex) {
-      return _alongTrail(a.trailIndex, a, b);
+    if (a.trailIndex == b.trailIndex && a.segmentIndex == b.segmentIndex) {
+      return [a.point, b.point];
     }
     final path = _graphPath(a, b);
     if (path == null) return null;
     final direct = distance.metersBetween(a.point, b.point);
-    if (_pathLength(path) >
-        direct * _maxBridgeDetourFactor + _maxBridgeDetourSlackMeters) {
+    if (a.trailIndex != b.trailIndex &&
+        _pathLength(path) >
+            direct * _maxBridgeDetourFactor + _maxBridgeDetourSlackMeters) {
       return null;
     }
     return path;
@@ -278,95 +305,127 @@ class TrailRouter {
     return total;
   }
 
-  /// The portion of a single trail between two anchors, following the trail's
-  /// own vertices so the whole leg stays exactly on the trail.
-  List<LatLng> _alongTrail(int trailIndex, TrailAnchor a, TrailAnchor b) {
-    final points = _network.trails[trailIndex].points;
-    if (a.segmentIndex == b.segmentIndex) return [a.point, b.point];
-    final leg = <LatLng>[a.point];
-    if (a.segmentIndex < b.segmentIndex) {
-      for (var k = a.segmentIndex + 1; k <= b.segmentIndex; k++) {
-        leg.add(points[k]);
+  List<LatLng>? _graphPath(TrailAnchor from, TrailAnchor to) =>
+      buildConnectedLegToAny(from, [to])?.path;
+
+  /// NAV-007: a single Dijkstra search chooses the shortest mapped connection.
+  /// The initial heading constraint is part of search, not a post-hoc rejection
+  /// that could miss a longer but valid forward alternative.
+  ({List<LatLng> path, int targetIndex})? buildConnectedLegToAny(
+    TrailAnchor from,
+    List<TrailAnchor> targets, {
+    double? headingDegrees,
+    double maximumInitialTurnDegrees = 75,
+    double maximumDistanceMeters = double.infinity,
+  }) {
+    _ensureGraphBuilt();
+    final nodeCount = _nodePoints.length;
+    if (nodeCount == 0 || targets.isEmpty) return null;
+    final startId = nodeCount;
+    final total = nodeCount + 1 + targets.length;
+    final fromTrail = _network.trails[from.trailIndex];
+    final startNodes = [
+      _nodeIndexOf(fromTrail.points[from.segmentIndex], fromTrail.routingLevel),
+      _nodeIndexOf(
+        fromTrail.points[from.segmentIndex + 1],
+        fromTrail.routingLevel,
+      ),
+    ];
+    if (startNodes.any((node) => node == null)) return null;
+    final targetEdges = <int, List<_Edge>>{};
+    final directTargets = <_Edge>[];
+    for (var index = 0; index < targets.length; index++) {
+      final target = targets[index];
+      final trail = _network.trails[target.trailIndex];
+      final goalId = startId + 1 + index;
+      for (final vertex in [target.segmentIndex, target.segmentIndex + 1]) {
+        final node = _nodeIndexOf(trail.points[vertex], trail.routingLevel);
+        if (node != null) {
+          targetEdges
+              .putIfAbsent(node, () => [])
+              .add(
+                _Edge(
+                  goalId,
+                  distance.metersBetween(_nodePoints[node], target.point),
+                ),
+              );
+        }
       }
-    } else {
-      for (var k = a.segmentIndex; k >= b.segmentIndex + 1; k--) {
-        leg.add(points[k]);
+      if (target.trailIndex == from.trailIndex &&
+          target.segmentIndex == from.segmentIndex) {
+        directTargets.add(
+          _Edge(goalId, distance.metersBetween(from.point, target.point)),
+        );
       }
     }
-    leg.add(b.point);
-    return leg;
-  }
-
-  /// Shortest path across the trail graph between anchors on different trails,
-  /// entering/leaving via the endpoints of each anchor's segment.
-  List<LatLng>? _graphPath(TrailAnchor a, TrailAnchor b) {
-    _ensureGraphBuilt();
-    final n = _nodePoints.length;
-    if (n == 0) return null;
-    final startId = n;
-    final goalId = n + 1;
-    final total = n + 2;
-
-    final aPoints = _network.trails[a.trailIndex].points;
-    final bPoints = _network.trails[b.trailIndex].points;
-    final a0 = _nodeIndexOf(aPoints[a.segmentIndex]);
-    final a1 = _nodeIndexOf(aPoints[a.segmentIndex + 1]);
-    final b0 = _nodeIndexOf(bPoints[b.segmentIndex]);
-    final b1 = _nodeIndexOf(bPoints[b.segmentIndex + 1]);
-    if (a0 == null || a1 == null || b0 == null || b1 == null) return null;
 
     LatLng pointOf(int id) => id == startId
-        ? a.point
-        : id == goalId
-        ? b.point
+        ? from.point
+        : id > startId
+        ? targets[id - startId - 1].point
         : _nodePoints[id];
 
-    List<_Edge> edgesOf(int u) {
-      if (u == startId) {
+    List<_Edge> edgesOf(int node) {
+      if (node == startId) {
         return [
-          _Edge(a0, distance.metersBetween(a.point, _nodePoints[a0])),
-          _Edge(a1, distance.metersBetween(a.point, _nodePoints[a1])),
+          for (final start in startNodes)
+            _Edge(
+              start!,
+              distance.metersBetween(from.point, _nodePoints[start]),
+            ),
+          ...directTargets,
         ];
       }
-      final base = u < n ? _adjacency[u] : const <_Edge>[];
-      if (u == b0 || u == b1) {
-        return [
-          ...base,
-          _Edge(goalId, distance.metersBetween(_nodePoints[u], b.point)),
-        ];
-      }
-      return base;
+      return [
+        for (final edge in _adjacency[node])
+          if (!(startNodes.contains(node) && startNodes.contains(edge.to)))
+            edge,
+        ...?targetEdges[node],
+      ];
     }
 
-    final dist = List<double>.filled(total, double.infinity);
-    final prev = List<int>.filled(total, -1);
-    dist[startId] = 0;
-
+    final distances = List<double>.filled(total, double.infinity);
+    final previous = List<int>.filled(total, -1);
+    distances[startId] = 0;
+    int? reachedGoal;
     final queue = _MinQueue()..add(_QueueEntry(startId, 0));
     while (queue.isNotEmpty) {
       final current = queue.removeFirst();
-      final u = current.node;
-      if (current.distance != dist[u]) continue;
-      if (u == goalId) break;
-      for (final edge in edgesOf(u)) {
+      final node = current.node;
+      if (current.distance != distances[node]) continue;
+      if (node > startId) {
+        reachedGoal = node;
+        break;
+      }
+      for (final edge in edgesOf(node)) {
+        if (headingDegrees != null &&
+            current.distance < 3 &&
+            distance.metersBetween(from.point, pointOf(edge.to)) >= 3) {
+          final bearing = distance.bearingDegrees(from.point, pointOf(edge.to));
+          final turn = ((bearing - headingDegrees + 540) % 360 - 180).abs();
+          if (turn > maximumInitialTurnDegrees) continue;
+        }
         final candidate = current.distance + edge.weight;
-        if (candidate < dist[edge.to]) {
-          dist[edge.to] = candidate;
-          prev[edge.to] = u;
+        if (candidate <= maximumDistanceMeters &&
+            candidate < distances[edge.to]) {
+          distances[edge.to] = candidate;
+          previous[edge.to] = node;
           queue.add(_QueueEntry(edge.to, candidate));
         }
       }
     }
-
-    if (dist[goalId].isInfinite) return null;
+    if (reachedGoal == null) return null;
     final ids = <int>[];
-    var current = goalId;
+    var current = reachedGoal;
     while (current != -1) {
       ids.add(current);
       if (current == startId) break;
-      current = prev[current];
+      current = previous[current];
     }
     if (ids.isEmpty || ids.last != startId) return null;
-    return [for (final id in ids.reversed) pointOf(id)];
+    return (
+      path: [for (final id in ids.reversed) pointOf(id)],
+      targetIndex: reachedGoal - startId - 1,
+    );
   }
 }

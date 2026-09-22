@@ -63,7 +63,7 @@ void main() {
     expect(router.snap(const LatLng(0.01, 0.01), maxMeters: 40), isNull);
   });
 
-  test('prefers the previous waypoint category when a tap is near both', () {
+  test('category preference cannot override a clearly nearer way', () {
     // A trail (at the equator) and a road ~33 m north of it run parallel.
     final router = TrailRouter(
       TrailNetwork(const [
@@ -85,12 +85,92 @@ void main() {
     // of way even when the other kind is closer.
     expect(
       router.snap(tap, preferCategory: WayCategory.trail)!.category,
-      WayCategory.trail,
+      WayCategory.road,
     );
     expect(
       router.snap(tap, preferCategory: WayCategory.road)!.category,
       WayCategory.road,
     );
+    expect(
+      router
+          .snap(
+            const LatLng(0.00015, 0.002),
+            preferCategory: WayCategory.trail,
+          )!
+          .category,
+      WayCategory.trail,
+    );
+  });
+
+  test('RTE-011 keeps grade-separated crossings disconnected', () {
+    final router = TrailRouter(
+      const TrailNetwork([
+        TrailPolyline(
+          points: [LatLng(0, 0), LatLng(0, 0.002), LatLng(0, 0.004)],
+          kind: 'path',
+        ),
+        TrailPolyline(
+          points: [
+            LatLng(-0.002, 0.002),
+            LatLng(0, 0.002),
+            LatLng(0.002, 0.002),
+          ],
+          kind: 'path',
+          structure: 'bridge',
+          level: 1,
+        ),
+      ]),
+    );
+    expect(
+      router.buildConnectedLeg(
+        router.snap(const LatLng(0, 0.001))!,
+        router.snap(const LatLng(0.001, 0.002))!,
+      ),
+      isNull,
+    );
+  });
+
+  test('bridge endpoints can join ground-level endpoints', () {
+    final router = TrailRouter(
+      const TrailNetwork([
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0, 0.002), LatLng(0, 0.004)],
+          kind: 'path',
+          structure: 'bridge',
+          level: 1,
+        ),
+      ]),
+    );
+    expect(
+      router.buildConnectedLeg(
+        router.snap(const LatLng(0, 0.001))!,
+        router.snap(const LatLng(0, 0.003))!,
+      ),
+      isNotNull,
+    );
+  });
+
+  test('same-way endpoints still choose a shorter connected alternative', () {
+    final router = TrailRouter(
+      const TrailNetwork([
+        TrailPolyline(
+          points: [
+            LatLng(0, 0),
+            LatLng(0.002, 0),
+            LatLng(0.002, 0.002),
+            LatLng(0, 0.002),
+          ],
+          kind: 'path',
+        ),
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+      ]),
+    );
+    final route = router.buildConnectedLeg(
+      router.snap(const LatLng(0, 0))!,
+      router.snap(const LatLng(0, 0.002))!,
+    )!;
+    expect(const GeoDistance().pathLengthMeters(route), lessThan(230));
   });
 
   test('bridges straight instead of an unreasonable cross-trail detour', () {
@@ -138,6 +218,23 @@ void main() {
     expect(router.buildConnectedRoute([first, far]), isNull);
     expect(router.buildConnectedLeg(first, far), isNull);
     expect(router.buildRoute([first, far]), [first.point, far.point]);
+  });
+
+  test('RTE-011 does not invent junctions between nearby parallel ways', () {
+    final router = TrailRouter(
+      TrailNetwork(const [
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0.00002, 0), LatLng(0.00002, 0.002)],
+          kind: 'path',
+        ),
+      ]),
+    );
+    final first = router.snap(const LatLng(0, 0.0005))!;
+    final second = router.snap(const LatLng(0.00002, 0.0015))!;
+
+    expect(first.trailIndex, isNot(second.trailIndex));
+    expect(router.buildConnectedLeg(first, second), isNull);
   });
 
   test('route between two anchors on the same trail follows the trail', () {

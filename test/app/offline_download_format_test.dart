@@ -185,4 +185,49 @@ void main() {
     expect(store.offlineAreas.first.providerId, 'cyclosm');
     expect(requestedHosts, contains('a.tile-cyclosm.openstreetmap.fr'));
   });
+
+  test(
+    'OFF-005/009: foreground resume respects a provider-paused raster area',
+    () async {
+      var requests = 0;
+      final store = await AppStore.forTesting(
+        repository: repository,
+        tileStore: tileStore,
+        mapProvider: _osmConfig,
+        downloader: OfflineDownloadService(
+          repository: repository,
+          store: tileStore,
+          config: _osmConfig,
+          client: MockClient((request) async {
+            requests++;
+            return http.Response('', 429, headers: {'retry-after': '3600'});
+          }),
+        ),
+      );
+      addTearDown(store.dispose);
+      await store.createOfflineArea(
+        name: 'Rate-limited raster',
+        bounds: const GeoBounds(
+          north: 0.001,
+          south: 0.0,
+          east: 0.001,
+          west: 0.0,
+        ),
+        minZoom: 12,
+        maxZoom: 12,
+        format: OfflineSourceFormat.rasterTiles,
+      );
+      await store.resumeDownload(store.offlineAreas.first);
+
+      expect(store.offlineAreas.first.status, OfflineAreaStatus.paused);
+      expect(store.offlineAreas.first.lastError, contains('cooldown'));
+      expect(requests, 1);
+
+      await store.resumeInterruptedDownloads();
+      expect(requests, 1);
+      await store.resumeDownload(store.offlineAreas.first);
+      expect(store.offlineAreas.first.status, OfflineAreaStatus.paused);
+      expect(requests, 1);
+    },
+  );
 }

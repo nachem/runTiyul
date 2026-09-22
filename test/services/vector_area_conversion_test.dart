@@ -44,6 +44,7 @@ class _FakeVectorSource implements VectorTileSource {
 
 class _RecordingTerrainBaker implements VectorTerrainBaker {
   final List<TileCoordinate> coordinates = [];
+  int resets = 0;
 
   @override
   Future<Uint8List> bake(Uint8List basePng, TileCoordinate coordinate) async {
@@ -52,7 +53,7 @@ class _RecordingTerrainBaker implements VectorTerrainBaker {
   }
 
   @override
-  void reset() => coordinates.clear();
+  void reset() => resets++;
 
   @override
   void dispose() {}
@@ -137,6 +138,7 @@ void main() {
     expect(result.sourceFormat, OfflineSourceFormat.convertedVector);
     expect(fake.reads, plan.tileCount);
     expect(terrainBaker.coordinates, plan.coordinates);
+    expect(terrainBaker.resets, 2);
     expect(fake.closed, isTrue);
     for (final coordinate in plan.coordinates) {
       final file = store.fileFor(
@@ -155,6 +157,16 @@ void main() {
     expect(loaded.single.sourceFormat, OfflineSourceFormat.convertedVector);
     final tracked = await repository.unsharedTiles(result.id);
     expect(tracked.every((row) => row['provider_id'] == _vecNamespace), isTrue);
+
+    final resumed = await service.convert(result, plan, onProgress: (_) {});
+    expect(resumed.status, OfflineAreaStatus.complete);
+    expect(resumed.actualBytes, result.actualBytes);
+    expect(
+      fake.reads,
+      plan.tileCount,
+      reason: 'Resume must reuse completed PNGs',
+    );
+    expect(terrainBaker.coordinates, plan.coordinates);
   });
 
   test('missing tiles are skipped and the area still completes', () async {

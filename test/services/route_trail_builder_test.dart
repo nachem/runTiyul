@@ -132,7 +132,34 @@ void main() {
     expect(source.closed, isTrue);
   });
 
-  test('refineOntoNetwork bridges an off-network gap along connected ways', () {
+  test('MAP-013 Offline mode never opens a remote vector source', () async {
+    var opens = 0;
+    final builder = RouteTrailBuilder(
+      openSource: (_) async {
+        opens++;
+        return _EmptySource();
+      },
+    );
+    final result = await builder.networkNearPoint(
+      const LatLng(0, 0),
+      'https://example/planet',
+      allowNetwork: false,
+    );
+    expect(result.isEmpty, isTrue);
+    expect(opens, 0);
+    await builder.networkNearPoint(
+      const LatLng(0, 0),
+      'https://example/planet',
+    );
+    await builder.networkNearPoint(
+      const LatLng(0, 0),
+      'https://example/planet',
+      allowNetwork: false,
+    );
+    expect(opens, 1);
+  });
+
+  test('RTE-011 does not drop an unmatchable point from the input', () {
     // Two collinear trails that meet at a shared junction at lon 0.002.
     final network = TrailNetwork(const [
       TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.002)], kind: 'path'),
@@ -142,20 +169,68 @@ void main() {
 
     // The middle point is ~55 m north of the line (off any way); the ends are
     // on it. The refined route should bridge across, staying on the network.
-    final refined = builder.refineOntoNetwork(const [
-      LatLng(0, 0),
-      LatLng(0.0005, 0.002),
-      LatLng(0, 0.004),
-    ], network);
+    const original = [LatLng(0, 0), LatLng(0.0005, 0.002), LatLng(0, 0.004)];
+    expect(builder.matchOnNetwork(original, network), isNull);
+    expect(builder.refineOntoNetwork(original, network), same(original));
+  });
 
-    expect(refined.length, greaterThanOrEqualTo(2));
-    // Every point stays on the connected way (latitude ~0): the detour is gone.
-    for (final point in refined) {
-      expect(point.latitude, closeTo(0, 1e-4));
-    }
-    // It reached the far end through the shared junction.
-    expect(refined.last.longitude, closeTo(0.004, 1e-6));
-    expect(refined.any((p) => (p.longitude - 0.002).abs() < 1e-6), isTrue);
+  test(
+    'matching chooses a connected nearby way over a disconnected nearest fragment',
+    () {
+      const network = TrailNetwork([
+        TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.001)], kind: 'path'),
+        TrailPolyline(
+          points: [LatLng(0.0001, 0), LatLng(0.0001, 0.003)],
+          kind: 'minor',
+        ),
+      ]);
+      final result = RouteTrailBuilder().matchOnNetwork(const [
+        LatLng(0, 0),
+        LatLng(0, 0.001),
+        LatLng(0.0001, 0.002),
+        LatLng(0.0001, 0.003),
+      ], network);
+      expect(result, isNotNull);
+      expect(
+        result!.every((point) => (point.latitude - 0.0001).abs() < 1e-8),
+        isTrue,
+      );
+    },
+  );
+
+  test('matching cannot silently trim an off-network route endpoint', () {
+    const network = TrailNetwork([
+      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.003)], kind: 'path'),
+    ]);
+    expect(
+      RouteTrailBuilder().matchOnNetwork(const [
+        LatLng(0, 0),
+        LatLng(0, 0.002),
+        LatLng(0.002, 0.003),
+      ], network),
+      isNull,
+    );
+  });
+
+  test('matching rejects a distant detour even when it is connected', () {
+    const network = TrailNetwork([
+      TrailPolyline(
+        points: [
+          LatLng(0, 0),
+          LatLng(0.005, 0),
+          LatLng(0.005, 0.002),
+          LatLng(0, 0.002),
+        ],
+        kind: 'path',
+      ),
+    ]);
+    expect(
+      RouteTrailBuilder().matchOnNetwork(const [
+        LatLng(0, 0),
+        LatLng(0, 0.002),
+      ], network),
+      isNull,
+    );
   });
 
   test('refineOntoNetwork never bridges disconnected ways off trail', () {

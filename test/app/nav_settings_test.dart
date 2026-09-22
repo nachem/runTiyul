@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -34,13 +35,20 @@ const _vectorConfig = MapProviderConfig(
 
 class _FakeRouteTrailBuilder extends RouteTrailBuilder {
   List<LatLng>? receivedRoute;
+  Completer<void>? hold;
+  final entered = Completer<void>();
+  bool? allowedNetwork;
 
   @override
   Future<RouteTrailResult> snapToTrails(
     List<LatLng> route,
-    String sourceUrl,
-  ) async {
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
     receivedRoute = route;
+    allowedNetwork = allowNetwork;
+    if (!entered.isCompleted) entered.complete();
+    await hold?.future;
     return const RouteTrailResult(
       snapped: [LatLng(0, 0), LatLng(0, 0.002)],
       network: TrailNetwork([]),
@@ -111,6 +119,58 @@ void main() {
     expect(reloaded.recordingMapFollow, isFalse);
     expect(reloaded.recordingMapOrientation, MapOrientationMode.northUp);
   });
+
+  for (final delete in [false, true]) {
+    test(
+      'RTE-011 stale snap cannot overwrite a ${delete ? 'deleted' : 'newly edited'} route',
+      () async {
+        final now = DateTime.utc(2026, 9, 6);
+        final route = TrailRoute(
+          id: 'stale',
+          name: 'Before',
+          source: RouteSource.manual,
+          createdAt: now,
+          updatedAt: now,
+          points: const [
+            RoutePoint(latitude: 0, longitude: 0),
+            RoutePoint(latitude: 0, longitude: 0.001),
+          ],
+        );
+        await repository.saveRoute(route);
+        final builder = _FakeRouteTrailBuilder()..hold = Completer<void>();
+        final store = await openStore(
+          config: _vectorConfig,
+          routeTrailBuilder: builder,
+        );
+        addTearDown(store.dispose);
+        await store.setMapTileMode(MapTileMode.offline);
+        final original = store.routes.single;
+        final snapping = store.snapRouteToTrails(original);
+        await builder.entered.future;
+        if (delete) {
+          await store.deleteRoute(original);
+        } else {
+          await store.updateManualRoute(
+            original,
+            'After',
+            const [LatLng(0, 0), LatLng(0, 0.003)],
+            preserveGeometry: true,
+            snapToTrailsOverride: false,
+          );
+        }
+        builder.hold!.complete();
+        expect(await snapping, RouteSnapOutcome.unchanged);
+        expect(builder.allowedNetwork, isFalse);
+        final saved = await repository.loadRoutes();
+        if (delete) {
+          expect(saved, isEmpty);
+        } else {
+          expect(saved.single.name, 'After');
+          expect(saved.single.points.last.longitude, 0.003);
+        }
+      },
+    );
+  }
 
   test(
     'whole-route snap cleans artifacts and persists imported geometry',

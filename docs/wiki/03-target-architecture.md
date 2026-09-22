@@ -206,6 +206,10 @@ Required constraints:
 - Cascade behavior explicitly selected and tested.
 - Schema changes use ordered, transactional migrations.
 
+The implemented v2 database coalesces concurrent first-open requests. Updates
+to route parents use update/insert rather than SQLite REPLACE, preserving
+activity foreign keys; REPLACE's implicit delete is not an update operation.
+
 Write an activity row before starting the GPS stream. Insert samples in small
 transactions as recording proceeds. Final summary updates and state transition
 must be transactional.
@@ -230,6 +234,13 @@ Persist checkpoint + emit immutable recording state
 
 Use injected clock and location interfaces in calculations. Avoid calculating
 distance from UI frame timing.
+
+Sample jump validation is elapsed-time aware: the short-interval allowance
+still rejects GPS teleports, delayed fixes may cover realistic running distance,
+and gaps of five minutes or more start a new zero-distance segment so a stale
+anchor cannot cause every subsequent fix to be rejected. A location-stream
+error stops the timer and durably pauses the activity before surfacing the GPS
+failure.
 
 The recording state machine should allow:
 
@@ -266,13 +277,24 @@ GPS jitter, widget rebuilds, and audio completion cannot re-arm them
 accidentally. Off-route and maneuver events take priority over progress on the
 same GPS update.
 
-`ForwardRouteRecovery` accepts only a reliable moving course and a locally
-loaded recognized trail/road network. It snaps the runner to that graph, searches
-for a connected route contact beyond monotonic progress, rejects initial paths
-outside the forward cone, rejects disconnected/off-terrain bridges, and trims
-the result at the first ahead contact. A failed search is cached briefly rather
-than repeated at GPS frequency. No user-facing prompt may translate a
-nearest-route projection behind the runner into a backtracking instruction.
+`ForwardRouteRecovery` accepts a reliable moving course and a locally loaded
+recognized trail/road network. One multi-target Dijkstra search chooses the
+shortest mapped path to sampled ahead contacts; the initial forward cone is a
+search constraint, not a post-hoc rejection of an unconstrained shortest path.
+The starting segment is split at the runner so an apparent forward start cannot
+turn around and traverse back through that position. Search is bounded to 3 km
+ahead in the plan (30 m samples) and 6 km of recovery path. It starts 30 m beyond
+last on-route progress; off-route projections do not advance that progress.
+The result trims as the runner moves and replans on a five-second cadence or
+alert transition. No reliable course means no stale recovery direction.
+
+Recording loads a bounded 3x3 z14 neighborhood and refreshes after moving 500 m,
+with at least 15 seconds between network attempts. The same source-keyed cache
+serves overlay, editing, matching, and navigation. Cached/local reads remain
+available in Offline mode without HTTP requests. In-process pause/resume retains
+navigation progress; durable progress restoration after process death remains
+a separate requirement. No prompt translates a nearest-route projection behind
+the runner into a backtracking instruction, and guidance is not rescue-grade.
 
 The two bundled earcons are immutable CC0 OGG assets with source provenance and
 hashes beside the files. System TTS uses installed platform voices rather than a
@@ -287,8 +309,11 @@ while searching ahead; it never instructs a return to the deviation point.
 
 `TrailMap` alone owns recording camera movement. It atomically applies current
 position and map rotation from a quality-filtered course, persists Follow
-position and north-up/course-up choices through `AppStore`, and treats a pan as
-an explicit request to stop position following without changing orientation.
+position and north-up/course-up choices through `AppStore`, and treats a
+single-finger pan as an explicit request to stop position following without
+changing orientation. Pinch/double-tap zoom and rotation retain following; all
+tracking and explicit current-location recenter moves preserve the live camera
+zoom so the runner controls map scale.
 
 ## 8. Metric calculation boundaries
 
@@ -348,19 +373,53 @@ viewport loads are capped and centered on the viewport.
 
 Follow mode uses strict connected routing: disconnected or unreasonably long
 graph detours are rejected and never represented as straight trail-following
-legs. Only the newest leg is calculated after a tap. Graph construction is
-lazy, and cross-trail routing uses a priority-queue shortest-path search.
-Persisted route geometry remains lossless for navigation and export; map layers
-simplify a separate rendering list at approximately one screen pixel for the
-current zoom. This keeps `RTE-009` storage fidelity separate from map frame
-cost.
+legs. The shared router searches connected alternatives even when both anchors
+belong to the same feature. Coincident nodes use a 0.01 m rounding grid, not a
+multi-metre proximity merge. Grade metadata separates bridge/tunnel interiors;
+coincident endpoints permit structure transitions. Available pedestrian/access
+restrictions exclude ways from the routing graph; motorway/trunk requires
+explicit pedestrian permission. Category preference is only a 6 m near-tie
+breaker. Display tiles are not a complete routing dataset: missing shared
+vertices, access/barrier tags, and tile-boundary topology can cause conservative
+failure. Do not infer an intersection solely from crossing lines.
 
-`RouteGeometryCleaner` runs before manual/imported geometry is persisted or
-used for navigation. It removes only tightly bounded return-to-junction spikes;
-larger double-backs remain as intentional U-turn candidates. Whole-route
-**Snap to trails** uses `RouteTrailBuilder` and `TrailRouter` strict connected
-legs, never the permissive straight fallback. Route identity/source are stable,
-and optional GPX metadata is retained for points that remain within one meter.
+`RouteEditorDraft` owns immutable full geometry plus sparse control indices.
+Opening a dense route derives at most 32 controls from endpoints and significant
+shape changes; those controls are not substituted for the stored track. Map
+markers are viewport/spacing culled (at most 40 visible). Long-press may insert
+a control without changing the line. Move/delete replaces only the span between
+neighboring controls, using connected routing in Follow trails and preserving
+all geometry outside the span. Mode changes do not modify geometry. Undo keeps
+up to 30 complete draft states. Editor saves bypass post-routing cleanup and
+whole-route auto-snap by default for existing routes, preserving matching GPX
+metadata and preventing unrequested changes to untouched sections.
+
+The vector overlay is independent of saved-route visibility and base-layer
+selection. It uses the configured `transportation` extractor, hides below z14,
+debounces 300 ms, caps each load at 24 source tiles, and has one active request
+plus the newest pending viewport. Stale requests stop between tiles. Rendering
+simplifies a copy of each line; it never changes graph or saved route geometry.
+Loading, absent source, unavailable network, and missing offline cache have
+explicit states and the visible source receives attribution.
+
+`TrailNetworkCache` keeps 48 extracted tiles in memory and at most 256 compressed
+JSON tiles / 64 MiB in application support `routing_network`. Keys include a
+version, source identity, extractor classes, and XYZ; source URLs are hashed in
+filenames. Only map features are stored, not activity samples. Offline queries
+read this cache or local MBTiles without opening HTTP sources. This bounded,
+opportunistic cache is not a downloaded routing package; coverage can evict,
+raster downloads do not populate it, and cache bytes are separate from raster
+area accounting. A guaranteed offline routing package needs additional design.
+
+`RouteGeometryCleaner` may prepare raw manual/imported geometry, but must not
+rewrite a connected graph result or geometry opened for navigation. Whole-route
+**Snap to trails** uses dynamic programming over up to six nearby anchors per
+observation, connected shortest-path legs, route-length scoring, and a 40 m
+input corridor checked in both directions. It rejects incomplete matches instead
+of dropping unmatchable observations. Graph results are not cleaned afterward.
+The caller checks that the route is still current before persisting an async
+result. Route identity/source are stable, and optional GPX metadata is retained
+for points that remain within one meter.
 
 ### 9.2 Download planning
 
@@ -378,6 +437,23 @@ label the result as an estimate.
 
 ### 9.3 Download execution
 
+Implemented stability ownership (2026-09-06): `AppStore` serializes area jobs
+and offline edit/delete mutations through one asynchronous storage queue.
+Duplicate resume calls share the same completion future. Edit/delete cancels
+the affected job before queueing and waits for outstanding writes to settle.
+Only one area downloads at once (up to four raster workers inside it), limiting
+native rendering memory and preventing overlapping areas sharing temporary
+tile paths concurrently. Queued jobs are visible and cancellable. Disposal
+cancels jobs and drains this queue before closing download resources.
+
+Converted-vector resume reuses existing nonempty final PNGs; a style refresh is
+explicit removal/redownload, not implicit regeneration on every resume. The
+shared `renderPng` boundary owns native pictures and images through encoding,
+including failure; terrain codecs and contour-label paragraphs also have
+explicit ownership. HTTP vector requests distinguish missing 404s from errors,
+with bounded retries and per-attempt timeouts. MBTiles initialization failure
+must close the just-opened database.
+
 - Persist the area and planned tile references before network work.
 - Use bounded worker concurrency.
 - Apply timeout and retry only to transient failures.
@@ -393,11 +469,36 @@ label the result as an estimate.
   completed tiles.
 - Completion requires every required tile to be valid or explicitly reconciled.
 
+Raster scheduling (OFF-005/OFF-009, implemented 2026-09-22) lives in
+`OfflineDownloadService`, with provider-specific `RasterDownloadPolicy` values
+owned by `MapProviderConfig`. Every attempt passes the same provider gate for
+request spacing, periodic batch breaks, and the latest shared cooldown. Default
+development requests use one worker, 500 ms spacing, and a 10-second break every
+20 requests; approved-provider defaults use four workers, 250 ms spacing, and a
+five-second break every 40 requests. These defaults do not confer permission.
+
+Transient retry is bounded to three attempts. Numeric or HTTP-date
+`Retry-After` extends exponential fallback deadlines; concurrent responses
+cannot shorten an active deadline. Server cooldowns are serialized into the
+existing `app_settings` table and loaded before resumed network work. Waits
+longer than the configured automatic-wait threshold, exhausted 429 retries,
+and HTTP 401/403 produce a resumable `paused` area with an explicit reason, not
+an automatic foreground retry loop. Per-job cancellation wakes timers and
+stops new requests; in-flight responses may finish and persist. Already-sent
+HTTP requests are not actively aborted. The same policy supplies minimum pacing
+time to the UI's approximate raster duration band.
+
+This gate covers raster download jobs, not interactive map browsing or
+vector/terrain source requests. Persisted deadlines use the injected wall clock;
+device clock changes and real background behavior remain validation concerns.
+
 Topographic data rules for the implemented raster renderer:
 
 - Online and raster-offline maps never request a separate elevation source.
-  A topographic raster provider such as CyclOSM carries its cartography in the
-  provider tile itself.
+  The view-only OpenTopoMap layer carries its cartography in the provider tile
+  itself and overzooms beyond native z17. CyclOSM remains an independent
+  selectable layer. Do not configure a per-tile fallback between them, because
+  it disables in-memory tile caching and delays every tile during an outage.
 - Converted-vector areas may fetch Terrarium only inside the conversion
   workflow. Decode, contour/hillshade rendering, and parent-tile reuse remain
   in memory; only the final composited PNG enters `TileStore` and SQLite.
@@ -462,6 +563,9 @@ A failed deletion remains visible and retryable.
   because that backend has no playback-completion callback.
 - Android 13+ notification permission where applicable.
 - Scoped storage compatible GPX import/export.
+- The download keep-alive service is non-sticky: after process death there is
+  no native download worker to restart. Android 15+ data-sync timeout stops the
+  service promptly; foreground-promotion rejection must not crash the host.
 
 ### iOS
 

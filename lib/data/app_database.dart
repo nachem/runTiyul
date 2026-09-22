@@ -9,10 +9,23 @@ class AppDatabase {
   final DatabaseFactory _factory;
   final String? _path;
   Database? _database;
+  Future<Database>? _opening;
 
   Future<Database> get database async {
     final current = _database;
     if (current != null) return current;
+    final pending = _opening;
+    if (pending != null) return pending;
+    final opening = _open();
+    _opening = opening;
+    try {
+      return await opening;
+    } finally {
+      _opening = null;
+    }
+  }
+
+  Future<Database> _open() async {
     final path = _path ?? p.join(await getDatabasesPath(), 'trail_runner.db');
     final opened = await _factory.openDatabase(
       path,
@@ -28,6 +41,8 @@ class AppDatabase {
   }
 
   Future<void> close() async {
+    final opening = _opening;
+    if (opening != null) await opening;
     await _database?.close();
     _database = null;
   }

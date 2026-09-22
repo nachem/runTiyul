@@ -5,6 +5,25 @@ import 'package:trail_runner/services/navigation_monitor.dart';
 void main() {
   const route = [LatLng(0, 0), LatLng(0, 0.01)];
 
+  test(
+    'NAV-007 off-route projections cannot skip valid forward rejoin points',
+    () {
+      final monitor = NavigationMonitor(
+        config: const NavAlertConfig(offRoutePersistence: 1),
+      );
+      final onRoute = monitor.update(const LatLng(0, 0.001), route: route);
+      final offRoute = monitor.update(const LatLng(0.001, 0.009), route: route);
+      expect(offRoute.offRoute, isTrue);
+      expect(offRoute.routeCompletedMeters, onRoute.routeCompletedMeters);
+      final rejoined = monitor.update(const LatLng(0, 0.005), route: route);
+      expect(
+        rejoined.routeCompletedMeters,
+        greaterThan(onRoute.routeCompletedMeters!),
+      );
+      expect(rejoined.routeCompletedMeters, lessThan(600));
+    },
+  );
+
   test('off-route fires after the persistence window and clears on return', () {
     final monitor = NavigationMonitor(
       config: const NavAlertConfig(

@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 
 import '../core/geo/distance.dart';
 import '../core/geo/geo_bounds.dart';
+import '../core/geo/location_sample_filter.dart';
 import '../core/geo/tile_math.dart';
 import '../core/ids.dart';
 import '../data/app_database.dart';
@@ -31,6 +32,7 @@ import '../services/route_trail_builder.dart';
 import '../services/tile_store.dart';
 import '../services/trail_extractor.dart';
 import '../services/trail_network.dart';
+import '../services/trail_network_cache.dart';
 import '../services/vector_area_conversion_service.dart';
 import '../services/vector_terrain_baker.dart';
 
@@ -62,6 +64,8 @@ class AppStore extends ChangeNotifier {
     required this.backgroundDownloads,
     required this._navigationAlertFeedback,
     required this._publicRasterDevUnlockCompiled,
+    required this._authorizedViewRasterDevUnlockCompiled,
+    this._locationService = const LocationService(),
   });
 
   final AppRepository repository;
@@ -77,9 +81,12 @@ class AppStore extends ChangeNotifier {
   final DownloadForegroundService backgroundDownloads;
   final NavigationAlertFeedback _navigationAlertFeedback;
   final bool _publicRasterDevUnlockCompiled;
+  final bool _authorizedViewRasterDevUnlockCompiled;
   final GpxService _gpxService = const GpxService();
-  final LocationService _locationService = const LocationService();
+  final LocationService _locationService;
   final GeoDistance _distance = const GeoDistance();
+  final LocationSampleFilter _locationSampleFilter =
+      const LocationSampleFilter();
   final RouteGeometryCleaner _routeGeometryCleaner =
       const RouteGeometryCleaner();
   final ForwardRouteRecovery _forwardRouteRecovery =
@@ -90,6 +97,7 @@ class AppStore extends ChangeNotifier {
   List<RunActivity> activities = [];
   List<OfflineArea> offlineAreas = [];
   MapTileMode mapTileMode = MapTileMode.auto;
+  MapTileMode? _mapTileModeBeforeOfflinePreview;
   String activeMapLayerId = '';
   String vectorSourceUrl = '';
   bool snapRoutesToTrails = true;
@@ -120,6 +128,27 @@ class AppStore extends ChangeNotifier {
   /// Areas whose download loop is in flight on this isolate right now.
   final Set<String> _runningDownloads = {};
 
+  // OFF-005/STO-004: one area owns tile writes at a time. Storage mutations
+  // wait for that owner to drain, including outstanding HTTP/SQLite work.
+  final Map<String, Future<void>> _downloadJobs = {};
+  final Set<String> _mutatingAreas = {};
+  Future<void> _offlineWork = Future<void>.value();
+  bool _disposed = false;
+
+  bool isDownloadQueued(String id) =>
+      _downloadJobs.containsKey(id) &&
+      _intendedDownloads.contains(id) &&
+      !_runningDownloads.contains(id);
+
+  Future<T> _withOfflineStorageLock<T>(Future<T> Function() action) {
+    final next = _offlineWork.then((_) => action());
+    _offlineWork = next.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return next;
+  }
+
   /// Whether the keep-alive foreground service is currently requested.
   bool _backgroundServiceActive = false;
 
@@ -140,12 +169,13 @@ class AppStore extends ChangeNotifier {
       ? OfflineSourceFormat.convertedVector
       : OfflineSourceFormat.rasterTiles;
 
-  /// The selectable online base maps. CyclOSM includes provider-rendered
+  /// The selectable online base maps. OpenTopoMap includes provider-rendered
   /// contours and hillshade, so viewing it never downloads separate height data.
   List<MapProviderConfig> get baseLayers {
     final candidates = [
       mapProvider,
       MapProviderConfig.cyclOsm(),
+      MapProviderConfig.openTopoMap,
       ...MapProviderConfig.onlineImageryLayers,
     ];
     final seen = <String>{};
@@ -159,6 +189,12 @@ class AppStore extends ChangeNotifier {
   bool get publicRasterDevUnlockAvailable =>
       _publicRasterDevUnlockCompiled && !publicRasterDevDownloadsUnlocked;
 
+  /// Whether the hidden unlock may promote this specific raster provider.
+  bool canUnlockRasterProvider(MapProviderConfig provider) =>
+      provider.isPublicDevelopmentRaster ||
+      (_authorizedViewRasterDevUnlockCompiled &&
+          provider.authorizedDebugDownloadsOnly);
+
   /// Raster sources currently allowed for area download. Debug providers carry
   /// their permission directly; an internal release can grant the same local
   /// policy after the persisted developer unlock is confirmed.
@@ -167,7 +203,7 @@ class AppStore extends ChangeNotifier {
       if (layer.offlineDownloadsAllowed)
         layer
       else if (publicRasterDevDownloadsUnlocked &&
-          layer.isPublicDevelopmentRaster)
+          canUnlockRasterProvider(layer))
         layer.withDevelopmentDownloadEnabled(),
   ];
 
@@ -196,6 +232,11 @@ class AppStore extends ChangeNotifier {
   TrailNetwork _navTrailNetwork = const TrailNetwork([]);
   ForwardRouteRecoveryResult? _activeForwardRecovery;
   DateTime? _lastForwardRecoveryAttemptAt;
+  int _navigationGeneration = 0;
+  bool _loadingNavigationNetwork = false;
+  DateTime? _lastNavigationNetworkAt;
+  LatLng? _navigationNetworkCenter;
+  String? _navigationActivityId;
 
   static Future<AppStore> create() async {
     final repository = AppRepository(AppDatabase());
@@ -223,6 +264,11 @@ class AppStore extends ChangeNotifier {
       downloader: downloader,
       vectorConverter: vectorConverter,
       routeTrailBuilder: RouteTrailBuilder(
+        cache: TrailNetworkCache(
+          directory: Directory(
+            p.join(tileStore.root.parent.path, 'routing_network'),
+          ),
+        ),
         // Route snapping and Follow-trails routing use trails plus roads of any
         // kind, so a route can stitch onto residential streets and service
         // roads as well as paths and tracks.
@@ -234,6 +280,8 @@ class AppStore extends ChangeNotifier {
       navigationAlertFeedback: NavigationAlertFeedback.device(),
       publicRasterDevUnlockCompiled:
           MapProviderConfig.publicRasterDevUnlockCompiled,
+      authorizedViewRasterDevUnlockCompiled:
+          MapProviderConfig.authorizedViewRasterDevUnlockCompiled,
     );
     await store.reload();
     return store;
@@ -254,7 +302,9 @@ class AppStore extends ChangeNotifier {
     DownloadForegroundService? backgroundDownloads,
     NavigationAlertFeedback? navigationAlertFeedback,
     RouteTrailBuilder? routeTrailBuilder,
+    LocationService locationService = const LocationService(),
     bool publicRasterDevUnlockCompiled = false,
+    bool authorizedViewRasterDevUnlockCompiled = false,
   }) async {
     final store = AppStore._(
       repository: repository,
@@ -282,10 +332,13 @@ class AppStore extends ChangeNotifier {
               trailClasses: TrailExtractor.trailAndRoadClasses,
             ),
           ),
+      locationService: locationService,
       backgroundDownloads: backgroundDownloads ?? DownloadForegroundService(),
       navigationAlertFeedback:
           navigationAlertFeedback ?? NavigationAlertFeedback.silent(),
       publicRasterDevUnlockCompiled: publicRasterDevUnlockCompiled,
+      authorizedViewRasterDevUnlockCompiled:
+          authorizedViewRasterDevUnlockCompiled,
     );
     await store.reload();
     return store;
@@ -394,13 +447,32 @@ class AppStore extends ChangeNotifier {
 
   void selectRoute(TrailRoute? route) {
     selectedRoute = route;
-    if (route != null) focusedOfflineArea = null;
+    if (route != null) {
+      focusedOfflineArea = null;
+      _restoreMapModeAfterOfflinePreview();
+    }
     notifyListeners();
   }
 
   void focusOfflineArea(OfflineArea? area) {
     focusedOfflineArea = area;
+    if (area == null) _restoreMapModeAfterOfflinePreview();
     notifyListeners();
+  }
+
+  /// MAP-009/MAP-011: previews saved coverage in Offline mode without replacing
+  /// the user's persisted map-source preference.
+  void previewOfflineArea(OfflineArea area) {
+    _mapTileModeBeforeOfflinePreview ??= mapTileMode;
+    focusedOfflineArea = area;
+    mapTileMode = MapTileMode.offline;
+    notifyListeners();
+  }
+
+  void _restoreMapModeAfterOfflinePreview() {
+    final previousMode = _mapTileModeBeforeOfflinePreview;
+    _mapTileModeBeforeOfflinePreview = null;
+    if (previousMode != null) mapTileMode = previousMode;
   }
 
   Future<void> acknowledgeAppUpdate() async {
@@ -455,12 +527,19 @@ class AppStore extends ChangeNotifier {
     }
   }
 
-  Future<bool> saveManualRoute(String name, List<LatLng> points) async {
+  Future<bool> saveManualRoute(
+    String name,
+    List<LatLng> points, {
+    bool? snapToTrailsOverride,
+    bool preserveGeometry = false,
+  }) async {
     if (points.length < 2) {
       _setError('A route needs at least two map points.');
       return false;
     }
-    final cleanedPoints = _routeGeometryCleaner.clean(points);
+    final cleanedPoints = preserveGeometry
+        ? points
+        : _routeGeometryCleaner.clean(points);
     final trimmed = name.trim();
     final now = DateTime.now().toUtc();
     final route = TrailRoute(
@@ -486,7 +565,8 @@ class AppStore extends ChangeNotifier {
       notifyListeners();
       // Snapping to nearby trails needs the network, so it runs after the
       // route is saved and visible rather than blocking the save.
-      if (snapRoutesToTrails && vectorSourceUrl.isNotEmpty) {
+      if ((snapToTrailsOverride ?? snapRoutesToTrails) &&
+          vectorSourceUrl.isNotEmpty) {
         unawaited(_snapSavedRoute(route, reportErrors: false));
       }
       return true;
@@ -512,8 +592,17 @@ class AppStore extends ChangeNotifier {
       final result = await routeTrailBuilder.snapToTrails(
         cleaned,
         vectorSourceUrl,
+        allowNetwork: mapTileMode != MapTileMode.offline,
       );
-      final geometry = _routeGeometryCleaner.clean(result.snapped);
+      if (!result.matched) return RouteSnapOutcome.unavailable;
+      if (_disposed ||
+          !identical(
+            routes.where((item) => item.id == route.id).firstOrNull,
+            route,
+          )) {
+        return RouteSnapOutcome.unchanged;
+      }
+      final geometry = result.snapped;
       if (geometry.length < 2 || !_geometryDiffers(original, geometry)) {
         return RouteSnapOutcome.unchanged;
       }
@@ -575,13 +664,17 @@ class AppStore extends ChangeNotifier {
   Future<bool> updateManualRoute(
     TrailRoute original,
     String name,
-    List<LatLng> points,
-  ) async {
+    List<LatLng> points, {
+    bool? snapToTrailsOverride,
+    bool preserveGeometry = false,
+  }) async {
     if (points.length < 2) {
       _setError('A route needs at least two map points.');
       return false;
     }
-    final cleanedPoints = _routeGeometryCleaner.clean(points);
+    final cleanedPoints = preserveGeometry
+        ? points
+        : _routeGeometryCleaner.clean(points);
     final trimmed = name.trim();
     final updated = TrailRoute(
       id: original.id,
@@ -589,14 +682,7 @@ class AppStore extends ChangeNotifier {
       source: original.source,
       createdAt: original.createdAt,
       updatedAt: DateTime.now().toUtc(),
-      points: cleanedPoints
-          .map(
-            (point) => RoutePoint(
-              latitude: point.latitude,
-              longitude: point.longitude,
-            ),
-          )
-          .toList(),
+      points: _withGeometry(original, cleanedPoints).points,
     );
     try {
       await repository.saveRoute(updated);
@@ -606,7 +692,8 @@ class AppStore extends ChangeNotifier {
       if (selectedRoute?.id == updated.id) selectedRoute = updated;
       errorMessage = null;
       notifyListeners();
-      if (snapRoutesToTrails && vectorSourceUrl.isNotEmpty) {
+      if ((snapToTrailsOverride ?? snapRoutesToTrails) &&
+          vectorSourceUrl.isNotEmpty) {
         unawaited(_snapSavedRoute(updated, reportErrors: false));
       }
       return true;
@@ -688,6 +775,7 @@ class AppStore extends ChangeNotifier {
   Future<void> setMapTileMode(MapTileMode mode) async {
     try {
       await repository.saveSetting(_mapTileModeSetting, mode.name);
+      _mapTileModeBeforeOfflinePreview = null;
       mapTileMode = mode;
       errorMessage = null;
       notifyListeners();
@@ -955,38 +1043,79 @@ class AppStore extends ChangeNotifier {
     _positionSubscription?.cancel();
     _positionSubscription = _locationService.positions().listen(
       (position) => unawaited(_acceptPosition(position)),
-      onError: (Object error) => _setError('GPS stream failed: $error'),
+      onError: (Object error) => unawaited(_handleLocationStreamError(error)),
     );
   }
 
+  Future<void> _handleLocationStreamError(Object error) async {
+    final activity = activeActivity;
+    if (activity == null || activity.status != ActivityStatus.recording) return;
+    await _positionSubscription?.cancel();
+    _positionSubscription = null;
+    _elapsedTimer?.cancel();
+    final paused = activity.copyWith(status: ActivityStatus.paused);
+    activeActivity = paused;
+    try {
+      await repository.updateActivity(paused);
+      _replaceActivity(paused);
+      _setError('Recording was paused because GPS stopped: $error');
+    } on Object catch (saveError) {
+      _setError(
+        'GPS stopped and the paused state could not be saved: $saveError',
+      );
+    }
+  }
+
   void _beginNavigation() {
+    if (_navigationActivityId == activeActivity?.id && _navRoute.isNotEmpty) {
+      return;
+    }
+    _navigationActivityId = activeActivity?.id;
+    _navigationGeneration++;
+    _loadingNavigationNetwork = false;
+    _lastNavigationNetworkAt = null;
+    _navigationNetworkCenter = null;
     _navMonitor
       ..config = navAlertConfig
       ..reset();
     navStatus = NavStatus.idle;
-    final route = selectedRoute;
+    final route = routes
+        .where((item) => item.id == activeActivity?.routeId)
+        .firstOrNull;
     _navRoute = route == null
         ? const []
-        : _routeGeometryCleaner.clean(
-            route.points.map((point) => point.latLng).toList(growable: false),
-          );
+        : route.points.map((point) => point.latLng).toList(growable: false);
     _navJunctions = const [];
     _navTrailNetwork = const TrailNetwork([]);
     _activeForwardRecovery = null;
     _lastForwardRecoveryAttemptAt = null;
     if (route != null && _navRoute.length >= 2 && vectorSourceUrl.isNotEmpty) {
-      unawaited(_loadNavigationNetwork(_navRoute));
+      unawaited(
+        _loadNavigationNetwork(
+          currentLocation ?? _navRoute.first,
+          DateTime.now().toUtc(),
+        ),
+      );
     }
   }
 
-  Future<void> _loadNavigationNetwork(List<LatLng> route) async {
+  Future<void> _loadNavigationNetwork(
+    LatLng position,
+    DateTime timestamp,
+  ) async {
+    if (_loadingNavigationNetwork || _disposed) return;
+    _loadingNavigationNetwork = true;
+    _lastNavigationNetworkAt = timestamp;
+    final generation = _navigationGeneration;
     try {
-      final network = await routeTrailBuilder.buildNetwork(
-        route,
+      final network = await routeTrailBuilder.networkNearPoint(
+        position,
         vectorSourceUrl,
+        allowNetwork: mapTileMode != MapTileMode.offline,
       );
-      if (!listEquals(route, _navRoute)) return;
+      if (_disposed || generation != _navigationGeneration) return;
       _navTrailNetwork = network;
+      _navigationNetworkCenter = position;
       _activeForwardRecovery = null;
       _lastForwardRecoveryAttemptAt = null;
       _navJunctions = navAlertConfig.junctionEnabled
@@ -994,10 +1123,19 @@ class AppStore extends ChangeNotifier {
           : const [];
     } on Object {
       // Network navigation is best-effort; the planned route remains visible.
+    } finally {
+      if (generation == _navigationGeneration) {
+        _loadingNavigationNetwork = false;
+      }
     }
   }
 
   void _endNavigation() {
+    _navigationGeneration++;
+    _navigationActivityId = null;
+    _loadingNavigationNetwork = false;
+    _lastNavigationNetworkAt = null;
+    _navigationNetworkCenter = null;
     _navRoute = const [];
     _navJunctions = const [];
     _navTrailNetwork = const TrailNetwork([]);
@@ -1014,6 +1152,18 @@ class AppStore extends ChangeNotifier {
     required DateTime timestamp,
   }) {
     if (_navRoute.length < 2) return;
+    final networkExpired =
+        _lastNavigationNetworkAt == null ||
+        timestamp.difference(_lastNavigationNetworkAt!) >=
+            const Duration(seconds: 15);
+    if (vectorSourceUrl.isNotEmpty &&
+        networkExpired &&
+        (_navigationNetworkCenter == null ||
+            _navTrailNetwork.isEmpty ||
+            _distance.metersBetween(_navigationNetworkCenter!, position) >=
+                500)) {
+      unawaited(_loadNavigationNetwork(position, timestamp));
+    }
     var updatedStatus = _navMonitor.update(
       position,
       route: _navRoute,
@@ -1026,15 +1176,21 @@ class AppStore extends ChangeNotifier {
       _activeForwardRecovery = null;
       _lastForwardRecoveryAttemptAt = null;
     } else if (headingDegrees != null && !_navTrailNetwork.isEmpty) {
+      if (_activeForwardRecovery case final previous?) {
+        _activeForwardRecovery = _forwardRouteRecovery.advance(
+          previous,
+          position: position,
+          headingDegrees: headingDegrees,
+        );
+      }
       final sinceLastAttempt = _lastForwardRecoveryAttemptAt == null
           ? null
           : timestamp.difference(_lastForwardRecoveryAttemptAt!);
       final recoveryDue =
           updatedStatus.triggered == NavAlert.offRoute ||
           updatedStatus.triggered == NavAlert.offRouteReminder ||
-          (_activeForwardRecovery == null &&
-              (sinceLastAttempt == null ||
-                  sinceLastAttempt >= const Duration(seconds: 5)));
+          sinceLastAttempt == null ||
+          sinceLastAttempt >= const Duration(seconds: 5);
       if (recoveryDue) {
         _lastForwardRecoveryAttemptAt = timestamp;
         _activeForwardRecovery = _forwardRouteRecovery.recover(
@@ -1045,6 +1201,8 @@ class AppStore extends ChangeNotifier {
           network: _navTrailNetwork,
         );
       }
+    } else {
+      _activeForwardRecovery = null;
     }
     final recovery = _activeForwardRecovery;
     if (updatedStatus.offRoute && recovery != null) {
@@ -1086,17 +1244,22 @@ class AppStore extends ChangeNotifier {
   Future<void> _acceptPosition(Position position) async {
     final activity = activeActivity;
     if (activity == null || activity.status != ActivityStatus.recording) return;
-    if (!position.accuracy.isFinite || position.accuracy > 60) return;
+    if (!_locationSampleFilter.hasUsableAccuracy(position.accuracy)) return;
 
     final previous = activity.samples.lastOrNull;
     var addedDistance = 0.0;
     var addedElevation = 0.0;
     if (previous != null) {
-      addedDistance = _distance.metersBetween(
+      final measuredDistance = _distance.metersBetween(
         previous.latLng,
         LatLng(position.latitude, position.longitude),
       );
-      if (addedDistance > 200) return;
+      final acceptedDistance = _locationSampleFilter.acceptedDistance(
+        distanceMeters: measuredDistance,
+        elapsed: position.timestamp.toUtc().difference(previous.recordedAt),
+      );
+      if (acceptedDistance == null) return;
+      addedDistance = acceptedDistance;
       final previousAltitude = previous.altitude;
       if (previousAltitude != null) {
         final delta = position.altitude - previousAltitude;
@@ -1213,12 +1376,12 @@ class AppStore extends ChangeNotifier {
     OfflineSourceFormat? format,
     String? providerId,
   }) async {
+    if (_disposed || !_mutatingAreas.add(area.id)) return;
     try {
       final plan = TilePlanner(
         maxTiles: maxTiles,
       ).plan(bounds, minZoom, maxZoom);
-      downloader.cancel(area.id);
-      vectorConverter.cancel(area.id);
+      cancelDownload(area);
       final sourceFormat = format ?? area.sourceFormat;
       final sourceProviderId =
           sourceFormat == OfflineSourceFormat.convertedVector
@@ -1254,27 +1417,34 @@ class AppStore extends ChangeNotifier {
       final retainedKeys = plan.coordinates
           .map((coordinate) => '$namespace/${coordinate.key}')
           .toSet();
-      final orphanPaths = await repository.replaceOfflineAreaPlan(
-        updated,
-        retainedKeys,
-      );
-      for (final relativePath in orphanPaths) {
-        final file = File(p.join(tileStore.root.path, relativePath));
-        if (await file.exists()) await file.delete();
-      }
-      _replaceOfflineArea(updated);
+      await _withOfflineStorageLock(() async {
+        final orphanPaths = await repository.replaceOfflineAreaPlan(
+          updated,
+          retainedKeys,
+        );
+        for (final relativePath in orphanPaths) {
+          final file = File(p.join(tileStore.root.path, relativePath));
+          if (await file.exists()) await file.delete();
+        }
+        _replaceOfflineArea(updated);
+      });
       focusedOfflineArea = updated;
       notifyListeners();
+      _mutatingAreas.remove(area.id);
       unawaited(_runDownload(updated, plan));
     } on Object catch (error) {
       _setError('Could not update offline area: $error');
+    } finally {
+      _mutatingAreas.remove(area.id);
     }
   }
 
   Future<void> resumeDownload(OfflineArea area) async {
     try {
-      final plan = const TilePlanner(
-        maxTiles: 1200,
+      final plan = TilePlanner(
+        // OFF-004/005: honor a previously confirmed plan, still bounded by the
+        // largest supported UI cap rather than the default new-area cap.
+        maxTiles: area.totalTiles.clamp(1200, 10000),
       ).plan(area.bounds, area.minZoom, area.maxZoom);
       await _runDownload(area, plan);
     } on Object catch (error) {
@@ -1283,7 +1453,26 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> _runDownload(OfflineArea area, TilePlan plan) async {
+    if (_disposed || _mutatingAreas.contains(area.id)) return;
+    final existing = _downloadJobs[area.id];
+    if (existing != null) return existing;
+    final completed = Completer<void>();
+    _downloadJobs[area.id] = completed.future;
     _intendedDownloads.add(area.id);
+    notifyListeners();
+    try {
+      await _withOfflineStorageLock(() async {
+        if (_disposed || !_intendedDownloads.contains(area.id)) return;
+        await _executeDownload(area, plan);
+      });
+    } finally {
+      _downloadJobs.remove(area.id);
+      completed.complete();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _executeDownload(OfflineArea area, TilePlan plan) async {
     _runningDownloads.add(area.id);
     _updateBackgroundService();
     try {
@@ -1317,6 +1506,7 @@ class AppStore extends ChangeNotifier {
         _intendedDownloads.remove(area.id);
       }
     } on Object catch (error) {
+      _intendedDownloads.remove(area.id);
       _setError('Offline download failed: $error');
     } finally {
       _runningDownloads.remove(area.id);
@@ -1328,6 +1518,7 @@ class AppStore extends ChangeNotifier {
     _intendedDownloads.remove(area.id);
     downloader.cancel(area.id);
     vectorConverter.cancel(area.id);
+    notifyListeners();
   }
 
   /// Resumes downloads that were interrupted (for example by the OS suspending
@@ -1335,7 +1526,7 @@ class AppStore extends ChangeNotifier {
   /// repeatedly; it never resumes a completed area or one already in flight.
   Future<void> resumeInterruptedDownloads() async {
     final pending = _intendedDownloads
-        .difference(_runningDownloads)
+        .difference(_downloadJobs.keys.toSet())
         .toList(growable: false);
     for (final id in pending) {
       final area = offlineAreas.where((item) => item.id == id).firstOrNull;
@@ -1360,20 +1551,29 @@ class AppStore extends ChangeNotifier {
   }
 
   Future<void> deleteOfflineArea(OfflineArea area) async {
+    if (_disposed || !_mutatingAreas.add(area.id)) return;
+    cancelDownload(area);
     try {
-      final unshared = await repository.unsharedTiles(area.id);
-      for (final row in unshared) {
-        final relative = row['relative_path']! as String;
-        final file = File(p.join(tileStore.root.path, relative));
-        if (await file.exists()) await file.delete();
-      }
-      await repository.deleteOfflineArea(area.id);
+      await _withOfflineStorageLock(() async {
+        final unshared = await repository.unsharedTiles(area.id);
+        for (final row in unshared) {
+          final relative = row['relative_path']! as String;
+          final file = File(p.join(tileStore.root.path, relative));
+          if (await file.exists()) await file.delete();
+        }
+        await repository.deleteOfflineArea(area.id);
+      });
       offlineAreas = offlineAreas.where((item) => item.id != area.id).toList();
-      if (focusedOfflineArea?.id == area.id) focusedOfflineArea = null;
+      if (focusedOfflineArea?.id == area.id) {
+        focusedOfflineArea = null;
+        _restoreMapModeAfterOfflinePreview();
+      }
       notifyListeners();
       unawaited(_persistOfflineAreaOrder());
     } on Object catch (error) {
       _setError('Could not delete offline area: $error');
+    } finally {
+      _mutatingAreas.remove(area.id);
     }
   }
 
@@ -1489,13 +1689,28 @@ class AppStore extends ChangeNotifier {
   }
 
   @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
+    for (final id in _downloadJobs.keys) {
+      downloader.cancel(id);
+      vectorConverter.cancel(id);
+    }
+    _intendedDownloads.clear();
     _positionSubscription?.cancel();
     _elapsedTimer?.cancel();
     if (_backgroundServiceActive) unawaited(backgroundDownloads.stop());
     unawaited(_navigationAlertFeedback.dispose());
-    downloader.dispose();
-    vectorConverter.dispose();
+    unawaited(
+      _offlineWork.then((_) {
+        downloader.dispose();
+        vectorConverter.dispose();
+      }),
+    );
     super.dispose();
   }
 }

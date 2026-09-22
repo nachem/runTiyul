@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -54,8 +55,13 @@ class MbtilesVectorTileSource implements VectorTileSource {
       file.path,
       options: OpenDatabaseOptions(readOnly: true, singleInstance: false),
     );
-    final bounds = await _readZoomBounds(db);
-    return MbtilesVectorTileSource._(db, bounds.$1, bounds.$2);
+    try {
+      final bounds = await _readZoomBounds(db);
+      return MbtilesVectorTileSource._(db, bounds.$1, bounds.$2);
+    } on Object {
+      await db.close();
+      rethrow;
+    }
   }
 
   static Future<(int, int)> _readZoomBounds(Database db) async {
@@ -180,6 +186,10 @@ class HttpVectorTileSource implements VectorTileSource {
   final bool _ownsClient;
   final String _template;
 
+  static const _requestTimeout = Duration(seconds: 15);
+  static const _maxAttempts = 3;
+  static const _retryDelay = Duration(milliseconds: 300);
+
   @override
   final int minZoom;
 
@@ -209,7 +219,11 @@ class HttpVectorTileSource implements VectorTileSource {
       if (source.contains('{z}')) {
         return HttpVectorTileSource._(httpClient, ownsClient, source, 0, 14);
       }
-      final response = await httpClient.get(Uri.parse(source));
+      final response = await _getWithRetry(
+        httpClient,
+        Uri.parse(source),
+        requestName: 'Vector TileJSON',
+      );
       if (response.statusCode != 200) {
         throw StateError(
           'Vector TileJSON request failed (HTTP ${response.statusCode}).',
@@ -243,14 +257,58 @@ class HttpVectorTileSource implements VectorTileSource {
         .replaceAll('{z}', '$z')
         .replaceAll('{x}', '$x')
         .replaceAll('{y}', '$y');
-    final response = await _client.get(Uri.parse(url));
-    if (response.statusCode != 200) return null;
+    final response = await _getWithRetry(
+      _client,
+      Uri.parse(url),
+      requestName: 'Vector tile',
+    );
+    if (response.statusCode == 404) return null;
+    // OFF-006: failed requests must not become missing tiles in a complete area.
+    if (response.statusCode != 200) {
+      throw StateError(
+        'Vector tile request failed (HTTP ${response.statusCode}).',
+      );
+    }
     final bytes = response.bodyBytes;
-    if (bytes.isEmpty) return null;
     if (bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
       return gzip.decode(bytes);
     }
     return bytes;
+  }
+
+  // OFF-009: each attempt includes response-body consumption in its timeout.
+  // Retry only transient failures, with at most two waits (300 ms, 600 ms).
+  static Future<http.Response> _getWithRetry(
+    http.Client client,
+    Uri uri, {
+    required String requestName,
+  }) async {
+    for (var attempt = 1; ; attempt++) {
+      try {
+        final response = await client.get(uri).timeout(_requestTimeout);
+        final status = response.statusCode;
+        final transient = status == 429 || (status >= 500 && status < 600);
+        if (!transient || attempt == _maxAttempts) return response;
+      } on TimeoutException {
+        if (attempt == _maxAttempts) {
+          throw TimeoutException(
+            '$requestName request timed out.',
+            _requestTimeout,
+          );
+        }
+      } on Exception catch (error) {
+        if (error is! http.ClientException &&
+            error is! SocketException &&
+            error is! HttpException) {
+          rethrow;
+        }
+        if (attempt == _maxAttempts) {
+          // Transport exceptions can contain provider credentials or tile URLs.
+          throw StateError('$requestName request failed (network error).');
+        }
+      }
+      await Future<void>.delayed(_retryDelay * (1 << (attempt - 1)));
+    }
   }
 
   @override

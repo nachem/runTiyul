@@ -21,8 +21,28 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-08-20:
+As of 2026-09-22:
 
+- Battery-saver GPS hardening accepts plausible delayed fixes with a
+  time-scaled jump limit, starts a zero-distance segment after five-minute
+  outages, and durably pauses on stream failure. Recording map Follow survives
+  pinch/double-tap zoom and rotation, one-finger pan disables it, and both
+  Follow updates and current-location recenter preserve manual zoom. All 282
+  tests and `flutter analyze --no-pub` passed; physical-device Battery Saver
+  and outdoor motion behavior remain unverified.
+
+- Latest routing pass: 273 tests, clean `flutter analyze --no-pub`, and a
+  successful debug APK build. A synthetic GPS recording exercises forward
+  recovery; no physical device was connected.
+- Preserve the new independent z14+ vector overlay, bounded/cancellable loads,
+  and Offline cache-only behavior. Raster tiles do not prove routing coverage.
+- Dense editing uses `RouteEditorDraft` sparse controls over lossless geometry.
+  Never flatten a route when switching modes, adopt a partially matched prefix,
+  or rerun whole-route snapping merely because an existing edit was saved.
+- Matching must retain all input geometry on failure, honor available access/
+  grade metadata, and never connect nearby ways through a coarse grid. Forward
+  recovery searches shortest within a bounded graph with the initial direction
+  constrained during search; off-route fixes must not advance route progress.
 - The functional MVP exists under feature-oriented `lib/` directories.
 - Android builds and was exercised on an Android 14/API 34 emulator.
 - Manual routes, GPX parsing/import, visual route selection, GPS recording,
@@ -31,7 +51,26 @@ As of 2026-08-20:
   development-only override is configured.
 - Network-disabled primary-map preview rendered downloaded tiles in Offline
   mode.
-- Format and analyzer pass; 171 automated tests pass.
+- Downloaded-area **Show on map** temporarily previews in Offline mode and
+  restores the user's prior source when closed or deleted; it no longer
+  persists Offline globally.
+- See the current validation counts in `02-implementation-status.md`.
+- CyclOSM is restored as an independent choice alongside Streets, Topographic,
+  and Satellite. Topographic requests OpenTopoMap directly and overzooms above
+  z17; do not add per-tile fallback because it disables memory caching.
+- Download jobs and offline mutations share a queue; cancel/drain before
+  edit/delete, deduplicate resume, and preserve completed converted tiles.
+  Native rendering resources are explicitly disposed. HTTP vector failures
+  other than 404 are errors, not missing coverage. Database route updates must
+  preserve activity links, and startup failures remain retryable without reset.
+- No device was connected for the stability review. The debug APK is not an
+  update for the permanent-signed installed app; do not uninstall or clear data
+  to work around signature mismatch. Runtime crash attribution remains pending
+  targeted device logs/reproduction.
+- A separately authorized internal build may compile
+  `ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS=true`; only then can the hidden
+  seven-tap unlock promote Topographic and Satellite. Keep the flag disabled by
+  default and do not infer provider permission for ordinary builds.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
   Push CI run `32322573390` passed format, analyze, and all tests; CodeQL run
@@ -296,6 +335,12 @@ resume, use airplane mode, view usage, and delete data.
   callback. A short cue that requests focus must be explicitly stopped after
   its known duration or other media may remain paused or ducked.
 - A Windows host cannot validate iOS runtime behavior.
+- OpenMapTiles display geometry is not a complete pedestrian-routing graph.
+  Missing topology/access rules require explicit limitations, not invented links.
+- SQLite/FFI setup inside widget tests must run through `tester.runAsync`; fake
+  time can otherwise deadlock on I/O before the first widget is pumped.
+- Editor quick fixes may remain in unsaved buffers. Format/save changed files
+  with the Dart tool and rerun the actual analyzer before claiming a clean build.
 
 ## 10. Definition of an honest completion report
 

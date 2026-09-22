@@ -45,6 +45,34 @@ class ForwardRouteRecovery {
   final GeoDistance distance;
   final RouteManeuverPlanner maneuverPlanner;
 
+  ForwardRouteRecoveryResult? advance(
+    ForwardRouteRecoveryResult previous, {
+    required LatLng position,
+    required double headingDegrees,
+  }) {
+    final projection = nearestOnPolyline(position, previous.path);
+    if (projection == null || projection.distanceMeters > maxTrailSnapMeters) {
+      return null;
+    }
+    final path = [
+      projection.point,
+      ...previous.path.skip(projection.segmentIndex + 1),
+    ];
+    final bearing = _initialBearing(path);
+    if (bearing == null ||
+        _headingDifference(bearing, headingDegrees) >
+            maximumInitialTurnDegrees) {
+      return null;
+    }
+    return ForwardRouteRecoveryResult(
+      path: path,
+      reconnectPoint: previous.reconnectPoint,
+      reconnectAlongRouteMeters: previous.reconnectAlongRouteMeters,
+      pathDistanceMeters: distance.pathLengthMeters(path),
+      initialBearingDegrees: bearing,
+    );
+  }
+
   ForwardRouteRecoveryResult? recover({
     required LatLng position,
     required double headingDegrees,
@@ -52,23 +80,17 @@ class ForwardRouteRecovery {
     required double completedRouteMeters,
     required TrailNetwork network,
   }) {
-    if (plannedRoute.length < 2 || network.isEmpty) return null;
+    if (plannedRoute.length < 2 ||
+        network.isEmpty ||
+        !headingDegrees.isFinite) {
+      return null;
+    }
     final router = TrailRouter(network);
     final current = router.snap(position, maxMeters: maxTrailSnapMeters);
     if (current == null) return null;
 
-    final nearestRoute = nearestOnPolyline(
-      position,
-      plannedRoute,
-      distance: distance,
-    );
-    final nearestAlong = nearestRoute == null
-        ? completedRouteMeters
-        : maneuverPlanner.alongRoute(plannedRoute, nearestRoute);
     final routeLength = distance.pathLengthMeters(plannedRoute);
-    final searchStart =
-        math.max(completedRouteMeters, nearestAlong) +
-        minimumReconnectAheadMeters;
+    final searchStart = completedRouteMeters + minimumReconnectAheadMeters;
     final searchEnd = math.min(
       routeLength,
       searchStart + maximumSearchAheadMeters,
@@ -87,33 +109,40 @@ class ForwardRouteRecovery {
       candidateDistances.add(searchEnd);
     }
 
+    final targets = <TrailAnchor>[];
     for (final along in candidateDistances) {
       final routePoint = maneuverPlanner.pointAlong(plannedRoute, along);
-      final target = router.snap(routePoint, maxMeters: maxTrailSnapMeters);
-      if (target == null) continue;
-      final candidatePath = router.buildConnectedLeg(current, target);
-      if (candidatePath == null || candidatePath.length < 2) continue;
-      final reconnect = _firstForwardReconnect(
-        candidatePath,
-        plannedRoute,
-        minimumAlongMeters: searchStart,
-      );
-      if (reconnect == null) continue;
-      final initialBearing = _initialBearing(reconnect.path);
-      if (initialBearing == null ||
-          _headingDifference(initialBearing, headingDegrees) >
-              maximumInitialTurnDegrees) {
-        continue;
-      }
-      return ForwardRouteRecoveryResult(
-        path: reconnect.path,
-        reconnectPoint: reconnect.point,
-        reconnectAlongRouteMeters: reconnect.alongRouteMeters,
-        pathDistanceMeters: distance.pathLengthMeters(reconnect.path),
-        initialBearingDegrees: initialBearing,
+      targets.addAll(
+        router.snapCandidates(routePoint, maxMeters: reconnectToleranceMeters),
       );
     }
-    return null;
+    final best = router.buildConnectedLegToAny(
+      current,
+      targets,
+      headingDegrees: headingDegrees,
+      maximumInitialTurnDegrees: maximumInitialTurnDegrees,
+      maximumDistanceMeters: maximumSearchAheadMeters * 2,
+    );
+    if (best == null || best.path.length < 2) return null;
+    final reconnect = _firstForwardReconnect(
+      best.path,
+      plannedRoute,
+      minimumAlongMeters: searchStart,
+    );
+    if (reconnect == null) return null;
+    final initialBearing = _initialBearing(reconnect.path);
+    if (initialBearing == null ||
+        _headingDifference(initialBearing, headingDegrees) >
+            maximumInitialTurnDegrees) {
+      return null;
+    }
+    return ForwardRouteRecoveryResult(
+      path: reconnect.path,
+      reconnectPoint: reconnect.point,
+      reconnectAlongRouteMeters: reconnect.alongRouteMeters,
+      pathDistanceMeters: distance.pathLengthMeters(reconnect.path),
+      initialBearingDegrees: initialBearing,
+    );
   }
 
   ({List<LatLng> path, LatLng point, double alongRouteMeters})?

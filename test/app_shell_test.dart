@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trail_runner/app/app.dart';
 import 'package:trail_runner/features/map/trail_map.dart';
@@ -229,5 +230,15 @@ void main() {
     expect(mapRotationForCourse(0), 0);
     expect(mapRotationForCourse(90), 270);
     expect(mapRotationForCourse(450), 270);
+  });
+
+  test('NAV-005 only a pan stops automatic position following', () {
+    expect(mapEventStopsLocationFollow(MapEventSource.dragStart), isTrue);
+    expect(
+      mapEventStopsLocationFollow(MapEventSource.multiFingerGestureStart),
+      isFalse,
+    );
+    expect(mapEventStopsLocationFollow(MapEventSource.doubleTap), isFalse);
+    expect(mapEventStopsLocationFollow(MapEventSource.scrollWheel), isFalse);
   });
 }

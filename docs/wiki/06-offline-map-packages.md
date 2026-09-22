@@ -2,13 +2,33 @@
 
 Status: design proposal; topographic on-device vector→raster slice implemented,
 native MapLibre/local terrain containers not implemented<br>
-Update 2026-07-16: CyclOSM provides online topographic raster viewing without a
-separate elevation request. For converted-vector offline areas only, Terrarium
+Update 2026-09-06: CyclOSM and Topographic (OpenTopoMap) are independent online
+layers, with no separate elevation request. For converted-vector offline areas only, Terrarium
 is fetched during conversion, decoded and rendered in memory, and its contours,
-labels, and hillshade are baked into the final PNG; raw elevation data is never
-retained. The earlier runtime overlay/cache/per-area terrain downloader was
-removed, with one-time cleanup for its old files and metadata. See
+labels, and subdued hillshade are baked into the final PNG; raw elevation data
+is never retained. Deep tiles progressively fade the enlarged z13 parent
+overlay so terrain remains secondary to roads, labels, and route lines. The
+earlier runtime overlay/cache/per-area terrain downloader was removed, with
+one-time cleanup for its old files and metadata. See
 [Implemented Details and Current Status](02-implementation-status.md).
+
+The stability pass serializes area conversion/download jobs and storage
+mutations, drains cancellation before edit/delete, and reuses existing nonempty
+converted PNGs on resume. To refresh an old rendered style, remove all areas
+sharing those tiles and redownload. Pictures, images, codecs, contour-label
+paragraphs, and per-area terrain caches have explicit release boundaries. HTTP
+source outages fail visibly rather than being counted as missing tiles.
+These changes are automated-test validated, not device stress-tested.
+
+The later 2026-09-06 routing pass adds an independent z14+ vector-road/trail
+comparison overlay and a bounded cache of extracted transportation features
+(`routing_network`, 48 tiles in memory, 256 tiles / 64 MiB on disk). This cache
+stores map ways and available grade/access metadata, not raw elevation or
+recorded activity tracks. Overlay, editing, matching, and recording share it;
+Offline mode reads only cached/local sources. It is not populated merely by
+raster downloads, is not included in raster-area usage totals, and can evict
+older coverage. A guaranteed offline-routing package remains unimplemented.
+
 Decision date: 2026-07-14  
 Applies to: MAP-004 through MAP-012, OFF-001 through OFF-014, and STO-001
 through STO-007
@@ -169,7 +189,11 @@ package. Terrain belongs only to the **Topographic vector** offline type.
   selected vector area. It does not request terrain below z10, uses source tiles
   through z13, and crops/reuses z13 parents for deeper output.
 - `TerrainContourService` decodes, traces 10 m contours with labeled 50 m index
-  lines, and creates hillshade entirely in memory.
+  lines, and creates subdued hillshade entirely in memory. Contour strokes are
+  intentionally light enough to preserve basemap and route readability.
+- Above z13, `TerrariumVectorTerrainBaker` reduces the opacity of the cropped
+  parent overlay as it is enlarged, preventing thick overzoomed contours from
+  dominating z14-z16 downloaded tiles.
 - The overlay is composited into the vector-rendered PNG; only that final PNG is
   stored and counted. Raw Terrarium and intermediate overlay bytes are discarded.
 - A 404 leaves the base vector tile usable; transient/server failures fail the

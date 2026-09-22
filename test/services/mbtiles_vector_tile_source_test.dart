@@ -64,4 +64,59 @@ void main() {
     expect(await source.readTile(12, 999, 999), isNull);
     await source.close();
   });
+
+  test('falls back to tile zoom bounds when metadata is absent', () async {
+    final db = await databaseFactoryFfi.openDatabase(mbtiles.path);
+    try {
+      await db.execute('DROP TABLE metadata');
+    } finally {
+      await db.close();
+    }
+
+    final source = await MbtilesVectorTileSource.openFile(
+      mbtiles,
+      factory: databaseFactoryFfi,
+    );
+    addTearDown(source.close);
+    expect(source.minZoom, 12);
+    expect(source.maxZoom, 12);
+    expect(await source.readTile(12, 100, 200), isNotEmpty);
+  });
+
+  test('closes the database when zoom-bound initialization fails', () async {
+    final db = await databaseFactoryFfi.openDatabase(mbtiles.path);
+    try {
+      await db.execute('DROP TABLE metadata');
+      await db.execute('DROP TABLE tiles');
+    } finally {
+      await db.close();
+    }
+
+    final factory = _TrackingDatabaseFactory();
+    addTearDown(() async {
+      final opened = factory.openedDatabase;
+      if (opened != null && opened.isOpen) await opened.close();
+    });
+
+    await expectLater(
+      MbtilesVectorTileSource.openFile(mbtiles, factory: factory),
+      throwsA(isA<DatabaseException>()),
+    );
+    expect(factory.openedDatabase, isNotNull);
+    expect(factory.openedDatabase!.isOpen, isFalse);
+  });
+}
+
+class _TrackingDatabaseFactory extends Fake implements DatabaseFactory {
+  Database? openedDatabase;
+
+  @override
+  Future<Database> openDatabase(
+    String path, {
+    OpenDatabaseOptions? options,
+  }) async {
+    final db = await databaseFactoryFfi.openDatabase(path, options: options);
+    openedDatabase = db;
+    return db;
+  }
 }

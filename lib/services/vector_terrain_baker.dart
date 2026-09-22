@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:http/http.dart' as http;
 
 import '../core/geo/tile_math.dart';
+import '../core/graphics/render_png.dart';
 import 'map_provider.dart';
 import 'terrain_contour_service.dart';
 
@@ -54,6 +56,13 @@ class TerrariumVectorTerrainBaker implements VectorTerrainBaker {
   static const int minTerrainZoom = 10;
   static const int maxTerrainZoom = 13;
   static const int _maxOverlayCacheEntries = 64;
+
+  /// Parent terrain is cropped and enlarged above z13. Reduce its opacity as
+  /// it is enlarged so contour strokes do not become dominant at deep zooms.
+  static double overlayOpacityForZoomDelta(int zoomDelta) {
+    if (zoomDelta <= 0) return 0.38;
+    return 0.38 / math.sqrt(1 << zoomDelta);
+  }
 
   final Map<String, Future<Uint8List?>> _overlayCache = {};
 
@@ -124,59 +133,63 @@ class TerrariumVectorTerrainBaker implements VectorTerrainBaker {
     required int sourceX,
     required int sourceY,
   }) async {
-    final baseCodec = await ui.instantiateImageCodec(basePng);
-    final overlayCodec = await ui.instantiateImageCodec(overlayPng);
-    final baseFrame = await baseCodec.getNextFrame();
-    final overlayFrame = await overlayCodec.getNextFrame();
-    final base = baseFrame.image;
-    final overlay = overlayFrame.image;
+    ui.Codec? baseCodec;
+    ui.Codec? overlayCodec;
+    ui.Image? baseImage;
+    ui.Image? overlayImage;
     try {
+      baseCodec = await ui.instantiateImageCodec(basePng);
+      baseImage = (await baseCodec.getNextFrame()).image;
+      overlayCodec = await ui.instantiateImageCodec(overlayPng);
+      overlayImage = (await overlayCodec.getNextFrame()).image;
+      final base = baseImage;
+      final overlay = overlayImage;
       final width = base.width.toDouble();
       final height = base.height.toDouble();
       final destination = ui.Rect.fromLTWH(0, 0, width, height);
-      final recorder = ui.PictureRecorder();
-      final canvas = ui.Canvas(recorder, destination);
-      canvas.drawImageRect(
-        base,
-        ui.Rect.fromLTWH(0, 0, width, height),
-        destination,
-        ui.Paint(),
-      );
+      return await renderPng(
+        width: base.width,
+        height: base.height,
+        draw: (canvas) {
+          canvas.drawImageRect(
+            base,
+            ui.Rect.fromLTWH(0, 0, width, height),
+            destination,
+            ui.Paint(),
+          );
 
-      final zoomDelta = coordinate.z - sourceZoom;
-      final factor = 1 << zoomDelta;
-      final subX = coordinate.x - (sourceX << zoomDelta);
-      final subY = coordinate.y - (sourceY << zoomDelta);
-      final sourceWidth = overlay.width / factor;
-      final sourceHeight = overlay.height / factor;
-      final source = ui.Rect.fromLTWH(
-        subX * sourceWidth,
-        subY * sourceHeight,
-        sourceWidth,
-        sourceHeight,
+          final zoomDelta = coordinate.z - sourceZoom;
+          final factor = 1 << zoomDelta;
+          final subX = coordinate.x - (sourceX << zoomDelta);
+          final subY = coordinate.y - (sourceY << zoomDelta);
+          final sourceWidth = overlay.width / factor;
+          final sourceHeight = overlay.height / factor;
+          final source = ui.Rect.fromLTWH(
+            subX * sourceWidth,
+            subY * sourceHeight,
+            sourceWidth,
+            sourceHeight,
+          );
+          canvas.drawImageRect(
+            overlay,
+            source,
+            destination,
+            ui.Paint()
+              ..filterQuality = ui.FilterQuality.low
+              ..color = ui.Color.fromARGB(
+                (255 * overlayOpacityForZoomDelta(zoomDelta)).round(),
+                255,
+                255,
+                255,
+              ),
+          );
+        },
       );
-      canvas.drawImageRect(
-        overlay,
-        source,
-        destination,
-        ui.Paint()..filterQuality = ui.FilterQuality.low,
-      );
-
-      final image = await recorder.endRecording().toImage(
-        base.width,
-        base.height,
-      );
-      try {
-        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
-        return bytes!.buffer.asUint8List();
-      } finally {
-        image.dispose();
-      }
     } finally {
-      base.dispose();
-      overlay.dispose();
-      baseCodec.dispose();
-      overlayCodec.dispose();
+      baseImage?.dispose();
+      overlayImage?.dispose();
+      baseCodec?.dispose();
+      overlayCodec?.dispose();
     }
   }
 

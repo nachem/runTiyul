@@ -1,6 +1,6 @@
 # Local Run and Debug Guide
 
-Last reviewed: 2026-07-22
+Last reviewed: 2026-09-06
 
 ## 1. Supported local targets
 
@@ -73,6 +73,18 @@ future production build, pass:
 flutter build apk --release `
   --dart-define=ALLOW_PUBLIC_RASTER_DEV_UNLOCK=false
 ```
+
+For a separately authorized internal build, Topographic and Satellite can be
+added to that same seven-tap workflow with:
+
+```powershell
+flutter build apk --release `
+  --dart-define=ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS=true
+```
+
+This flag is false by default. Use it only when the provider permission covers
+offline/debug caching, and continue to enforce the in-app tile cap, attribution,
+retention, credentials, and any narrower terms in that grant.
 
 Converted-vector downloads remain a separate path and never authorize a raster
 endpoint.
@@ -209,6 +221,36 @@ voice installation, output routing, or background playback.
 
 ## 7. Offline map debugging
 
+### Vector comparison and route verification
+
+For `MAP-013`, use the polyline icon (**Show vector roads and trails**) on a map.
+At z14 and above it shows the actual configured vector transportation lines:
+teal dashed trails, blue roads, and gray restricted ways. Below z14 it is hidden
+and makes no new tile requests. Compare this overlay with Streets, CyclOSM, or
+Topographic to identify raster-visible paths missing from the vector dataset.
+The app does not infer routing geometry from raster pixels.
+
+For `RTE-012`, open a dense imported route in Edit waypoints. It should retain
+all coordinates but show sparse controls. Tap a visible control, or long-press
+a hidden section to insert/select one, then Move/Delete. In Follow trails, only
+the neighboring span changes. Checkpoint mode allows explicit straight edits;
+switching modes itself must not change the line. Undo restores the whole edit.
+Test repeated mode switching, failed/disconnected edits, and save/reload with
+optional GPX altitude/timestamps.
+
+For `NAV-007`, start a selected-route recording and move onto a connected
+off-route way with a reliable course. The recovery line and arrow should start
+forward, select the shortest available connection within the local search, and
+update the rejoin distance as movement continues. Confirm a dead end, missing
+way, prohibited link, or unavailable heading does not produce an invented path.
+Off-route movement must not advance planned-route progress.
+
+Offline routing requires cached extracted ways or a local MBTiles source.
+The cache is bounded and opportunistic; downloading raster tiles alone is not
+enough. Verify behavior with the network disabled and after restart. Physical
+GPS, heading, terrain-access accuracy, and prolonged mobile CPU/memory behavior
+remain unverified for the 2026-09-06 changes.
+
 The public OpenStreetMap standard tile service must not be used for production
 bulk download. Use only the app's explicitly labeled development mode for small
 test areas, or configure a provider that permits offline use.
@@ -270,7 +312,57 @@ Record:
 
 ## 11. Latest local verification
 
-Command validation on 2026-08-19 with Flutter 3.44.6 and Dart 3.12.2:
+Routing/overlay/editor pass on 2026-09-06: all 273 tests passed, analysis was
+clean, and the debug APK built. The tests exercise the actual overlay control,
+zoom hiding, a 390x844 dense-editor layout, cache persistence, matching and
+grade/access regressions, stale-result protection, and a synthetic recording
+with forward recovery and in-process pause/resume. No device was connected;
+no installation, outdoor validation, or iOS runtime test was performed.
+
+Stability review on 2026-09-06:
+
+- Analyzer and Android debug build passed; the build retains the existing
+  non-fatal `flutter_tts` Kotlin-plugin migration warning.
+- The full Flutter tests cover download serialization, duplicate resume,
+  edit/delete cancellation, large-plan resume, vector HTTP failures, native
+  picture cleanup, startup retry, and preserved route/activity links. Final
+  suite totals are maintained in [implementation status](02-implementation-status.md).
+- `adb devices -l` listed no device. No installation or live crash reproduction
+  was possible; no signature, database corruption, or OOM root cause is confirmed.
+- Do not install the debug APK over the permanent-signed release, uninstall,
+  or clear app data. Reproduce on the original signed installation and inspect
+  targeted crash logs; a repaired update must use the same permanent key.
+- CyclOSM and Topographic are separate picker choices. No live provider
+  availability claim was made during this pass. Foreground-service timeout,
+  offline airplane mode, background GPS, memory stress, and iOS still need a
+  physical-device test.
+
+Current source/test validation on 2026-09-04:
+
+- Changed Dart files were formatted.
+- `flutter analyze --no-pub`: passed with no issues.
+- Full VS Code Flutter test runner: all 175 tests passed, including terrain,
+  temporary offline-preview, and direct topographic-provider regressions.
+- The source/test run itself did not use a device; map behavior was not manually
+  inspected during that run.
+- Live tile probes returned valid images for OSM Standard, OpenTopoMap, and
+  Esri while CyclOSM returned HTTP 502. Online Topographic now uses OpenTopoMap
+  directly so interactive tiles remain cacheable and do not wait on CyclOSM.
+- The direct-Topographic revision built with the protected permanent signer,
+  installed in place on the Pixel 10, and cold-launched successfully in 667 ms.
+  Device screenshots confirmed Online Streets and settled, sharp Online
+  Topographic tiles; the next 500 buffered log lines had no immediate Flutter
+  or Android fatal exception.
+- The current source then built as a release APK with the DPAPI-protected local
+  recovery key. Its package, `1.4.0+10` identity, and permanent certificate were
+  verified before `pm install -r` returned `Success` on a Pixel 10. Android kept
+  the original first-install timestamp, the cold activity launch returned
+  `Status: ok` in 273 ms, the process remained alive, and no immediate fatal
+  log lines were found. Stored routes/maps and map rendering were not manually
+  inspected; this was a same-version replacement, not a cross-version upgrade.
+
+The latest APK validation remains the 2026-08-19 run with Flutter 3.44.6 and
+Dart 3.12.2:
 
 - Dart formatting passed on every changed Dart source/test file.
 - `flutter analyze --no-pub`: passed with no issues.

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -56,6 +57,49 @@ class _InstantConverter extends VectorAreaConversionService {
 
   @override
   void cancel(String areaId) {}
+}
+
+/// Holds the first write open so cancellation/edit/delete interleavings are
+/// deterministic. It deliberately persists after cancel, like an in-flight
+/// HTTP response finishing before the downloader observes cancellation.
+class _BlockedConverter extends VectorAreaConversionService {
+  _BlockedConverter({
+    required super.repository,
+    required super.store,
+    required super.config,
+  });
+
+  final entered = Completer<void>();
+  final release = Completer<void>();
+  final cancelled = <String>{};
+  int calls = 0;
+
+  @override
+  void cancel(String areaId) => cancelled.add(areaId);
+
+  @override
+  Future<OfflineArea> convert(
+    OfflineArea initial,
+    TilePlan plan, {
+    required void Function(OfflineArea) onProgress,
+    String? sourceOverride,
+  }) async {
+    cancelled.remove(initial.id);
+    calls++;
+    if (calls == 1) {
+      entered.complete();
+      await release.future;
+    }
+    final result = _withStatus(
+      initial,
+      cancelled.contains(initial.id)
+          ? OfflineAreaStatus.paused
+          : OfflineAreaStatus.complete,
+    );
+    await repository.saveOfflineArea(result);
+    onProgress(result);
+    return result;
+  }
 }
 
 const _bounds = GeoBounds(north: 31.78, south: 31.77, east: 35.22, west: 35.21);
@@ -126,6 +170,153 @@ void main() {
   tearDown(() async {
     await database.close();
     await tileDir.delete(recursive: true);
+  });
+
+  Future<(AppStore, _BlockedConverter)> blockedStore() async {
+    final converter = _BlockedConverter(
+      repository: repository,
+      store: tileStore,
+      config: _config,
+    );
+    final store = await AppStore.forTesting(
+      repository: repository,
+      tileStore: tileStore,
+      mapProvider: _config,
+      vectorConverter: converter,
+    );
+    addTearDown(store.dispose);
+    final area = _convertedArea(OfflineAreaStatus.paused);
+    await repository.saveOfflineArea(area);
+    store.offlineAreas = [area];
+    return (store, converter);
+  }
+
+  test('duplicate resumes share one worker', () async {
+    final (store, converter) = await blockedStore();
+    final area = store.offlineAreas.single;
+    final first = store.resumeDownload(area);
+    await converter.entered.future;
+    final second = store.resumeDownload(area);
+    await Future<void>.delayed(Duration.zero);
+    expect(converter.calls, 1);
+    converter.release.complete();
+    await Future.wait([first, second]);
+    expect(converter.calls, 1);
+  });
+
+  test('delete drains cancelled writes and cannot resurrect an area', () async {
+    final (store, converter) = await blockedStore();
+    final area = store.offlineAreas.single;
+    final running = store.resumeDownload(area);
+    await converter.entered.future;
+    final deleting = store.deleteOfflineArea(area);
+    await store.resumeDownload(area); // Ignored while deletion owns the area.
+    expect(await repository.loadOfflineAreas(), hasLength(1));
+    converter.release.complete();
+    await Future.wait([running, deleting]);
+    await store.resumeInterruptedDownloads();
+    expect(await repository.loadOfflineAreas(), isEmpty);
+    expect(store.offlineAreas, isEmpty);
+    expect(converter.calls, 1);
+  });
+
+  test('edit drains the old plan before starting its replacement', () async {
+    final (store, converter) = await blockedStore();
+    final area = store.offlineAreas.single;
+    final running = store.resumeDownload(area);
+    await converter.entered.future;
+    final editing = store.updateOfflineArea(
+      area: area,
+      name: 'Edited',
+      bounds: area.bounds,
+      minZoom: 13,
+      maxZoom: 13,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(converter.calls, 1);
+    converter.release.complete();
+    await Future.wait([running, editing]);
+    await store.resumeDownload(store.offlineAreas.single);
+    final saved = (await repository.loadOfflineAreas()).single;
+    expect(saved.name, 'Edited');
+    expect(saved.minZoom, 13);
+    expect(saved.status, OfflineAreaStatus.complete);
+    expect(converter.calls, 2);
+  });
+
+  test('overlapping area jobs are serialized', () async {
+    final (store, converter) = await blockedStore();
+    final running = store.resumeDownload(store.offlineAreas.single);
+    await converter.entered.future;
+    await store.createOfflineArea(
+      name: 'Second',
+      bounds: _bounds,
+      minZoom: 12,
+      maxZoom: 12,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(converter.calls, 1);
+    expect(store.isDownloadQueued(store.offlineAreas.first.id), isTrue);
+    final queued = store.resumeDownload(store.offlineAreas.first);
+    converter.release.complete();
+    await Future.wait([running, queued]);
+    expect(converter.calls, 2);
+  });
+
+  test('pausing a queued area never starts its worker', () async {
+    final (store, converter) = await blockedStore();
+    final running = store.resumeDownload(store.offlineAreas.single);
+    await converter.entered.future;
+    await store.createOfflineArea(
+      name: 'Queued',
+      bounds: _bounds,
+      minZoom: 12,
+      maxZoom: 12,
+    );
+    final area = store.offlineAreas.first;
+    final queued = store.resumeDownload(area);
+    store.cancelDownload(area);
+    converter.release.complete();
+    await Future.wait([running, queued]);
+    expect(converter.calls, 1);
+    expect(store.isDownloadQueued(area.id), isFalse);
+  });
+
+  test('resume honors an approved plan larger than the default cap', () async {
+    final converter = _InstantConverter(
+      repository: repository,
+      store: tileStore,
+      config: _config,
+    );
+    final store = await AppStore.forTesting(
+      repository: repository,
+      tileStore: tileStore,
+      mapProvider: _config,
+      vectorConverter: converter,
+    );
+    addTearDown(store.dispose);
+    const bounds = GeoBounds(north: 32, south: 31.8, east: 35.4, west: 35.2);
+    final plan = const TilePlanner(maxTiles: 10000).plan(bounds, 16, 16);
+    expect(plan.tileCount, greaterThan(1200));
+    await store.resumeDownload(
+      OfflineArea(
+        id: 'large',
+        name: 'Large',
+        bounds: bounds,
+        minZoom: 16,
+        maxZoom: 16,
+        providerId: _config.id,
+        status: OfflineAreaStatus.paused,
+        totalTiles: plan.tileCount,
+        completedTiles: 0,
+        actualBytes: 0,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+        sourceFormat: OfflineSourceFormat.convertedVector,
+      ),
+    );
+    expect(converter.calls, 1);
+    expect(store.errorMessage, isNull);
   });
 
   test(

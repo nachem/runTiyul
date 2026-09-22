@@ -39,4 +39,26 @@ void main() {
     final network = TrailNetwork([horizontal, vertical]);
     expect(network.nearest(const LatLng(0.01, 0.01)), isNull);
   });
+
+  test('junction cues do not treat a bridge crossing as an intersection', () {
+    final network = TrailNetwork([
+      horizontal,
+      TrailPolyline(
+        points: vertical.points,
+        kind: 'path',
+        structure: 'bridge',
+        level: 1,
+      ),
+    ]);
+    expect(network.junctions(), isEmpty);
+  });
+
+  test('restricted ways cannot create junction cues or snap targets', () {
+    final network = TrailNetwork([
+      horizontal,
+      TrailPolyline(points: vertical.points, kind: 'path', routable: false),
+    ]);
+    expect(network.junctions(), isEmpty);
+    expect(network.nearest(const LatLng(0.0008, 0)), isNull);
+  });
 }

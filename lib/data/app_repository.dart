@@ -30,11 +30,15 @@ class AppRepository {
   Future<void> saveRoute(TrailRoute route) async {
     final db = await _appDatabase.database;
     await db.transaction((txn) async {
-      await txn.insert(
+      // REPLACE deletes the parent row and SET NULL detaches saved activities.
+      // RTE-005/DAT-004: editing a route must retain its activity relationships.
+      final updated = await txn.update(
         'routes',
         _routeMap(route),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        where: 'id = ?',
+        whereArgs: [route.id],
       );
+      if (updated == 0) await txn.insert('routes', _routeMap(route));
       await txn.delete(
         'route_points',
         where: 'route_id = ?',

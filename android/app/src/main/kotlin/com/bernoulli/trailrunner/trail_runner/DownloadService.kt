@@ -23,8 +23,20 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForegroundNotification()
-        return START_STICKY
+        try {
+            startForegroundNotification()
+        } catch (_: RuntimeException) {
+            // Android may reject dataSync foreground work after its time budget
+            // expires. Do not crash the app; downloads remain resumable.
+            stopSelf(startId)
+        }
+        // There is no native worker to restore after process death.
+        return START_NOT_STICKY
+    }
+
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        // Android 15+ kills dataSync services that fail to stop after timeout.
+        stopSelf()
     }
 
     private fun startForegroundNotification() {

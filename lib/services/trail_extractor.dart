@@ -69,13 +69,39 @@ class TrailExtractor {
         final kind = properties['class']?.stringValue;
         if (kind == null || !trailClasses.contains(kind)) continue;
         final name = properties['name']?.stringValue;
+        final structure = properties['brunnel']?.stringValue ?? '';
+        final level =
+            properties['layer']?.dartIntValue?.toInt() ??
+            int.tryParse(properties['layer']?.stringValue ?? '') ??
+            0;
+        final foot = properties['foot']?.stringValue;
+        final access = properties['access']?.stringValue;
+        final footAllowed = const {
+          'yes',
+          'designated',
+          'permissive',
+        }.contains(foot);
+        final restricted =
+            const {'no', 'private'}.contains(foot) ||
+            (!footAllowed &&
+                (const {'no', 'private'}.contains(access) ||
+                    kind == 'motorway' ||
+                    kind == 'trunk'));
 
         final geoJson = feature.toGeoJson(x: x, y: y, z: z);
         if (geoJson is GeoJsonLineString) {
-          _add(trails, geoJson.geometry?.coordinates, kind, name);
+          _add(
+            trails,
+            geoJson.geometry?.coordinates,
+            kind,
+            name,
+            level,
+            structure,
+            !restricted,
+          );
         } else if (geoJson is GeoJsonMultiLineString) {
           for (final line in geoJson.geometry?.coordinates ?? const []) {
-            _add(trails, line, kind, name);
+            _add(trails, line, kind, name, level, structure, !restricted);
           }
         }
       }
@@ -88,12 +114,24 @@ class TrailExtractor {
     List<List<double>>? coordinates,
     String kind,
     String? name,
+    int level,
+    String structure,
+    bool routable,
   ) {
     if (coordinates == null || coordinates.length < 2) return;
     // GeoJSON coordinates are [longitude, latitude].
     final points = coordinates
         .map((c) => LatLng(c[1], c[0]))
         .toList(growable: false);
-    trails.add(TrailPolyline(points: points, kind: kind, name: name));
+    trails.add(
+      TrailPolyline(
+        points: points,
+        kind: kind,
+        name: name,
+        level: level,
+        structure: structure,
+        routable: routable,
+      ),
+    );
   }
 }

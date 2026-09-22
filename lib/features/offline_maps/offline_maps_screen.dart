@@ -163,7 +163,8 @@ class _AreaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = area.status == OfflineAreaStatus.downloading;
+    final queued = store.isDownloadQueued(area.id);
+    final active = queued || area.status == OfflineAreaStatus.downloading;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -178,7 +179,11 @@ class _AreaCard extends StatelessWidget {
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ),
-                Chip(label: Text(area.status.name.toUpperCase())),
+                Chip(
+                  label: Text(
+                    queued ? 'QUEUED' : area.status.name.toUpperCase(),
+                  ),
+                ),
                 if (dragHandle != null) ...[
                   const SizedBox(width: 4),
                   dragHandle!,
@@ -588,7 +593,7 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
 
   Future<void> _handleLockedCurrentMapTap() async {
     final active = widget.store.activeMapLayer;
-    if (!active.isPublicDevelopmentRaster) {
+    if (!widget.store.canUnlockRasterProvider(active)) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -629,9 +634,10 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Enable developer raster downloads?'),
         content: const Text(
-          'Public OpenStreetMap and CyclOSM tile services are not production '
-          'offline-download backends. Enable this only for small development '
-          'tests. The developer unlock will remain enabled on this device.',
+          'This special build enables small, authorized development downloads '
+          'for its configured raster sources. Do not use it for production or '
+          'outside the granted provider limits. The unlock remains enabled on '
+          'this device.',
         ),
         actions: [
           TextButton(
@@ -689,9 +695,6 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
     }
   }
 
-  /// A rough completion-time band for [tiles]. Converting vector tiles on the
-  /// device is CPU-bound and roughly sequential; raster tiles download over the
-  /// network with about four workers in parallel.
   (Duration, Duration) _estimatedTime(int tiles) {
     if (_usesVector) {
       return (
@@ -699,9 +702,18 @@ class _OfflineAreaEditorState extends State<OfflineAreaEditor> {
         Duration(milliseconds: tiles * 300),
       );
     }
+    final policy =
+        _currentRasterProvider?.downloadPolicy ?? const RasterDownloadPolicy();
+    final pacing = policy.minimumDuration(tiles);
     return (
-      Duration(milliseconds: tiles * 50),
-      Duration(milliseconds: tiles * 110),
+      pacing +
+          Duration(
+            milliseconds: (tiles * 200 / policy.maxConcurrentRequests).ceil(),
+          ),
+      pacing +
+          Duration(
+            milliseconds: (tiles * 440 / policy.maxConcurrentRequests).ceil(),
+          ),
     );
   }
 

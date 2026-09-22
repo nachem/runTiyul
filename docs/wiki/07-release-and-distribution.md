@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-08-20
+Last reviewed: 2026-09-22
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -37,6 +37,24 @@ Independent downloads match `SHA256SUMS.txt`: APK
 tagged release workflow.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
 `versionName=1.4.0`, `versionCode=10`, and the pinned permanent certificate.
+
+### Local 1.4.1 build
+
+On 2026-09-22 the workspace version was advanced to `1.4.1+11` with
+[authored notes](releases/v1.4.1.md). All 303 tests, formatting, and analysis
+passed. `flutter build apk --release --no-pub` produced a permanent-signed APK;
+Android SDK tools verified the application ID, version `1.4.1+11`, and pinned
+release certificate. The 62,724,952-byte versioned local artifact is
+`build/app/outputs/flutter-apk/RunTiyul-1.4.1.apk`, SHA-256
+`a65c12b61cb1e03dbda322b21dfc94f458a7ba188353e4c8d797b655b766f2ab`.
+That initial preparation did not publish or install the artifact. Publication
+was requested on 2026-09-22 and is now being prepared through the existing tagged
+GitHub Actions workflow, including the newer raster pacing/cooldown changes.
+Final pre-publication checks passed all 305 tests, 102-file formatting, analysis,
+release metadata, all 94 local Markdown targets, and whitespace.
+The public artifacts will be rebuilt from the release commit rather than
+uploaded from this earlier local output. The latest published version remains
+`v1.4.0+10` until hosted publication succeeds.
 
 ## 2. Website (`site/`)
 

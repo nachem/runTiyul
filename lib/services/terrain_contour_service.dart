@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import '../core/graphics/render_png.dart';
+
 /// A decoded grid of elevations (metres) sampled from one Terrarium
 /// ("terrain-RGB") tile. Row-major, [width] * [height] samples.
 class ElevationTile {
@@ -219,60 +221,55 @@ class TerrainContourService {
     bool hillshade = true,
   }) async {
     final size = 256 * scale;
-    final recorder = ui.PictureRecorder();
     final rect = ui.Rect.fromLTWH(0, 0, size.toDouble(), size.toDouble());
-    final canvas = ui.Canvas(recorder, rect);
+    return renderPng(
+      width: size,
+      height: size,
+      draw: (canvas) async {
+        if (hillshade) {
+          final shade = await _hillshadeImage(tile);
+          try {
+            canvas.drawImageRect(
+              shade,
+              ui.Rect.fromLTWH(
+                0,
+                0,
+                shade.width.toDouble(),
+                shade.height.toDouble(),
+              ),
+              rect,
+              ui.Paint()..filterQuality = ui.FilterQuality.low,
+            );
+          } finally {
+            shade.dispose();
+          }
+        }
 
-    if (hillshade) {
-      final shade = await _hillshadeImage(tile);
-      try {
-        canvas.drawImageRect(
-          shade,
-          ui.Rect.fromLTWH(
-            0,
-            0,
-            shade.width.toDouble(),
-            shade.height.toDouble(),
-          ),
-          rect,
-          ui.Paint()..filterQuality = ui.FilterQuality.low,
-        );
-      } finally {
-        shade.dispose();
-      }
-    }
+        // Map grid coordinates (0..width-1) onto the tile canvas.
+        final sx = size / (tile.width - 1);
+        final sy = size / (tile.height - 1);
+        final minorPaint = ui.Paint()
+          ..style = ui.PaintingStyle.stroke
+          ..color = const ui.Color(0x99a06a3c)
+          ..strokeWidth = 0.8 * scale
+          ..isAntiAlias = true;
+        final indexPaint = ui.Paint()
+          ..style = ui.PaintingStyle.stroke
+          ..color = const ui.Color(0xcc7a4a24)
+          ..strokeWidth = 1.3 * scale
+          ..isAntiAlias = true;
 
-    // Map grid coordinates (0..width-1) onto the tile canvas.
-    final sx = size / (tile.width - 1);
-    final sy = size / (tile.height - 1);
-    final minorPaint = ui.Paint()
-      ..style = ui.PaintingStyle.stroke
-      ..color = const ui.Color(0x99a06a3c)
-      ..strokeWidth = 1.0 * scale
-      ..isAntiAlias = true;
-    final indexPaint = ui.Paint()
-      ..style = ui.PaintingStyle.stroke
-      ..color = const ui.Color(0xcc7a4a24)
-      ..strokeWidth = 1.8 * scale
-      ..isAntiAlias = true;
-
-    final segments = contourSegments(tile);
-    for (final s in segments) {
-      canvas.drawLine(
-        ui.Offset(s.x1 * sx, s.y1 * sy),
-        ui.Offset(s.x2 * sx, s.y2 * sy),
-        s.isIndex ? indexPaint : minorPaint,
-      );
-    }
-    if (labelContours) _drawContourLabels(canvas, segments, sx, sy, size);
-
-    final image = await recorder.endRecording().toImage(size, size);
-    try {
-      final png = await image.toByteData(format: ui.ImageByteFormat.png);
-      return png!.buffer.asUint8List();
-    } finally {
-      image.dispose();
-    }
+        final segments = contourSegments(tile);
+        for (final s in segments) {
+          canvas.drawLine(
+            ui.Offset(s.x1 * sx, s.y1 * sy),
+            ui.Offset(s.x2 * sx, s.y2 * sy),
+            s.isIndex ? indexPaint : minorPaint,
+          );
+        }
+        if (labelContours) _drawContourLabels(canvas, segments, sx, sy, size);
+      },
+    );
   }
 
   /// Draws elevation numbers along the heavier index contours, spaced apart and
@@ -346,17 +343,23 @@ class TerrainContourService {
       ..color = const ui.Color(0xE6FFFFFF);
     final fill = ui.Paint()..color = const ui.Color(0xFF6B4423);
     final haloParagraph = build(halo);
-    final fillParagraph = build(fill);
-    canvas.save();
-    canvas.translate(x, y);
-    canvas.rotate(angle);
-    final offset = ui.Offset(
-      -haloParagraph.width / 2,
-      -haloParagraph.height / 2,
-    );
-    canvas.drawParagraph(haloParagraph, offset);
-    canvas.drawParagraph(fillParagraph, offset);
-    canvas.restore();
+    ui.Paragraph? fillParagraph;
+    try {
+      fillParagraph = build(fill);
+      canvas.save();
+      canvas.translate(x, y);
+      canvas.rotate(angle);
+      final offset = ui.Offset(
+        -haloParagraph.width / 2,
+        -haloParagraph.height / 2,
+      );
+      canvas.drawParagraph(haloParagraph, offset);
+      canvas.drawParagraph(fillParagraph, offset);
+      canvas.restore();
+    } finally {
+      haloParagraph.dispose();
+      fillParagraph?.dispose();
+    }
   }
 
   /// Decodes a Terrarium PNG and renders its contours (and optional hillshade)
@@ -413,7 +416,11 @@ class TerrainContourService {
         illumination = illumination.clamp(0.0, 1.0);
         // Darken shadowed areas; keep lit areas transparent so the base map
         // shows through.
-        final shadow = ((1.0 - illumination) * 90).round().clamp(0, 255);
+        // Keep relief subordinate to the basemap and route overlays. This is
+        // composited into the final offline tile rather than drawn as a
+        // separately adjustable layer, so a strong shadow would permanently
+        // obscure roads, labels, and routes.
+        final shadow = ((1.0 - illumination) * 48).round().clamp(0, 255);
         final o = (y * w + x) * 4;
         pixels[o] = 0;
         pixels[o + 1] = 0;
