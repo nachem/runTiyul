@@ -30,7 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| [v1.4.1](releases/v1.4.1.md) | 2026-09-22 | Publication in progress; local signing verified | Delayed-GPS resilience, zoom-preserving recenter, recording Follow/rotation fixes, raster pacing/cooldowns, and route/map hardening. |
+| [v1.4.1](releases/v1.4.1.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.1) | Delayed-GPS resilience, zoom-preserving recenter, recording Follow/rotation fixes, raster pacing/cooldowns, and route/map hardening. |
 | [v1.4.0](releases/v1.4.0.md) | 2026-08-20 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.0) | Adds forward mapped-trail recovery, precise two-phase maneuver guidance, route cleanup/snapping, correct Back history, and recording map tracking. |
 | [v1.3.1](releases/v1.3.1.md) | 2026-08-15 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.3.1) | Releases transient navigation audio focus so interrupted music can resume after a prompt. |
 | [v1.3.0](releases/v1.3.0.md) | 2026-07-27 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.3.0) | Directional off-route recovery cues, informative voice guidance, and configurable distance/time progress updates. |

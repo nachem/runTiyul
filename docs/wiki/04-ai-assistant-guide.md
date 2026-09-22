@@ -31,7 +31,7 @@ As of 2026-09-22:
   tests and `flutter analyze --no-pub` passed; physical-device Battery Saver
   and outdoor motion behavior remain unverified.
 
-- Latest routing pass: 273 tests, clean `flutter analyze --no-pub`, and a
+- The 2026-09-06 routing pass: 273 tests, clean `flutter analyze --no-pub`, and a
   successful debug APK build. A synthetic GPS recording exercises forward
   recovery; no physical device was connected.
 - Preserve the new independent z14+ vector overlay, bounded/cancellable loads,
@@ -73,18 +73,20 @@ As of 2026-09-22:
   default and do not infer provider permission for ordinary builds.
 - Pull-request CI, dependency review, Dependabot, SHA-pinned Actions, a fixed
   Flutter 3.44.6 release toolchain, checksums, and provenance are configured.
-  Push CI run `32322573390` passed format, analyze, and all tests; CodeQL run
-  `32322572632` passed; Pages run `30808751792` passed. `v1.4.0` exercised
+  Push CI run `35740358839` passed format, analyze, and tests; CodeQL run
+  `35740358543` passed; Pages run `30808751792` passed. `v1.4.1` exercised
   the release checksums and both provenance attestations. PR dependency review
   has not been exercised yet.
 - Contribution, conduct, support, privacy, and security policies plus issue/PR
   templates and CODEOWNERS are present. GitHub private vulnerability reporting,
   Dependabot security updates, secret scanning, and push protection are enabled;
   `main` remains unprotected.
-- `v1.4.0+10` is published with forward mapped-way recovery, precise maneuver
-  guidance, route cleanup/snapping, Back history, and recording map tracking.
-  Workflow `32322574702`, public asset hashes and sizes, stable download URLs,
-  APK identity/signature, and APK+IPA provenance checks passed on 2026-08-20.
+- `v1.4.1+11` is published from `fcf721f` on `main` with delayed-GPS and camera
+  fixes, raster pacing/cooldowns, and route/map hardening. All 305 local tests,
+  formatting, and analysis passed. Workflow `35740728459`, public asset hashes
+  and sizes, stable download URLs, APK identity/signature, and APK+IPA provenance
+  checks passed on 2026-09-22. The tag is immutable; documentation evidence
+  updates must not move it. Device testing remains pending.
 - Monotonic route-progress announcements and directional off-route route-finder
   alerts are implemented and unit/widget-tested. `v1.4.0+10` adds strict
   connected mapped-way recovery ahead, exact-angle advance/apex and consecutive
@@ -95,7 +97,7 @@ As of 2026-09-22:
   deactivation, and overlapping-alert ownership is tested. Recovery geometry,
   camera behavior, media resumption, heading quality, audio, and locked-screen
   behavior remain physical-device unverified.
-- iOS, physical-device background tracking, native GPX picking, free-space
+- iOS runtime, physical-device background tracking, native GPX picking, free-space
   checks, and production provider configuration remain unverified or
   unimplemented.
 
