@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-09-22<br>
+Last reviewed: 2026-09-23<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -52,7 +52,7 @@ instructions are mandatory for all future agents.
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
 | Android package size | v1.4.3 universal APK is 62.74 MB (59.83 MiB), primarily three CPU-architecture library sets. An ARM64-only payload is estimated at roughly 24 MB; no split build or size optimization was performed. App/User data remain distinct. See the [size audit](07-release-and-distribution.md#apk-size-audit-2026-09-22). |
 | Latest published release | [v1.4.3+13](releases/v1.4.3.md) published 2026-09-22 from `f32b565` on `main`, after hosted CI and CodeQL passed. Public APK/IPA checksums, Android identity/certificate, exact tagged-workflow provenance, and stable latest URLs verify. Device testing remains pending. |
-| Prepared next version | [v1.4.4+14](releases/v1.4.4.md), local and unpublished: routing bends/T-junctions, nearby snaps/direct connections, authorized Esri DEV workflow. 331 tests, analyzer, and authorized-DEV Android debug build pass; no install or field test. |
+| Prepared next version | [v1.4.4+14](releases/v1.4.4.md), publication requested 2026-09-23: routing bends/T-junctions, nearby snaps/direct connections, authorized Esri DEV workflow. Source `41ceb506` passed hosted CI and CodeQL; 331 local tests, analyzer, and authorized-DEV debug build pass. Tagged builds/public verification are pending; no install or field test. |
 | Release workflow | [Run 35750301499](https://github.com/nachem/runTiyul/actions/runs/35750301499) passed metadata, Android permanent-signature/identity verification, unsigned iOS build, checksums, APK+IPA provenance, and publication for `v1.4.3`; `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | `v1.4.3` retains the `v1.2.2` permanent certificate and increases `versionCode` to 13. On 2026-09-04, a locally rebuilt, matching-signed `1.4.0+10` APK replaced the installed `1.4.0+10` app on a Pixel 10 with `pm install -r`; Android preserved the original install timestamp and recorded a new update timestamp. A true cross-version upgrade and manual inspection of retained routes/maps remain unverified. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation unlocks eligible sources on that device. Topographic/Satellite remain view-only unless a separately authorized internal build explicitly enables `ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS`; arbitrary providers remain excluded. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |

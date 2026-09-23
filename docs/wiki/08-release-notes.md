@@ -1,6 +1,6 @@
 # Release Notes Index
 
-Last reviewed: 2026-09-22
+Last reviewed: 2026-09-23
 
 This page is the durable index and policy for RunTiyul release notes. Detailed,
 authored notes live under [`releases/`](releases/) and are also used verbatim as
@@ -30,7 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
-| [v1.4.4](releases/v1.4.4.md) | 2026-09-22 | Prepared locally; unpublished | Mapped bends and T-junctions, nearby waypoint snapping with explicit direct connections, and the authorized Esri DEV workflow. |
+| [v1.4.4](releases/v1.4.4.md) | 2026-09-23 | Publication requested; builds pending | Mapped bends and T-junctions, nearby waypoint snapping with explicit direct connections, and the authorized Esri DEV workflow. |
 | [v1.4.3](releases/v1.4.3.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.3) | Center view preserves manual zoom and orientation; a distinct Fit route and content action intentionally adjusts zoom. |
 | [v1.4.2](releases/v1.4.2.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.2) | Prevents a delayed startup GPS fix from resetting toolbar zoom or current-location recenter; preserves zoom changes while GPS is pending. |
 | [v1.4.1](releases/v1.4.1.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.1) | Delayed-GPS resilience, zoom-preserving recenter, recording Follow/rotation fixes, raster pacing/cooldowns, and route/map hardening. |

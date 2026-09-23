@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-09-22
+Last reviewed: 2026-09-23
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -74,7 +74,7 @@ at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
 evidence of the actual bytes on a phone. A device storage breakdown is needed
 to attribute a reported 64 MB specifically to User data rather than App size.
 
-### 1.4.4 local preparation
+### 1.4.4 publication preparation
 
 [v1.4.4+14](releases/v1.4.4.md) is prepared locally on 2026-09-22 with route
 bend/T-junction fixes, nearby snapping and reported direct connections, and the
@@ -86,6 +86,13 @@ Signing identity, schema, provider licensing, and production defaults are
 unchanged. The private backup remains excluded. No tag, push, publication,
 signed release build, live-provider request, or device test was performed as
 part of this preparation; v1.4.3 remains the latest public release.
+
+On 2026-09-23, publication was requested after source commit `41ceb506` was
+pushed. [CI 35765968661](https://github.com/nachem/runTiyul/actions/runs/35765968661)
+and [CodeQL 35765967694](https://github.com/nachem/runTiyul/actions/runs/35765967694)
+passed for that exact source. Release notes are being finalized before the
+immutable tag is created; tagged builds and public artifact verification remain
+pending. Ordinary release provider gates remain unchanged.
 
 ### 1.4.3 center-view release publication
 
