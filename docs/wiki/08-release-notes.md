@@ -30,6 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| [v1.4.5](releases/v1.4.5.md) | 2026-09-23 | Preparing publication | Live checkpoint route preview, wider candidate routing, bounded short-gap connections, and exact-preview saving. |
 | [v1.4.4](releases/v1.4.4.md) | 2026-09-23 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.4) | Mapped bends and T-junctions, nearby waypoint snapping with explicit direct connections, and the authorized Esri DEV workflow. |
 | [v1.4.3](releases/v1.4.3.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.3) | Center view preserves manual zoom and orientation; a distinct Fit route and content action intentionally adjusts zoom. |
 | [v1.4.2](releases/v1.4.2.md) | 2026-09-22 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.2) | Prevents a delayed startup GPS fix from resetting toolbar zoom or current-location recenter; preserves zoom changes while GPS is pending. |

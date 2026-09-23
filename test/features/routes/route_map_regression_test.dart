@@ -58,6 +58,16 @@ class _PlanningBuilder extends RouteTrailBuilder {
   ]);
 
   @override
+  Future<TrailNetwork> networkForCheckpoints(
+    List<LatLng> checkpoints,
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
+    permissions.add(allowNetwork);
+    return network;
+  }
+
+  @override
   Future<TrailNetwork> networkForBounds(
     GeoBounds bounds,
     String sourceUrl, {
@@ -77,6 +87,17 @@ class _PlanningBuilder extends RouteTrailBuilder {
     permissions.add(allowNetwork);
     nearbyRequests.add(point);
     return network;
+  }
+}
+
+class _PreviewRepository extends AppRepository {
+  _PreviewRepository(super.database);
+
+  TrailRoute? saved;
+
+  @override
+  Future<void> saveRoute(TrailRoute route) async {
+    saved = route;
   }
 }
 
@@ -246,6 +267,57 @@ void main() {
       expect(map().waypoints, bentRoute);
       expect(find.text('1 direct segment (not mapped)'), findsNothing);
       expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
+
+  testWidgets(
+    'RTE-003: Checkpoints previews a mapped route before saving and Undo preserves taps',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(430, 932);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      final builder = _PlanningBuilder();
+      final repository = _PreviewRepository(database);
+      final planningStore = (await tester.runAsync(
+        () => AppStore.forTesting(
+          repository: repository,
+          tileStore: store.tileStore,
+          mapProvider: _provider,
+          routeTrailBuilder: builder,
+          locationService: const _CurrentLocationService(),
+        ),
+      ))!;
+      addTearDown(planningStore.dispose);
+      planningStore.mapTileMode = MapTileMode.offline;
+      planningStore.vectorSourceUrl = 'https://example.invalid/planet';
+      await tester.pumpWidget(
+        MaterialApp(home: ManualRouteEditor(store: planningStore)),
+      );
+      await tester.pumpAndSettle();
+      TrailMap map() => tester.widget<TrailMap>(find.byType(TrailMap));
+      map().onTap!(const LatLng(31.8004, 35.20005));
+      await tester.pumpAndSettle();
+      map().onTap!(const LatLng(31.8021, 35.2018));
+      await tester.pumpAndSettle();
+      final preview = [...map().waypoints];
+      expect(preview, contains(const LatLng(31.802, 35.2)));
+      expect(map().waypointMarkers, hasLength(2));
+      expect(planningStore.routes, isEmpty);
+      map().onTap!(const LatLng(31.804, 35.204));
+      await tester.pumpAndSettle();
+      expect(map().waypointMarkers, hasLength(3));
+      expect(find.text('1 direct segment (not mapped)'), findsOneWidget);
+      await tester.tap(find.byTooltip('Undo route edit'));
+      await tester.pumpAndSettle();
+      expect(map().waypoints, preview);
+      expect(map().waypointMarkers, hasLength(2));
+      expect(builder.permissions.every((allowed) => !allowed), isTrue);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(repository.saved!.points.map((point) => point.latLng), preview);
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );

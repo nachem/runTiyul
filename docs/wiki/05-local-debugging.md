@@ -241,7 +241,7 @@ The app does not infer routing geometry from raster pixels.
 For `RTE-012`, open a dense imported route in Edit waypoints. It should retain
 all coordinates but show sparse controls. Tap a visible control, or long-press
 a hidden section to insert/select one, then Move/Delete. In Follow trails, only
-the neighboring span changes. Checkpoint mode allows explicit straight edits;
+the neighboring span changes. With snapping off, Checkpoint mode allows explicit straight edits;
 switching modes itself must not change the line. Undo restores the whole edit.
 Test repeated mode switching, failed/disconnected edits, and save/reload with
 optional GPX altitude/timestamps.
@@ -256,6 +256,19 @@ with cached data in Offline mode and with a GPX off-map stop, checking retained
 geometry and metadata after save/reload. Direct lines are not verified access
 or navigation-recovery connections. Automated versions of these scenarios pass;
 outdoor and phone performance verification remain pending.
+
+For the unpublished 2026-09-23 checkpoint update, create a new route in
+**Checkpoints** with **Snap to nearby trail** enabled. Select two points around
+a long bend/hairpin and verify the routed preview appears before Save. Add a
+point 40-150 m off the nearest way: its location should remain and the preview
+should use explicit unmapped approach segments rather than a whole-leg shortcut.
+Try crowded junctions, a small end-to-end gap, and a near T-junction gap. Gap
+connections are limited to 12 m, same level, and plausible continuation; parallel
+ways and bridges must not acquire a mapped connection. Undo, Move, Delete,
+control insertion, and Save should retain checkpoint order and preview geometry.
+Repeat with cached data in Offline mode and compare saved manual Snap with GPX
+shape matching. The actual phone, access/barrier situation, and missing-data
+behavior still require field validation; synthetic scenarios are not a guarantee.
 
 For `NAV-007`, start a selected-route recording and move onto a connected
 off-route way with a reliable course. The recovery line and arrow should start

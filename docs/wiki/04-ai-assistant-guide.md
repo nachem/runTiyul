@@ -205,7 +205,14 @@ Exit criteria:
   monotonic progress, and never convert a nearest-route point behind the runner
   into a backtracking instruction.
 - Preserve intentional U-turns while cleaning only bounded return-to-junction
-  artifacts; route snapping must not introduce straight off-network bridges.
+  artifacts. GPX matching and navigation recovery must not silently invent
+  mapped bridges. Checkpoint planning may use explicit approach/gap/direct
+  connections, but must retain unmapped diagnostics and keep those edges out
+  of strict recovery topology.
+- Checkpoint selection is pathfinding, not recorded-track matching: preserve
+  every ordered input, keep raw taps separate from the routed preview, and save
+  exactly that preview. Do not apply checkpoint search rules to imported GPX
+  geometry or infer complete routing coverage from display-vector tiles.
 - Persist recording/download progress incrementally.
 - Use database transactions for state transitions and related records.
 - Preserve nullable sensor data; do not convert missing elevation to zero.

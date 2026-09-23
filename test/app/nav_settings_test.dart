@@ -38,15 +38,18 @@ class _FakeRouteTrailBuilder extends RouteTrailBuilder {
   Completer<void>? hold;
   final entered = Completer<void>();
   bool? allowedNetwork;
+  bool? checkpointRouting;
 
   @override
   Future<RouteTrailResult> snapToTrails(
     List<LatLng> route,
     String sourceUrl, {
     bool allowNetwork = true,
+    bool checkpointRouting = false,
   }) async {
     receivedRoute = route;
     allowedNetwork = allowNetwork;
+    this.checkpointRouting = checkpointRouting;
     if (!entered.isCompleted) entered.complete();
     await hold?.future;
     return const RouteTrailResult(
@@ -58,6 +61,13 @@ class _FakeRouteTrailBuilder extends RouteTrailBuilder {
 }
 
 class _LocalPlanningBuilder extends RouteTrailBuilder {
+  _LocalPlanningBuilder({
+    this.network = const TrailNetwork([
+      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
+    ]),
+  });
+
+  final TrailNetwork network;
   bool? allowedNetwork;
 
   @override
@@ -67,9 +77,7 @@ class _LocalPlanningBuilder extends RouteTrailBuilder {
     bool allowNetwork = true,
   }) async {
     allowedNetwork = allowNetwork;
-    return const TrailNetwork([
-      TrailPolyline(points: [LatLng(0, 0), LatLng(0, 0.004)], kind: 'path'),
-    ]);
+    return network;
   }
 }
 
@@ -107,6 +115,57 @@ void main() {
     mapProvider: config,
     navigationAlertFeedback: feedback,
     routeTrailBuilder: routeTrailBuilder,
+  );
+
+  test(
+    'RTE-003: saved manual checkpoints use pathfinding and retain their mapped loop',
+    () async {
+      const start = LatLng(0, 0);
+      const finish = LatLng(0, 0.001);
+      final now = DateTime.utc(2026, 9, 23);
+      await repository.saveRoute(
+        TrailRoute(
+          id: 'checkpoints',
+          name: 'Hairpin checkpoints',
+          source: RouteSource.manual,
+          createdAt: now,
+          updatedAt: now,
+          points: const [
+            RoutePoint(latitude: 0, longitude: 0),
+            RoutePoint(latitude: 0, longitude: 0.001),
+          ],
+        ),
+      );
+      final builder = _LocalPlanningBuilder(
+        network: const TrailNetwork([
+          TrailPolyline(points: [start, LatLng(0.004, 0)], kind: 'path'),
+          TrailPolyline(
+            points: [LatLng(0.004, 0), LatLng(0.004, 0.001), finish],
+            kind: 'path',
+          ),
+        ]),
+      );
+      final store = await openStore(
+        config: _vectorConfig,
+        routeTrailBuilder: builder,
+      );
+      addTearDown(store.dispose);
+      await store.setMapTileMode(MapTileMode.offline);
+      expect(
+        await store.snapRouteToTrails(store.routes.single),
+        RouteSnapOutcome.updated,
+      );
+      final saved = (await repository.loadRoutes()).single;
+      expect(saved.id, 'checkpoints');
+      expect(saved.source, RouteSource.manual);
+      expect(
+        saved.points.map((point) => point.latLng),
+        contains(const LatLng(0.004, 0.001)),
+      );
+      expect(saved.points.first.latLng, start);
+      expect(saved.points.last.latLng, finish);
+      expect(builder.allowedNetwork, isFalse);
+    },
   );
 
   test(
@@ -262,6 +321,7 @@ void main() {
       final outcome = await store.snapRouteToTrails(store.routes.single);
 
       expect(outcome, RouteSnapOutcome.updated);
+      expect(builder.checkpointRouting, isFalse);
       expect(builder.receivedRoute, [
         const LatLng(0, 0),
         const LatLng(0, 0.001),

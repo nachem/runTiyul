@@ -211,6 +211,64 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
 
   List<LatLng> get _activeMarkers => _draft.controls;
 
+  bool get _plansCheckpoints =>
+      !_followTrails &&
+      _snap &&
+      (widget.initialRoute == null || _draft.checkpointInputs != null);
+
+  Future<void> _planCheckpointEdit(List<LatLng> checkpoints) async {
+    if (_loadingTrails || _saving) return;
+    final original = _draft;
+    if (checkpoints.isEmpty) {
+      _applyEdit(RouteEditorDraft(const []));
+      return;
+    }
+    setState(() {
+      _loadingTrails = true;
+      _trailError = null;
+    });
+    var network = _trailNetwork;
+    String? loadError;
+    try {
+      network = await widget.store.routeTrailBuilder.networkForCheckpoints(
+        checkpoints,
+        widget.store.vectorSourceUrl,
+        allowNetwork: widget.store.mapTileMode != MapTileMode.offline,
+      );
+    } on Object {
+      loadError = 'Map data unavailable. Unmapped connections are direct.';
+    }
+    if (!mounted) return;
+    setState(() => _loadingTrails = false);
+    if (!identical(original, _draft)) return;
+    final router = TrailRouter(network);
+    final plan = router.planWaypoints(
+      checkpoints,
+      checkpointRouting: true,
+      allowDirectConnections: true,
+    );
+    setState(() {
+      _trailNetwork = network;
+      _trailRouter = router;
+    });
+    _applyEdit(
+      plan == null
+          ? null
+          : RouteEditorDraft.fromCheckpointPlan(checkpoints, plan),
+    );
+    if (loadError != null) setState(() => _trailError = loadError);
+  }
+
+  void _setSnap(bool value) {
+    if (_loadingTrails || _saving) return;
+    setState(() => _snap = value);
+    if (_plansCheckpoints && _draft.points.isNotEmpty) {
+      unawaited(
+        _planCheckpointEdit(_draft.checkpointInputs ?? _draft.controls),
+      );
+    }
+  }
+
   void _setFollowTrails(bool value) {
     if (value == _followTrails || _loadingTrails || _saving) return;
     setState(() {
@@ -277,6 +335,16 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
     if (_loadingTrails || _saving) return;
     final original = _draft;
     final selected = _moving ? _selected : null;
+    if (_plansCheckpoints) {
+      final checkpoints = [...(_draft.checkpointInputs ?? _draft.controls)];
+      if (selected == null) {
+        checkpoints.add(point);
+      } else {
+        checkpoints[selected] = point;
+      }
+      await _planCheckpointEdit(checkpoints);
+      return;
+    }
     RouteEditorDraft? edit({bool allowDirectConnections = false}) =>
         selected == null
         ? original.append(
@@ -322,6 +390,12 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
   Future<void> _deleteControl() async {
     final selected = _selected;
     if (selected == null || _loadingTrails || _saving) return;
+    if (_plansCheckpoints) {
+      final checkpoints = [...(_draft.checkpointInputs ?? _draft.controls)]
+        ..removeAt(selected);
+      await _planCheckpointEdit(checkpoints);
+      return;
+    }
     if (_followTrails && _trailRouter == null) {
       await _loadTrails(near: _activeMarkers[selected]);
     }
@@ -431,7 +505,7 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                         ? null
                         : (selection) => _setFollowTrails(selection.first),
                   ),
-                  if (_followTrails || _trailError != null)
+                  if (_followTrails || _plansCheckpoints || _trailError != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
                       child: Row(
@@ -452,7 +526,14 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                           TextButton.icon(
                             onPressed: _loadingTrails
                                 ? null
-                                : () => unawaited(_loadTrails()),
+                                : () => unawaited(
+                                    _plansCheckpoints
+                                        ? _planCheckpointEdit(
+                                            _draft.checkpointInputs ??
+                                                _draft.controls,
+                                          )
+                                        : _loadTrails(),
+                                  ),
                             icon: const Icon(Icons.refresh, size: 18),
                             label: const Text('Reload'),
                           ),
@@ -534,11 +615,8 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
             if (!_followTrails)
               SwitchListTile(
                 value: _snap,
-                onChanged: (value) => setState(() => _snap = value),
+                onChanged: _loadingTrails || _saving ? null : _setSnap,
                 title: const Text('Snap to nearby trail'),
-                subtitle: const Text(
-                  'Aligns the saved route to a close real trail when one is found.',
-                ),
               ),
             Padding(
               padding: const EdgeInsets.all(16),
@@ -560,7 +638,9 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                                     _nameController.text,
                                     _points,
                                     snapToTrailsOverride:
-                                        _snap && !_followTrails,
+                                        _snap &&
+                                        !_followTrails &&
+                                        _draft.checkpointInputs == null,
                                     preserveGeometry: true,
                                   )
                                 : await widget.store.updateManualRoute(
@@ -568,7 +648,9 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                                     _nameController.text,
                                     _points,
                                     snapToTrailsOverride:
-                                        _snap && !_followTrails,
+                                        _snap &&
+                                        !_followTrails &&
+                                        _draft.checkpointInputs == null,
                                     preserveGeometry: true,
                                   );
                             if (!context.mounted) return;

@@ -400,6 +400,36 @@ split nodes. Category preference is only a 6 m near-tie breaker. Missing metadat
 and tile-boundary quantization can still prevent mapped connections. Do not infer
 arbitrary interior intersections solely from crossing lines.
 
+Checkpoint planning is a separate mode of `planWaypoints` (RTE-003/RTE-011,
+workspace update 2026-09-23), not a relaxation of strict recovery topology.
+It evaluates all ordered inputs with up to 16 candidates in a 150 m radius.
+Candidates within 40 m may move the checkpoint; more distant candidates keep
+the input location and use explicit unmapped approach segments. A distinct input
+more than 5 m from its neighbor cannot collapse into a negligible projected leg.
+Candidate costs account for route length, snap distance, and unmapped distance;
+fully mapped paths take priority over gap-assisted or whole-leg direct fallback.
+Each previous candidate performs one multi-target search for the next set.
+Mapped search bounds are 10 km minimum, eight times checkpoint separation, and
+100 km maximum; checkpoint chords are not treated as recorded route geometry.
+
+If a target has no mapped path, a separate planning adjacency may bridge an
+at-most-12 m gap from a dangling endpoint to another routable way at the same
+level. Direction must remain within 60 degrees of the endpoint's continuation;
+reciprocal continuation is checked when the target is also dangling. Candidates
+come from a 50 m spatial segment index. Projected split nodes are linked in
+segment order; gap edges carry a 25-times distance penalty and retain explicit
+direct-segment indices through path reconstruction. Strict pathfinding does not
+read planning adjacency. These are planning guesses, not verified topology or
+permission to cross a barrier; no arbitrary intersection or grade transition is
+invented by this gap heuristic.
+
+`networkForCheckpoints` reuses source-keyed cached corridor tiles. When the
+initial plan still has wholly unrouted legs it expands once from a one-tile to
+two-tile ring, staying inside the 256-tile workload budget. Offline mode never
+opens HTTP sources. Map gaps outside that budget retain explicit fallback rather
+than forcing unbounded downloads. This cannot guarantee a globally best route
+or complete access/barrier coverage from display-vector data.
+
 `RouteEditorDraft` owns immutable full geometry plus sparse control indices.
 Opening a dense route derives at most 32 controls from endpoints and significant
 shape changes; those controls are not substituted for the stored track. Map
@@ -413,6 +443,14 @@ whole-route auto-snap by default for existing routes, preserving matching GPX
 metadata and preventing unrequested changes to untouched sections. Direct segment
 indices are transient draft diagnostics carried through append, insert, local
 replacement, and Undo; they are not new persisted route metadata.
+
+For new Checkpoints routes with snapping enabled, the draft also retains the
+raw checkpoint inputs separately from generated points. Edits re-plan the full
+checkpoint sequence and preview it before saving; Undo restores the prior raw
+inputs, geometry, and diagnostics. Inserting a control preserves the other raw
+inputs. Saving sends this exact geometry with background snapping disabled.
+Reopening a route keeps its full geometry but does not reconstruct raw checkpoints.
+Existing dense routes are not automatically reduced to sparse checkpoint input.
 
 The vector overlay is independent of saved-route visibility and base-layer
 selection. It uses the configured `transportation` extractor, hides below z14,
@@ -433,7 +471,7 @@ area accounting. A guaranteed offline routing package needs additional design.
 
 `RouteGeometryCleaner` may prepare raw manual/imported geometry, but must not
 rewrite a connected graph result or geometry opened for navigation. Whole-route
-**Snap to trails** uses the shared candidate planner over observations sampled
+**Snap to trails** on imported GPX uses the shared candidate planner over observations sampled
 at 20 m of original travel. Observed geometry must remain within 40 m of a mapped
 replacement; candidate routes respect the length bound. Sparse gaps over 80 m
 do not force the mapped bend to remain near the unobserved straight chord, while
@@ -441,6 +479,8 @@ dense spans retain the reverse corridor check. Unmatched observations and input
 spans remain explicit direct connections; no partial prefix replaces the whole
 route. Strict `matchOnNetwork` remains available for all-mapped callers. Graph
 results are not cleaned afterward.
+Saved manual routes instead select checkpoint routing explicitly and retain all
+input points without GPX observation sampling or chord-based rejection.
 The caller checks that the route is still current before persisting an async
 result. Route identity/source are stable, and optional GPX metadata is retained
 for points that remain within one meter.

@@ -74,6 +74,18 @@ at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
 evidence of the actual bytes on a phone. A device storage breakdown is needed
 to attribute a reported 64 MB specifically to User data rather than App size.
 
+### 1.4.5 publication preparation
+
+[v1.4.5+15](releases/v1.4.5.md) is being prepared on 2026-09-23 from the
+checkpoint-routing workspace changes. The source version and authored notes
+are updated. Fresh candidate validation passed all 348 tests, a read-only
+104-file format check, full analysis, and version/note consistency. Commit/tag,
+hosted checks, both platform builds, and independent artifact verification
+remain pending. Production provider gates, schema,
+dependencies, and permanent Android signing are unchanged. The private backup
+and generated build outputs remain excluded. v1.4.4 remains the latest verified
+public release until publication completes.
+
 ### 1.4.4 publication
 
 [v1.4.4+14](releases/v1.4.4.md) is prepared locally on 2026-09-22 with route

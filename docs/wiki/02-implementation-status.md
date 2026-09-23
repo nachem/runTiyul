@@ -46,6 +46,65 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
+### 2026-09-23 checkpoint route selection (workspace, unpublished)
+
+- **RTE-003/RTE-011:** regressions reproduced a valid multi-feature hairpin
+  rejected by chord-based length limits and a connected way hidden by six
+  nearer fragments. Checkpoint planning is now distinct from recorded GPX
+  matching: it considers every checkpoint, up to 16 nearby way candidates
+  within 150 m, and bounded mapped paths without the GPX chord/corridor test.
+  Candidate routing searches all next targets together rather than separately
+  for every pair. Fully mapped sequences take priority; route length and snap
+  distance choose between viable candidates. The path budget is the larger of
+  10 km or eight times the checkpoint separation, capped at 100 km per leg.
+- Points within 40 m snap; points farther away remain at their selected
+  positions. A nearby way within 150 m can serve such a checkpoint through
+  short, explicitly unmapped approach/departure segments. Distinct nearby
+  checkpoints cannot collapse onto the same projected location merely to avoid
+  a loop. Stops less than the GPX 20 m sampling interval are retained.
+- Only when a target cannot be reached through mapped edges, planning may use
+  a connector of at most 12 m between a dangling endpoint and a same-level
+  routable way in its forward continuation (60-degree cone, checked from both
+  sides when both are dangling). A 50 m spatial index bounds gap candidates;
+  multiple projections along one segment are connected in order. Gap distance
+  carries a 25-times cost and only those segments are labeled unmapped. These
+  links are separate from strict graph adjacency and never enable recovery
+  across a gap, bridge, or prohibited connector. No walkability is inferred.
+- `networkForCheckpoints` loads the route corridor and, if whole legs remain
+  unrouted, tries a second tile ring within the existing 256-tile limit. Cached
+  tiles are reused; Offline never opens an HTTP source. Empty/missing coverage
+  leaves a direct plan; unavailable source or data-budget limits remain explicit.
+- **RTE-009/RTE-012:** new Checkpoints routes show their routed preview while
+  selecting points instead of waiting for Save. Original taps are held separately
+  from generated geometry, preserved through control insertion and Undo; further
+  checkpoint edits re-evaluate the sequence. Save sends the exact preview and
+  does not trigger a second background snap. Existing dense-route editing remains
+  lossless and local; explicit Snap on saved manual routes uses the checkpoint
+  planner, while GPX keeps its prior matching mode and metadata protection.
+
+Validation on 2026-09-23: all **348** tests passed in the full VS Code Flutter
+runner; `flutter analyze --no-pub` passed; changed Dart files were formatted;
+`flutter build apk --debug --no-pub` succeeded. The existing `flutter_tts` Kotlin
+warning is non-fatal. Tests cover long/close hairpins, candidate crowding,
+shortest connected alternatives, approach segments, collinear/T-junction and
+multiple short gaps, parallel/bridge separation, 1,500 unrelated fragments,
+distinct close stops, bounded corridor expansion, Offline isolation, actual
+checkpoint preview/Undo/Save, saved manual routing, and GPX behavior. `flutter
+devices` listed Windows, Chrome, and Edge only; no mobile target was connected.
+
+Limits: these are synthetic and mocked scenarios, not a claim that all real
+routes connect. Actual topology, access, barriers, tile coverage, and long-route
+phone performance still need device/data verification. User-planned approach
+and gap connections are explicitly unmapped and can be unsuitable in reality.
+Raw checkpoints and per-segment diagnostics are draft-only; saved route geometry
+persists, but a reopened route does not recover those raw taps. No device install,
+live map-provider probe, signed release, version bump, commit, or publication
+was performed during the initial implementation checks. On 2026-09-23,
+publication was requested: [v1.4.5+15](releases/v1.4.5.md) is prepared with
+348 passing candidate tests, a clean 104-file formatting check, full analysis,
+and matching release metadata. Hosted checks and publication remain pending;
+published v1.4.4 remains unchanged until those complete.
+
 ### 2026-09-22 route planning and authorized Esri development (released in v1.4.4)
 
 - **RTE-003/RTE-011:** failing regressions reproduced a sparse right-angle
@@ -330,9 +389,9 @@ connected, and no APK was installed, app data reset, or release published.
 | Offline zoom limits | Implemented; overzoom analyzer/test only | Offline mode now uses the same zoom range as the online map: zoom-out is no longer locked at the downloaded minimum, and zooming in past the downloaded maximum scales (overzooms) the deepest saved tiles up to z19 instead of going blank. Where the current offline area lacks coverage (below the downloaded minimum), tiles render transparent in pure Offline mode; Auto fills them from the online layer. Auto-fit and the **Show on map** preview floor the camera at the downloaded minimum zoom (`offlineAwareFitZoom`), so previewing an area downloaded only at deep zoom levels no longer lands on a blank (gray) map below its coverage. Previewing an area that is still downloading now uses a download-progress-independent map key (`offlineAreaMapKey`), so the per-tile `updatedAt` bump no longer recreates the whole map and its controls on every downloaded tile (which had left the preview a flickering gray screen with no controls). |
 | Current GPS location | Implemented, emulator permission verified | Location service and map marker exist; denied/settings flows are surfaced as errors but not comprehensively device-tested. |
 | GPX import | Implemented, parser unit-tested | Uses the platform `file_selector`; the native picker was not exercised in the emulator verification. |
-| Manual route creation/editing (`RTE-003`, `RTE-012`) | Implemented; analyzer/unit/widget-tested | Sparse controls preserve geometry; Follow trails snaps nearby points, follows connected bends, and retains distant points with reported direct connections. Move/Delete changes only adjacent spans, mode switching is lossless, and Undo restores complete edits. Duplicate snapped taps do not add controls. See v1.4.4 preparation above for limits and device gaps. |
+| Manual route creation/editing (`RTE-003`, `RTE-012`) | Implemented; latest checkpoint improvement is workspace-only | New snapping-enabled Checkpoints routes preview candidate-based paths before Save, preserve raw taps for re-planning/Undo, and report approaches/gaps/direct fallback. Existing dense/Follow-trails edits retain local geometry preservation. Saved previews match displayed geometry; raw checkpoints are not persisted separately. See the 2026-09-23 checkpoint entry for automated coverage and limits. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
-| Route cleanup and whole-route matching (`RTE-010`, `RTE-011`) | Implemented; analyzer/unit/widget-tested, real GPX/device use unverified | Bounded artifact cleanup remains. Planning scores connected nearby candidates and accepts sparse mapped bends while retaining off-map stops and original unmapped spans as reported direct connections. Strict matching still rejects incomplete matches. Identity/source, matching GPX metadata, and stale-result protection remain. |
+| Route cleanup and whole-route matching (`RTE-010`, `RTE-011`) | Implemented; analyzer/unit/widget-tested, real GPX/device use unverified | Saved manual routes use checkpoint pathfinding with wider candidates and long-bend routing. GPX retains shape/length matching and bounded artifact cleanup. Strict routing remains separate from explicit planning gaps. Identity/source, matching GPX metadata, and stale-result protection remain. Latest checkpoint improvements are not in published v1.4.4. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit/widget-tested, physical-device stress test pending | Point-local loading remains bounded to 3x3 z14 tiles and viewport loads to 24 tiles. Distant taps now load only their endpoint neighborhood and retain a reported direct connection when the loaded graph cannot connect them, without fetching an unbounded corridor. Prior geometry is unchanged; local planning considers up to six candidates. Graph construction remains lazy, endpoint splits are bounds-filtered, and shortest paths use a binary heap. Display simplification does not change saved geometry. |
 | Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Completed cues explicitly release transient audio focus; iOS deactivates its shared session with `notifyOthersOnDeactivation`, and a generation guard prevents an older cue from releasing a newer alert's audio. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior and recovery, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
@@ -748,12 +807,13 @@ limits, and production licensing still require independent verification.
 
 ## 9. Automated validation
 
-Latest local code validation completed on 2026-09-22; hosted `v1.4.4` release
+Latest local code validation completed on 2026-09-23; hosted `v1.4.4` release
 validation and independent public artifact checks completed on 2026-09-23.
 Earlier dated entries below remain historical evidence:
 
 | Command | Result |
 | --- | --- |
+| Checkpoint routing workspace validation (2026-09-23) | All 348 tests passed; changed Dart files were formatted; `flutter analyze --no-pub` passed; `flutter build apk --debug --no-pub` succeeded with the existing non-fatal `flutter_tts` warning. Tests exercise checkpoint candidate routing, short-gap/approach diagnostics, corridor expansion, offline isolation, preview/save/Undo, and GPX separation. `flutter devices` listed desktop/web targets only. No mobile install, live provider probe, signed release, or publication occurred. |
 | Public `v1.4.4+14` route-planning release (2026-09-23) | Tagged commit `23d2f40` passed CI `35840448575` and CodeQL `35840446114` before tagging. [Release run 35840664878](https://github.com/nachem/runTiyul/actions/runs/35840664878) passed signed Android build/identity, unsigned iOS packaging, checksums, provenance, and publication. Independent public APK (62,741,312 bytes) and IPA (16,044,660 bytes) downloads match the manifest and GitHub digests. Android SDK inspection verifies permanent certificate and `1.4.4+14`; both attestations verify exact tagged workflow/source commit on GitHub-hosted runners; stable latest URLs return HTTP 200 with matching sizes. Hashes are in the [release notes](releases/v1.4.4.md). No device installation or runtime validation occurred. |
 | Route planning and authorized Esri preparation (2026-09-22) | All 331 tests passed; `flutter analyze --no-pub` passed and changed Dart files were formatted. The authorized-DEV debug APK built as `1.4.4+14`; existing `flutter_tts` warning is non-fatal. Synthetic route/editing/persistence and mocked Esri workflow scenarios passed. No live-source request, device install/field test, signed release build, or iOS validation occurred for this change. |
 | Public `v1.4.3+13` center-view release (2026-09-22) | Tagged commit `f32b565` is pushed to `main`. All 28 focused map/control and 312 full-suite local tests passed; full 101-file formatting and analysis passed after minimal validation cleanup. CI `35750005333` and CodeQL `35750004979` passed. [Release run 35750301499](https://github.com/nachem/runTiyul/actions/runs/35750301499) passed signed Android identity/build, unsigned iOS packaging, checksums, provenance, and publication. Independent APK (62,741,316 bytes) and IPA (16,036,646 bytes) downloads match public hashes, both exact tagged-workflow/source-commit attestations verify, and latest URLs return HTTP 200 with matching sizes. Android SDK inspection confirms the permanent certificate and `1.4.3+13`; hashes are in the [release notes](releases/v1.4.3.md). No physical-device validation occurred. |

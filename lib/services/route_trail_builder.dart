@@ -197,6 +197,37 @@ class RouteTrailBuilder {
     return _readNetwork(tiles, sourceUrl, allowNetwork: allowNetwork);
   }
 
+  Future<TrailNetwork> networkForCheckpoints(
+    List<LatLng> checkpoints,
+    String sourceUrl, {
+    bool allowNetwork = true,
+  }) async {
+    if (checkpoints.isEmpty || sourceUrl.isEmpty) return const TrailNetwork([]);
+    if (checkpoints.length == 1) {
+      return networkNearPoint(
+        checkpoints.single,
+        sourceUrl,
+        allowNetwork: allowNetwork,
+      );
+    }
+    final network = await buildNetwork(
+      checkpoints,
+      sourceUrl,
+      allowNetwork: allowNetwork,
+    );
+    final plan = planOnNetwork(checkpoints, network, checkpointRouting: true);
+    if (plan != null && plan.unroutedLegs == 0) return network;
+    final loaded = tilesForRoute(checkpoints).toSet();
+    final additional = tilesForRoute(checkpoints, buffer: 2)
+        .where((tile) => !loaded.contains(tile))
+        .take(math.max(0, 256 - loaded.length))
+        .toList(growable: false);
+    if (additional.isEmpty) return network;
+    return network.merge(
+      await _readNetwork(additional, sourceUrl, allowNetwork: allowNetwork),
+    );
+  }
+
   /// Builds the trail network covering [bounds] by reading its covering tiles
   /// from the vector source at [sourceUrl]. Used to power tap-to-follow route
   /// building over the currently-viewed map area.
@@ -267,12 +298,15 @@ class RouteTrailBuilder {
     List<LatLng> route,
     String sourceUrl, {
     bool allowNetwork = true,
+    bool checkpointRouting = false,
   }) async {
-    final network = await buildNetwork(
-      route,
-      sourceUrl,
-      allowNetwork: allowNetwork,
-    );
+    final network = checkpointRouting
+        ? await networkForCheckpoints(
+            route,
+            sourceUrl,
+            allowNetwork: allowNetwork,
+          )
+        : await buildNetwork(route, sourceUrl, allowNetwork: allowNetwork);
     if (network.isEmpty) {
       return RouteTrailResult(
         snapped: route,
@@ -281,7 +315,11 @@ class RouteTrailBuilder {
         matched: false,
       );
     }
-    final plan = planOnNetwork(route, network);
+    final plan = planOnNetwork(
+      route,
+      network,
+      checkpointRouting: checkpointRouting,
+    );
     final refined = plan != null && plan.points.length >= 2
         ? plan.points
         : null;
@@ -308,9 +346,17 @@ class RouteTrailBuilder {
     List<LatLng> route,
     TrailNetwork network, {
     bool allowDirectConnections = true,
+    bool checkpointRouting = false,
   }) {
     if (route.length < 2) return null;
     final router = TrailRouter(network);
+    if (checkpointRouting) {
+      return router.planWaypoints(
+        route,
+        allowDirectConnections: allowDirectConnections,
+        checkpointRouting: true,
+      );
+    }
     final observations = <int>[0];
     var accumulated = 0.0;
     for (var index = 1; index < route.length; index++) {

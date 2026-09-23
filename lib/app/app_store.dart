@@ -594,11 +594,15 @@ class AppStore extends ChangeNotifier {
       final original = route.points
           .map((point) => point.latLng)
           .toList(growable: false);
-      final cleaned = _routeGeometryCleaner.clean(original);
+      final checkpointRouting = route.source == RouteSource.manual;
+      final cleaned = checkpointRouting
+          ? original
+          : _routeGeometryCleaner.clean(original);
       final result = await routeTrailBuilder.snapToTrails(
         cleaned,
         vectorSourceUrl,
         allowNetwork: mapTileMode != MapTileMode.offline,
+        checkpointRouting: checkpointRouting,
       );
       if (!result.matched) return RouteSnapOutcome.unavailable;
       if (_disposed ||

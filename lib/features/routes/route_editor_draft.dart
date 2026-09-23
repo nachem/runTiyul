@@ -13,15 +13,37 @@ class RouteEditorDraft {
     routeControlIndices(points),
   );
 
+  factory RouteEditorDraft.fromCheckpointPlan(
+    List<LatLng> checkpoints,
+    TrailRoutePlan plan,
+  ) {
+    final indices = <int>[];
+    final inputs = <LatLng>[];
+    for (var index = 0; index < plan.waypointIndices.length; index++) {
+      final handle = plan.waypointIndices[index];
+      if (indices.isNotEmpty && indices.last == handle) continue;
+      indices.add(handle);
+      inputs.add(checkpoints[index]);
+    }
+    return RouteEditorDraft._(
+      List.unmodifiable(plan.points),
+      List.unmodifiable(indices),
+      List.unmodifiable(plan.directSegments),
+      List.unmodifiable(inputs),
+    );
+  }
+
   const RouteEditorDraft._(
     this.points,
     this.controlIndices, [
     this.directSegments = const [],
+    this.checkpointInputs,
   ]);
 
   final List<LatLng> points;
   final List<int> controlIndices;
   final List<int> directSegments;
+  final List<LatLng>? checkpointInputs;
   static const _distance = GeoDistance();
 
   List<LatLng> get controls => [
@@ -157,6 +179,12 @@ class RouteEditorDraft {
       for (final handle in controlIndices)
         inserted && handle >= index ? handle + 1 : handle,
     ];
+    final originalInputs = checkpointInputs == null
+        ? null
+        : {
+            for (var control = 0; control < handles.length; control++)
+              handles[control]: checkpointInputs![control],
+          };
     if (!handles.contains(index)) handles.add(index);
     handles.sort();
     return (
@@ -169,6 +197,12 @@ class RouteEditorDraft {
             if (inserted && segment == index - 1) segment + 1,
           ],
         ]),
+        checkpointInputs == null
+            ? null
+            : List.unmodifiable([
+                for (final handle in handles)
+                  originalInputs![handle] ?? updated[handle],
+              ]),
       ),
       control: handles.indexOf(index),
     );
