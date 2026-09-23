@@ -401,7 +401,7 @@ and tile-boundary quantization can still prevent mapped connections. Do not infe
 arbitrary interior intersections solely from crossing lines.
 
 Checkpoint planning is a separate mode of `planWaypoints` (RTE-003/RTE-011,
-workspace update 2026-09-23), not a relaxation of strict recovery topology.
+released in v1.4.5 on 2026-09-23), not a relaxation of strict recovery topology.
 It evaluates all ordered inputs with up to 16 candidates in a 150 m radius.
 Candidates within 40 m may move the checkpoint; more distant candidates keep
 the input location and use explicit unmapped approach segments. A distinct input

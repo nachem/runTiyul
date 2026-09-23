@@ -257,7 +257,7 @@ geometry and metadata after save/reload. Direct lines are not verified access
 or navigation-recovery connections. Automated versions of these scenarios pass;
 outdoor and phone performance verification remain pending.
 
-For the unpublished 2026-09-23 checkpoint update, create a new route in
+For the v1.4.5 checkpoint update, create a new route in
 **Checkpoints** with **Snap to nearby trail** enabled. Select two points around
 a long bend/hairpin and verify the routed preview appears before Save. Add a
 point 40-150 m off the nearest way: its location should remain and the preview

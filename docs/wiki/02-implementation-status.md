@@ -46,7 +46,7 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
-### 2026-09-23 checkpoint route selection (workspace, unpublished)
+### 2026-09-23 checkpoint route selection (released in v1.4.5)
 
 - **RTE-003/RTE-011:** regressions reproduced a valid multi-feature hairpin
   rejected by chord-based length limits and a connected way hidden by six
@@ -100,10 +100,18 @@ Raw checkpoints and per-segment diagnostics are draft-only; saved route geometry
 persists, but a reopened route does not recover those raw taps. No device install,
 live map-provider probe, signed release, version bump, commit, or publication
 was performed during the initial implementation checks. On 2026-09-23,
-publication was requested: [v1.4.5+15](releases/v1.4.5.md) is prepared with
+publication was requested: [v1.4.5+15](releases/v1.4.5.md) was prepared with
 348 passing candidate tests, a clean 104-file formatting check, full analysis,
-and matching release metadata. Hosted checks and publication remain pending;
-published v1.4.4 remains unchanged until those complete.
+and matching release metadata. Commit
+`da262d86d62969df3373688f178710a6a2bc7b00` passed hosted CI `35884094142` and
+CodeQL `35884093234` before the immutable `v1.4.5` tag was pushed. [Release run
+35884381841](https://github.com/nachem/runTiyul/actions/runs/35884381841) passed
+signed Android build/identity, unsigned iOS packaging, checksums, provenance,
+and publication. Independent public APK/IPA downloads match the checksum
+manifest and GitHub digests. Android package/version/permanent certificate,
+both exact tagged-source attestations, and stable latest URLs verify. Artifact
+hashes are recorded in the release notes. No device installation or field test
+occurred; the earlier v1.4.4 tag and artifacts remain unchanged.
 
 ### 2026-09-22 route planning and authorized Esri development (released in v1.4.4)
 
@@ -389,9 +397,9 @@ connected, and no APK was installed, app data reset, or release published.
 | Offline zoom limits | Implemented; overzoom analyzer/test only | Offline mode now uses the same zoom range as the online map: zoom-out is no longer locked at the downloaded minimum, and zooming in past the downloaded maximum scales (overzooms) the deepest saved tiles up to z19 instead of going blank. Where the current offline area lacks coverage (below the downloaded minimum), tiles render transparent in pure Offline mode; Auto fills them from the online layer. Auto-fit and the **Show on map** preview floor the camera at the downloaded minimum zoom (`offlineAwareFitZoom`), so previewing an area downloaded only at deep zoom levels no longer lands on a blank (gray) map below its coverage. Previewing an area that is still downloading now uses a download-progress-independent map key (`offlineAreaMapKey`), so the per-tile `updatedAt` bump no longer recreates the whole map and its controls on every downloaded tile (which had left the preview a flickering gray screen with no controls). |
 | Current GPS location | Implemented, emulator permission verified | Location service and map marker exist; denied/settings flows are surfaced as errors but not comprehensively device-tested. |
 | GPX import | Implemented, parser unit-tested | Uses the platform `file_selector`; the native picker was not exercised in the emulator verification. |
-| Manual route creation/editing (`RTE-003`, `RTE-012`) | Implemented; latest checkpoint improvement is workspace-only | New snapping-enabled Checkpoints routes preview candidate-based paths before Save, preserve raw taps for re-planning/Undo, and report approaches/gaps/direct fallback. Existing dense/Follow-trails edits retain local geometry preservation. Saved previews match displayed geometry; raw checkpoints are not persisted separately. See the 2026-09-23 checkpoint entry for automated coverage and limits. |
+| Manual route creation/editing (`RTE-003`, `RTE-012`) | Implemented and released in v1.4.5; device testing pending | New snapping-enabled Checkpoints routes preview candidate-based paths before Save, preserve raw taps for re-planning/Undo, and report approaches/gaps/direct fallback. Existing dense/Follow-trails edits retain local geometry preservation. Saved previews match displayed geometry; raw checkpoints are not persisted separately. See the 2026-09-23 checkpoint entry for automated coverage and limits. |
 | Route library/detail/management | Implemented | Routes persist in SQLite; detail, rename, edit-waypoints, duplicate, and delete actions are exposed. Rename/duplicate persistence is unit-tested. |
-| Route cleanup and whole-route matching (`RTE-010`, `RTE-011`) | Implemented; analyzer/unit/widget-tested, real GPX/device use unverified | Saved manual routes use checkpoint pathfinding with wider candidates and long-bend routing. GPX retains shape/length matching and bounded artifact cleanup. Strict routing remains separate from explicit planning gaps. Identity/source, matching GPX metadata, and stale-result protection remain. Latest checkpoint improvements are not in published v1.4.4. |
+| Route cleanup and whole-route matching (`RTE-010`, `RTE-011`) | Implemented; analyzer/unit/widget-tested, real GPX/device use unverified | Saved manual routes use checkpoint pathfinding with wider candidates and long-bend routing. GPX retains shape/length matching and bounded artifact cleanup. Strict routing remains separate from explicit planning gaps. Identity/source, matching GPX metadata, and stale-result protection remain. Latest checkpoint improvements are published in v1.4.5. |
 | Route map integration | Implemented; primary-map path emulator verified, dashed style/auto-fit analyzer/test only | All saved trails in/partly in the viewport render by default as dashed lines (map convention); tapping a route opens the primary Map tab, emphasizes it with the full controls, and fits the whole selected trail in view. Under `NAV-001`, realtime recording receives all saved routes for the layers toggle, while the selected navigation route is primary content and remains visible when saved overlays are hidden. |
 | Route-editor and long-route performance | Implemented; analyzer/unit/widget-tested, physical-device stress test pending | Point-local loading remains bounded to 3x3 z14 tiles and viewport loads to 24 tiles. Distant taps now load only their endpoint neighborhood and retain a reported direct connection when the loaded graph cannot connect them, without fetching an unbounded corridor. Prior geometry is unchanged; local planning considers up to six candidates. Graph construction remains lazy, endpoint splits are bounds-filtered, and shortest paths use a binary heap. Display simplification does not change saved geometry. |
 | Route progress/off-route alerts (`NAV-002`, `NAV-004`) | Partially implemented; analyzer/unit/widget-tested, live audio not device-verified | While recording a selected route, progress is the monotonic maximum nearest projection along the route; configurable distance (0.5-5 km) or elapsed-time (5-60 minute) intervals trigger completed/remaining guidance only while on route. Sustained off-route state stores the nearest route point, distance, compass bearing, and runner-relative direction when GPS heading exists. Guidance repeats every configurable 10-60 seconds and compares distance with the previous cue: two slow warning cues mean approaching the route, while three fast cues mean moving away; the banner and voice state where the route lies. Junction uses one rising cue and progress uses two relaxed rising cues. The persisted output mode defaults to **Tone + voice** and also offers **Voice**, **Tones**, and **Haptics only**; all four cue types can be previewed with unsaved settings. Voice uses an installed offline English system voice and matching tone-pattern fallback. Completed cues explicitly release transient audio focus; iOS deactivates its shared session with `notifyOthersOnDeactivation`, and a generation guard prevents an older cue from releasing a newer alert's audio. Visual route-progress percentage remains unimplemented. Physical-device heading quality, audibility in wind, media/silent-mode behavior and recovery, Bluetooth/open-ear routing, background/locked-screen playback, and iOS remain unverified. |
@@ -807,12 +815,13 @@ limits, and production licensing still require independent verification.
 
 ## 9. Automated validation
 
-Latest local code validation completed on 2026-09-23; hosted `v1.4.4` release
+Latest local code validation completed on 2026-09-23; hosted `v1.4.5` release
 validation and independent public artifact checks completed on 2026-09-23.
 Earlier dated entries below remain historical evidence:
 
 | Command | Result |
 | --- | --- |
+| Public `v1.4.5+15` checkpoint-routing release (2026-09-23) | All 348 candidate tests, 104-file formatting, and full analysis passed. Tagged commit `da262d8` passed CI `35884094142` and CodeQL `35884093234`. [Release run 35884381841](https://github.com/nachem/runTiyul/actions/runs/35884381841) passed signed Android identity/build, unsigned iOS packaging, checksums, provenance, and publication. Independent public APK (62,905,156 bytes) and IPA (16,059,599 bytes) downloads match the manifest and GitHub digests. Android SDK inspection verifies the permanent certificate and `1.4.5+15`; both attestations verify the exact tagged workflow/source commit on GitHub-hosted runners; stable latest URLs return HTTP 200 with matching sizes. Hashes are in the [release notes](releases/v1.4.5.md). No device installation or runtime validation occurred. |
 | Checkpoint routing workspace validation (2026-09-23) | All 348 tests passed; changed Dart files were formatted; `flutter analyze --no-pub` passed; `flutter build apk --debug --no-pub` succeeded with the existing non-fatal `flutter_tts` warning. Tests exercise checkpoint candidate routing, short-gap/approach diagnostics, corridor expansion, offline isolation, preview/save/Undo, and GPX separation. `flutter devices` listed desktop/web targets only. No mobile install, live provider probe, signed release, or publication occurred. |
 | Public `v1.4.4+14` route-planning release (2026-09-23) | Tagged commit `23d2f40` passed CI `35840448575` and CodeQL `35840446114` before tagging. [Release run 35840664878](https://github.com/nachem/runTiyul/actions/runs/35840664878) passed signed Android build/identity, unsigned iOS packaging, checksums, provenance, and publication. Independent public APK (62,741,312 bytes) and IPA (16,044,660 bytes) downloads match the manifest and GitHub digests. Android SDK inspection verifies permanent certificate and `1.4.4+14`; both attestations verify exact tagged workflow/source commit on GitHub-hosted runners; stable latest URLs return HTTP 200 with matching sizes. Hashes are in the [release notes](releases/v1.4.4.md). No device installation or runtime validation occurred. |
 | Route planning and authorized Esri preparation (2026-09-22) | All 331 tests passed; `flutter analyze --no-pub` passed and changed Dart files were formatted. The authorized-DEV debug APK built as `1.4.4+14`; existing `flutter_tts` warning is non-fatal. Synthetic route/editing/persistence and mocked Esri workflow scenarios passed. No live-source request, device install/field test, signed release build, or iOS validation occurred for this change. |
