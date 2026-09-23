@@ -1,6 +1,6 @@
 # Implemented Details and Current Status
 
-Snapshot date: 2026-09-22<br>
+Snapshot date: 2026-09-23<br>
 Overall status: functional Flutter MVP verified on an Android 14 emulator
 
 ## 1. Executive summary
@@ -46,7 +46,7 @@ hosting remain proposals only.
 
 ## 2. Verified feature matrix
 
-### 2026-09-22 route planning and authorized Esri development (v1.4.4 preparation)
+### 2026-09-22 route planning and authorized Esri development (released in v1.4.4)
 
 - **RTE-003/RTE-011:** failing regressions reproduced a sparse right-angle
   route rejected by the fixed 40 m chord corridor and a same-level T-junction
@@ -87,15 +87,26 @@ remains non-fatal. Automated scenarios cover bends, hairpins, T-junctions in
 both directions, parallel/bridge/private-way separation, off-map stops, empty
 coverage, duplicate controls, editor taps/Undo, persistence, and Esri mocked
 requests/confirmation. No live map-source requests, device install, outdoor
-route test, signed release build, or iOS validation was performed for this work.
+route test, signed release build, or iOS validation was performed during the
+initial local preparation.
+
+Publication completed on 2026-09-23. Tagged commit
+`23d2f40b9b675fa18c302113dae7f67f3bbc776b` passed hosted CI `35840448575` and
+CodeQL `35840446114` before tagging. [Release run
+35840664878](https://github.com/nachem/runTiyul/actions/runs/35840664878) passed
+the signed Android build/identity gate, unsigned iOS packaging, checksums,
+provenance, and publication. Independent public APK/IPA downloads match the
+manifest and GitHub digests; Android identity/certificate, both exact-source
+attestations, and stable latest URLs verify. No device runtime or installation
+was tested. See the [v1.4.4 release notes](releases/v1.4.4.md) for artifact hashes.
 
 Limitations: the scenarios are synthetic, not field verification. Direct paths
 do not establish walkability or legal access. Their editor diagnostics are
 transient and not persisted per segment; route geometry is persisted. The
 bounded vector dataset may omit topology and real paths. Multi-tile quantization
 gaps larger than coordinate precision, arbitrary line crossings, and long-route
-device performance still require verification. Publication remains pending;
-see the [prepared v1.4.4 notes](releases/v1.4.4.md).
+device performance still require verification. The public release retains
+ordinary provider gates; Esri requires the separately authorized DEV build.
 
 ### 2026-09-22 center-view control separation (released in v1.4.3)
 
@@ -737,11 +748,13 @@ limits, and production licensing still require independent verification.
 
 ## 9. Automated validation
 
-Latest local code and hosted `v1.4.3` release validation completed on 2026-09-22.
+Latest local code validation completed on 2026-09-22; hosted `v1.4.4` release
+validation and independent public artifact checks completed on 2026-09-23.
 Earlier dated entries below remain historical evidence:
 
 | Command | Result |
 | --- | --- |
+| Public `v1.4.4+14` route-planning release (2026-09-23) | Tagged commit `23d2f40` passed CI `35840448575` and CodeQL `35840446114` before tagging. [Release run 35840664878](https://github.com/nachem/runTiyul/actions/runs/35840664878) passed signed Android build/identity, unsigned iOS packaging, checksums, provenance, and publication. Independent public APK (62,741,312 bytes) and IPA (16,044,660 bytes) downloads match the manifest and GitHub digests. Android SDK inspection verifies permanent certificate and `1.4.4+14`; both attestations verify exact tagged workflow/source commit on GitHub-hosted runners; stable latest URLs return HTTP 200 with matching sizes. Hashes are in the [release notes](releases/v1.4.4.md). No device installation or runtime validation occurred. |
 | Route planning and authorized Esri preparation (2026-09-22) | All 331 tests passed; `flutter analyze --no-pub` passed and changed Dart files were formatted. The authorized-DEV debug APK built as `1.4.4+14`; existing `flutter_tts` warning is non-fatal. Synthetic route/editing/persistence and mocked Esri workflow scenarios passed. No live-source request, device install/field test, signed release build, or iOS validation occurred for this change. |
 | Public `v1.4.3+13` center-view release (2026-09-22) | Tagged commit `f32b565` is pushed to `main`. All 28 focused map/control and 312 full-suite local tests passed; full 101-file formatting and analysis passed after minimal validation cleanup. CI `35750005333` and CodeQL `35750004979` passed. [Release run 35750301499](https://github.com/nachem/runTiyul/actions/runs/35750301499) passed signed Android identity/build, unsigned iOS packaging, checksums, provenance, and publication. Independent APK (62,741,316 bytes) and IPA (16,036,646 bytes) downloads match public hashes, both exact tagged-workflow/source-commit attestations verify, and latest URLs return HTTP 200 with matching sizes. Android SDK inspection confirms the permanent certificate and `1.4.3+13`; hashes are in the [release notes](releases/v1.4.3.md). No physical-device validation occurred. |
 | Public `v1.4.2+12` recenter hotfix (2026-09-22) | Tagged commit `11c83fc` is pushed to `main`. CI `35745309481` passed formatting, clean analysis, and the complete committed-source test suite; CodeQL `35745308024` passed. [Release run 35745585108](https://github.com/nachem/runTiyul/actions/runs/35745585108) passed signed Android identity/build, unsigned iOS packaging, checksums, provenance, and publication. Independent APK (62,741,224 bytes) and IPA (16,035,861 bytes) downloads match public hashes, both tagged-workflow/source-commit attestations verify, and latest URLs return HTTP 200 with matching sizes. Android SDK inspection confirms the permanent certificate and `1.4.2+12`; hashes are in the [release notes](releases/v1.4.2.md). Unrelated local download edits were excluded and left untouched. No physical-device validation occurred. |
