@@ -400,7 +400,7 @@ split nodes. Category preference is only a 6 m near-tie breaker. Missing metadat
 and tile-boundary quantization can still prevent mapped connections. Do not infer
 arbitrary interior intersections solely from crossing lines.
 
-Curved-feature candidate selection (RTE-011, workspace update 2026-09-24)
+Curved-feature candidate selection (RTE-011, released in v1.4.6 on 2026-09-24)
 projects onto each segment and retains local distance minima along the feature,
 rather than one nearest point for the whole polyline. This preserves alternate
 nearby hairpin arms while excluding non-minimal dense straight vertices.

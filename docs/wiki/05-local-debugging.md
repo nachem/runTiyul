@@ -270,7 +270,7 @@ Repeat with cached data in Offline mode and compare saved manual Snap with GPX
 shape matching. The actual phone, access/barrier situation, and missing-data
 behavior still require field validation; synthetic scenarios are not a guarantee.
 
-For the unpublished 2026-09-24 non-road fix, locate a path/track hairpin in the
+For the v1.4.6 non-road fix, locate a path/track hairpin in the
 vector overlay, especially one stored as a single winding line. In Checkpoints
 and Follow trails, tap exactly on opposite arms and verify that both endpoints
 and the intervening bend remain. Repeat beside a shorter nearby road: deliberate

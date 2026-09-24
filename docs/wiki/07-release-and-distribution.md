@@ -13,10 +13,10 @@ hosted run or release.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.4.5+15` published (62,905,156 bytes); package/version/certificate, provenance, checksum, and stable latest URL independently verified on 2026-09-23 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.4.5+15` published (16,059,599 bytes); checksum, provenance, and stable latest URL verified on 2026-09-23. On-device sideload remains unverified |
-| Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `35884094142` passed formatting, analysis, and the complete committed-source test suite with Flutter 3.44.6. Dependency review awaits a pull request |
-| Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `35884381841` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.4.5` |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.4.6+16` published (62,905,152 bytes); package/version/certificate, provenance, checksum, and stable latest URL independently verified on 2026-09-24 |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.4.6+16` published (16,060,156 bytes); checksum, provenance, and stable latest URL verified on 2026-09-24. On-device sideload remains unverified |
+| Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `36030535334` passed formatting, analysis, and the complete committed-source test suite with Flutter 3.44.6. Dependency review awaits a pull request |
+| Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `36030762592` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.4.6` |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
 | License | [MIT](../../LICENSE), © Bernoulli Software | Implemented |
 | Repository visibility | Public | Implemented |
@@ -24,19 +24,19 @@ hosted run or release.
 The download links used by the site and README point at stable asset names via
 `https://github.com/nachem/runTiyul/releases/latest/download/RunTiyul.apk` and
 `...RunTiyul.ipa`. As of the
-[`v1.4.5` release](https://github.com/nachem/runTiyul/releases/tag/v1.4.5)
-(2026-09-23), both return HTTP `200`. Release workflow
-[`35884381841`](https://github.com/nachem/runTiyul/actions/runs/35884381841)
+[`v1.4.6` release](https://github.com/nachem/runTiyul/releases/tag/v1.4.6)
+(2026-09-24), both return HTTP `200`. Release workflow
+[`36030762592`](https://github.com/nachem/runTiyul/actions/runs/36030762592)
 passed its metadata gate, permanent-signature Android identity verification,
 unsigned iOS build, checksums, APK+IPA provenance, and publication jobs.
 Independent downloads match `SHA256SUMS.txt`: APK
-`1665d0b69c9c22e2f7c6dfdd257309271cddf38a47300fd906800319333b5bda`
-(62,905,156 bytes) and IPA
-`58981d758057a3a05545896892c12ff211c9e3307e044491438a7750b42ce0d0`
-(16,059,599 bytes). Both build-provenance attestations verify against the
+`24ad34ad5a3ac7fab5c400511f878219a12b8651687562d168155fd99177f287`
+(62,905,152 bytes) and IPA
+`5a3ec0778bf2d35a227c5976df5eb4fc636224d0bc21f42c1e6879fc815b0279`
+(16,060,156 bytes). Both build-provenance attestations verify against the
 tagged release workflow, exact source commit, and GitHub-hosted runner policy.
 The public APK reports package `com.bernoulli.trailrunner.trail_runner`,
-`versionName=1.4.5`, `versionCode=15`, and the pinned permanent certificate.
+`versionName=1.4.6`, `versionCode=16`, and the pinned permanent certificate.
 
 ### APK size audit (2026-09-22)
 
@@ -74,18 +74,26 @@ at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
 evidence of the actual bytes on a phone. A device storage breakdown is needed
 to attribute a reported 64 MB specifically to User data rather than App size.
 
-### 1.4.6 publication preparation
+### 1.4.6 publication
 
-[v1.4.6+16](releases/v1.4.6.md) is being prepared on 2026-09-24 for the
-non-road trail snapping fixes. The prior implementation passed 365 tests,
-full analysis, and an Android debug build. Fresh v1.4.6 candidate validation
-passed all 365 tests, 105-file formatting, full analysis, and version/note
-consistency. Device discovery found only desktop/web targets. Commit/tag,
-hosted gates, signed Android and unsigned iOS release builds, and independent
-public artifact verification remain pending. Provider restrictions,
-schema, dependencies, cache format, and permanent signing identity are
-unchanged. The private backup and generated files remain excluded from Git.
-v1.4.5 remains the latest verified public release until publication completes.
+[v1.4.6+16](releases/v1.4.6.md) was published on 2026-09-24 with the non-road
+trail snapping fixes. Fresh candidate validation passed 365 tests, a read-only
+105-file format check, full analysis, and metadata checks. The implementation
+debug APK also built; device discovery found desktop/web targets only.
+Commit `7816c7673096ac60634958737ce86a9a3ea33041` was pushed to `main`, passed
+[CI 36030535334](https://github.com/nachem/runTiyul/actions/runs/36030535334) and
+[CodeQL 36030534648](https://github.com/nachem/runTiyul/actions/runs/36030534648),
+then was tagged `v1.4.6`. [Release run
+36030762592](https://github.com/nachem/runTiyul/actions/runs/36030762592) passed
+both platform builds, permanent-signature Android identity, checksums,
+provenance, and publication. Release ID `395894711` contains the verified public
+APK/IPA and checksum file. Independent downloads match both the manifest and
+GitHub digests; both exact-source attestations and stable latest URLs verify.
+Publication evidence is recorded separately without changing the immutable tag.
+No mobile installation or field test was performed; the user plans to check
+the problematic trails on their phone. Provider restrictions, schema,
+dependencies, cache format, and signing identity are unchanged. The private
+backup and generated files remain excluded from Git.
 
 ### 1.4.5 publication
 
@@ -376,20 +384,20 @@ update in place.
 
 ## 5. Known limitations
 
-- The unsigned iOS `.ipa` **builds successfully in CI** (verified in `v1.4.5` on
+- The unsigned iOS `.ipa` **builds successfully in CI** (verified in `v1.4.6` on
   the macOS runner) but its on-device sideload/runtime has **not been verified**
   (the wider iOS runtime is also unverified — see
   [implementation status](02-implementation-status.md)). The release job is
   designed to still publish the Android APK if the iOS step fails.
 - The `releases/latest/download/...` links and the site's live-release
-  enhancement depend on at least one published `v*` release; `v1.4.5` is the
+  enhancement depend on at least one published `v*` release; `v1.4.6` is the
   current latest release.
 - CI actions emit a Node.js 20 deprecation warning (non-blocking).
-- `v1.2.2` through `v1.4.5` provide permanently signed APKs suitable for an
+- `v1.2.2` through `v1.4.6` provide permanently signed APKs suitable for an
   in-place upgrade test, but data preservation remains physical-device
   unverified.
-- Push CI passed in run `35884094142`; CodeQL passed in run `35884093234`.
-  Pull-request dependency review remains unexercised. `v1.4.5` independently
+- Push CI passed in run `36030535334`; CodeQL passed in run `36030534648`.
+  Pull-request dependency review remains unexercised. `v1.4.6` independently
   verified the published checksum asset and both provenance attestations.
 - `main` is not protected by a branch rule or ruleset. Although GitHub's
   dependency graph can produce an SPDX SBOM, no SBOM or aggregated
