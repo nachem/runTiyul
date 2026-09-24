@@ -1,6 +1,6 @@
 # RunTiyul Wiki Index
 
-Last reviewed: 2026-09-23<br>
+Last reviewed: 2026-09-24<br>
 Current milestone: MVP hardening and physical-device verification  
 Overall implementation status: functional Android-verified MVP; production provider and iOS verification remain
 
@@ -40,6 +40,7 @@ instructions are mandatory for all future agents.
 | Vector comparison overlay | Independent polyline toggle on every map; configured vector roads/trails and restricted ways, z14+ only, bounded/debounced/cancellable loads with source attribution. Offline is cache/local-only. Analyzer/unit/widget-tested; real raster/vector comparison remains device-unverified. |
 | Dense route editing and matching | Published v1.4.4 fixes sparse bends and same-level endpoint-to-segment T-junctions. Nearby points snap, distant points remain as reported direct connections, and whole-route snapping retains off-map stops. Local Move/Delete, sparse controls, Undo, GPX metadata, access/grade separation, and stale-result protection remain. Navigation recovery stays strictly mapped. Synthetic/unit/widget-tested, not field-verified. |
 | Checkpoint planning | Published v1.4.5: live routed preview, 16 nearby candidates within 150 m, long-bend pathfinding, bounded corridor expansion, and explicit short approach/gap connections. Raw checkpoint taps survive draft edits/Undo; Save retains the preview. GPX matching and strict navigation remain separate. 348 local tests and hosted release checks pass; no mobile/field validation. |
+| Non-road trail snapping (workspace) | Unpublished: preserve nearby arms of a single winding path/track as snap candidates and keep near-exact taps before choosing shorter alternatives. Prevents hairpin endpoint collapse and unintended jumps to nearby roads. 365 tests and analyzer pass, including synthetic tile extraction/turns and SQLite persistence; reported real trail/device validation remains pending. |
 | Forward recovery | Bounded multi-target shortest-path search with initial forward constraint; off-route progress stays fixed, recovery trims/replans with movement and shows a direction arrow. Shared bounded map-way cache supports local/offline data. Synthetic-GPS-tested; outdoor direction/access, device performance, and guaranteed offline routing coverage remain unverified. |
 | Stability review (2026-09-06) | Serialized area downloads/storage mutations, duplicate-resume protection, cancel/drain before edit/delete, queued-pause controls, larger-plan resume, converted-tile reuse, explicit vector HTTP errors/retries, native graphics cleanup, preserved route/activity links, coalesced database open, startup retry, and Android data-sync timeout stop are implemented and regression-tested. Reported phone crash remains unreproduced; no device was connected. Signing identity and schema v2 are unchanged. |
 | Map controls/source modes | Published v1.4.3 separates Center view (keep zoom) from Fit route and content (adjust zoom); center-view and GPS recenter preserve zoom, and center-view preserves rotation. Delayed startup camera placement is cancelled by toolbar actions. Untouched startup and automatic route previews retain their fitting behavior. Source controls, safe-area panels, offline preview restoration, and z19 overzoom remain. |
@@ -53,6 +54,7 @@ instructions are mandatory for all future agents.
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
 | Android package size | v1.4.3 universal APK is 62.74 MB (59.83 MiB), primarily three CPU-architecture library sets. An ARM64-only payload is estimated at roughly 24 MB; no split build or size optimization was performed. App/User data remain distinct. See the [size audit](07-release-and-distribution.md#apk-size-audit-2026-09-22). |
 | Latest published release | [v1.4.5+15](releases/v1.4.5.md) published 2026-09-23 from `da262d8` on `main`, after hosted CI and CodeQL passed. Public APK/IPA checksums, Android identity/certificate, exact tagged-workflow provenance, and stable latest URLs verify. Device testing remains pending. |
+| Next release | [v1.4.6+16](releases/v1.4.6.md) is being prepared on 2026-09-24 for mobile testing of the non-road trail fixes. Fresh candidate validation passed 365 tests, 105-file formatting, full analysis, and metadata checks. Hosted gates, publication, and independent artifact verification are pending. |
 | Release workflow | [Run 35884381841](https://github.com/nachem/runTiyul/actions/runs/35884381841) passed metadata, Android permanent-signature/identity verification, unsigned iOS build, checksums, APK+IPA provenance, and publication for `v1.4.5`; `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | `v1.4.5` retains the `v1.2.2` permanent certificate and increases `versionCode` to 15. On 2026-09-04, a locally rebuilt, matching-signed `1.4.0+10` APK replaced the installed `1.4.0+10` app on a Pixel 10 with `pm install -r`; Android preserved the original install timestamp and recorded a new update timestamp. A true cross-version upgrade and manual inspection of retained routes/maps remain unverified. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation unlocks eligible sources on that device. Topographic/Satellite remain view-only unless a separately authorized internal build explicitly enables `ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS`; arbitrary providers remain excluded. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
@@ -61,7 +63,7 @@ instructions are mandatory for all future agents.
 | Long-term offline maps | On-device vector→raster conversion uses pure-Dart `vector_tile_renderer`, crisp parent over-rendering above source z14 through selectable z16, English-preferring labels, trail emphasis, and peak labels; native MapLibre rendering and a hosted production source remain unimplemented |
 | Topographic offline maps | Implemented only for converted-vector areas: Terrarium is fetched during conversion at z10-z13, rendered in memory into labeled contours + subdued hillshade (z13 parent reused with progressively reduced overlay opacity for deeper output), and baked into the final PNG. Raw elevation and overlays are never stored; online/raster maps make no separate elevation requests. The removed runtime overlay/cache/downloader is cleaned up once on startup. Converted maps credit both sources. Not device-verified; visual quality, conversion speed, memory, battery, and storage need physical-device validation |
 | Open-source project health | Contribution, conduct, support, privacy, and security policies; CODEOWNERS; issue/PR templates; Dependabot; SHA-pinned Actions; and version-pinned PR/release workflows are configured. Private vulnerability reporting, dependency alerts/security updates, secret scanning, and push protection are enabled. Push CI and Pages pass; PR dependency review/provenance remain unexercised and `main` is not protected |
-| Automated validation | On 2026-09-23, v1.4.5 passed all 348 local tests, 104-file formatting, full analysis, hosted CI/CodeQL, signed Android and unsigned iOS builds, publication, and independent checksum/signature/provenance/latest-link checks. No live map-provider probe, device install/field test, or iOS runtime validation occurred. |
+| Automated validation | On 2026-09-24, the v1.4.6 candidate passed 365 tests, 105-file formatting, full analysis, and metadata checks. The implementation debug APK built; completed device discovery found desktop/web targets only. No live map-provider or outdoor verification occurred. Published v1.4.5 retains its earlier validation evidence. |
 
 Detailed evidence belongs in
 [Implemented Details and Current Status](02-implementation-status.md).
@@ -82,6 +84,11 @@ vector/terrain requests. See the
 [implementation and evidence](02-implementation-status.md#2026-09-22-development-raster-download-hardening).
 
 ## Current implementation priority
+
+Non-road verification gate: obtain a failing GPX or map location and compare the
+vector geometry with the actual trail. Exercise exact/noisy hairpin taps,
+nearby-road alternatives, reverse direction, and saved turn geometry on a
+phone. The local 2026-09-24 algorithm fixes are not yet released.
 
 Checkpoint verification gate: exercise long bends, dense junctions, short
 fragment gaps, off-trail approach segments, and preview/edit/Undo/save on a

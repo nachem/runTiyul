@@ -118,6 +118,71 @@ void main() {
   );
 
   test(
+    'RTE-011: saved trail taps retain their bend beside a shorter road',
+    () async {
+      const start = LatLng(31.8, 35.2);
+      const corner = LatLng(31.802, 35.2);
+      const finish = LatLng(31.8, 35.2002);
+      final now = DateTime.utc(2026, 9, 24);
+      await repository.saveRoute(
+        TrailRoute(
+          id: 'trail-hairpin',
+          name: 'Trail hairpin',
+          source: RouteSource.manual,
+          createdAt: now,
+          updatedAt: now,
+          points: [
+            RoutePoint(
+              latitude: start.latitude,
+              longitude: start.longitude,
+              elevation: 42,
+              recordedAt: now,
+            ),
+            RoutePoint(
+              latitude: finish.latitude,
+              longitude: finish.longitude,
+              elevation: 47,
+            ),
+          ],
+        ),
+      );
+      final builder = _LocalPlanningBuilder(
+        network: const TrailNetwork([
+          TrailPolyline(
+            points: [start, corner, LatLng(31.802, 35.2002), finish],
+            kind: 'path',
+          ),
+          TrailPolyline(
+            points: [LatLng(31.79991, 35.2), LatLng(31.79991, 35.2002)],
+            kind: 'minor',
+          ),
+        ]),
+      );
+      final store = await openStore(
+        config: _vectorConfig,
+        routeTrailBuilder: builder,
+      );
+      addTearDown(store.dispose);
+      await store.setMapTileMode(MapTileMode.offline);
+
+      expect(
+        await store.snapRouteToTrails(store.routes.single),
+        RouteSnapOutcome.updated,
+      );
+      final saved = (await repository.loadRoutes()).single;
+      expect(saved.id, 'trail-hairpin');
+      expect(saved.source, RouteSource.manual);
+      expect(saved.points.first.latLng, start);
+      expect(saved.points.last.latLng, finish);
+      expect(saved.points.map((point) => point.latLng), contains(corner));
+      expect(saved.points.first.elevation, 42);
+      expect(saved.points.first.recordedAt, now);
+      expect(saved.points.last.elevation, 47);
+      expect(builder.allowedNetwork, isFalse);
+    },
+  );
+
+  test(
     'RTE-003: saved manual checkpoints use pathfinding and retain their mapped loop',
     () async {
       const start = LatLng(0, 0);

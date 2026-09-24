@@ -400,13 +400,30 @@ split nodes. Category preference is only a 6 m near-tie breaker. Missing metadat
 and tile-boundary quantization can still prevent mapped connections. Do not infer
 arbitrary interior intersections solely from crossing lines.
 
+Curved-feature candidate selection (RTE-011, workspace update 2026-09-24)
+projects onto each segment and retains local distance minima along the feature,
+rather than one nearest point for the whole polyline. This preserves alternate
+nearby hairpin arms while excluding non-minimal dense straight vertices.
+Adjacent coincident projections are deduplicated; global six/16 candidate caps
+and maximum snap distances remain. This does not add graph junctions or change
+grade/access policy.
+
+The shared candidate-plan comparison keeps connectivity first (fewer wholly
+direct legs, then mapped-only versus unmapped), then minimizes missed existing
+snaps within 2 m, before comparing route cost. This preserves deliberate trail
+or road taps instead of moving them to a nearby shorter way. Exact candidates
+that cannot participate in a connected plan do not forbid useful alternatives.
+The priority is used by Checkpoints, local Follow-trails edits, and matching;
+strict recovery still follows its mapped graph and heading constraints.
+
 Checkpoint planning is a separate mode of `planWaypoints` (RTE-003/RTE-011,
 released in v1.4.5 on 2026-09-23), not a relaxation of strict recovery topology.
 It evaluates all ordered inputs with up to 16 candidates in a 150 m radius.
 Candidates within 40 m may move the checkpoint; more distant candidates keep
 the input location and use explicit unmapped approach segments. A distinct input
 more than 5 m from its neighbor cannot collapse into a negligible projected leg.
-Candidate costs account for route length, snap distance, and unmapped distance;
+After the shared connectivity and near-exact-snap priorities, candidate costs
+account for route length, snap distance, and unmapped distance;
 fully mapped paths take priority over gap-assisted or whole-leg direct fallback.
 Each previous candidate performs one multi-target search for the next set.
 Mapped search bounds are 10 km minimum, eight times checkpoint separation, and

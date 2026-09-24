@@ -270,6 +270,17 @@ Repeat with cached data in Offline mode and compare saved manual Snap with GPX
 shape matching. The actual phone, access/barrier situation, and missing-data
 behavior still require field validation; synthetic scenarios are not a guarantee.
 
+For the unpublished 2026-09-24 non-road fix, locate a path/track hairpin in the
+vector overlay, especially one stored as a single winding line. In Checkpoints
+and Follow trails, tap exactly on opposite arms and verify that both endpoints
+and the intervening bend remain. Repeat beside a shorter nearby road: deliberate
+trail taps should not jump to it when the trail connects. Place a slightly noisy
+middle checkpoint between arms and check continuity with the neighboring points.
+Reverse the route, save/reload, and inspect turns on footways, steps, and tracks.
+The synthetic extraction/turn and SQLite cases pass; an actual failing GPX or map
+location is still needed to verify the reported real-world case. Do not assume
+missing raster-visible paths exist in the vector routing data.
+
 For `NAV-007`, start a selected-route recording and move onto a connected
 off-route way with a reliable course. The recovery line and arrow should start
 forward, select the shortest available connection within the local search, and

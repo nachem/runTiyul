@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-09-23
+Last reviewed: 2026-09-24
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -73,6 +73,19 @@ and caches may contribute. `TrailNetworkCache` caps its routing-data disk cache
 at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
 evidence of the actual bytes on a phone. A device storage breakdown is needed
 to attribute a reported 64 MB specifically to User data rather than App size.
+
+### 1.4.6 publication preparation
+
+[v1.4.6+16](releases/v1.4.6.md) is being prepared on 2026-09-24 for the
+non-road trail snapping fixes. The prior implementation passed 365 tests,
+full analysis, and an Android debug build. Fresh v1.4.6 candidate validation
+passed all 365 tests, 105-file formatting, full analysis, and version/note
+consistency. Device discovery found only desktop/web targets. Commit/tag,
+hosted gates, signed Android and unsigned iOS release builds, and independent
+public artifact verification remain pending. Provider restrictions,
+schema, dependencies, cache format, and permanent signing identity are
+unchanged. The private backup and generated files remain excluded from Git.
+v1.4.5 remains the latest verified public release until publication completes.
 
 ### 1.4.5 publication
 

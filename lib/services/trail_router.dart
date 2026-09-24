@@ -63,6 +63,7 @@ class _WaypointState {
     this.leg = const [],
     this.directSegments = const [],
     this.unmappedMeters = 0,
+    this.missedExactSnaps = 0,
   });
 
   final LatLng point;
@@ -73,13 +74,18 @@ class _WaypointState {
   final List<LatLng> leg;
   final List<int> directSegments;
   final double unmappedMeters;
+  final int missedExactSnaps;
 
-  bool betterThan(_WaypointState other) =>
-      directLegs < other.directLegs ||
-      (directLegs == other.directLegs &&
-          ((unmappedMeters == 0 && other.unmappedMeters > 0) ||
-              ((unmappedMeters == 0) == (other.unmappedMeters == 0) &&
-                  cost < other.cost)));
+  bool betterThan(_WaypointState other) {
+    if (directLegs != other.directLegs) return directLegs < other.directLegs;
+    if ((unmappedMeters == 0) != (other.unmappedMeters == 0)) {
+      return unmappedMeters == 0;
+    }
+    if (missedExactSnaps != other.missedExactSnaps) {
+      return missedExactSnaps < other.missedExactSnaps;
+    }
+    return cost < other.cost;
+  }
 }
 
 typedef _GraphLeg = ({List<LatLng> points, List<int> directSegments});
@@ -542,20 +548,41 @@ class TrailRouter {
     for (var i = 0; i < _network.trails.length; i++) {
       final trail = _network.trails[i];
       if (!trail.routable) continue;
-      final projection = nearestOnPolyline(
-        query,
-        trail.points,
-        distance: distance,
-      );
-      if (projection == null || projection.distanceMeters > maxMeters) continue;
-      final anchor = TrailAnchor(
-        trailIndex: i,
-        segmentIndex: projection.segmentIndex,
-        point: projection.point,
-        category: TrailExtractor.categoryOf(trail.kind),
-        distanceMeters: projection.distanceMeters,
-      );
-      candidates.add(anchor);
+      final projections = [
+        for (var segment = 0; segment + 1 < trail.points.length; segment++)
+          nearestOnPolyline(query, [
+            trail.points[segment],
+            trail.points[segment + 1],
+          ], distance: distance)!,
+      ];
+      TrailAnchor? previous;
+      for (var segment = 0; segment < projections.length; segment++) {
+        final projection = projections[segment];
+        if (projection.distanceMeters > maxMeters ||
+            (segment > 0 &&
+                projections[segment - 1].distanceMeters <
+                    projection.distanceMeters) ||
+            (segment + 1 < projections.length &&
+                projections[segment + 1].distanceMeters <
+                    projection.distanceMeters)) {
+          continue;
+        }
+        if (previous != null &&
+            previous.segmentIndex + 1 == segment &&
+            distance.metersBetween(previous.point, projection.point) <=
+                nodeGridMeters) {
+          continue;
+        }
+        final anchor = TrailAnchor(
+          trailIndex: i,
+          segmentIndex: segment,
+          point: projection.point,
+          category: TrailExtractor.categoryOf(trail.kind),
+          distanceMeters: projection.distanceMeters,
+        );
+        candidates.add(anchor);
+        previous = anchor;
+      }
     }
     candidates.sort(
       (left, right) => left.distanceMeters.compareTo(right.distanceMeters),
@@ -592,14 +619,24 @@ class TrailRouter {
       ];
     }
 
+    int missedExactSnap(TrailAnchor? anchor, List<TrailAnchor?> nearby) {
+      if (nearby.isEmpty ||
+          (nearby.first?.distanceMeters ?? double.infinity) > 2) {
+        return 0;
+      }
+      return (anchor?.distanceMeters ?? double.infinity) > 2 ? 1 : 0;
+    }
+
+    final firstCandidates = candidates(0);
     var states = [
-      for (final anchor in candidates(0))
+      for (final anchor in firstCandidates)
         _WaypointState(
           point: checkpointRouting && (anchor?.distanceMeters ?? 0) > 40
               ? waypoints.first
               : anchor?.point ?? waypoints.first,
           anchor: anchor,
           cost: (anchor?.distanceMeters ?? 0) * 4,
+          missedExactSnaps: missedExactSnap(anchor, firstCandidates),
         ),
     ];
     for (var index = 1; index < waypoints.length; index++) {
@@ -710,6 +747,9 @@ class TrailRouter {
             directLegs: previous.directLegs + (direct ? 1 : 0),
             unmappedMeters:
                 previous.unmappedMeters + (checkpointRouting ? unmapped : 0),
+            missedExactSnaps:
+                previous.missedExactSnaps +
+                missedExactSnap(anchor, nextCandidates),
             previous: previous,
             leg: leg,
             directSegments: directSegments,
