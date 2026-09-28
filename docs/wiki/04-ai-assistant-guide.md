@@ -26,11 +26,12 @@ As of 2026-09-28:
 - RTE-003 now exposes **Return to start** and selected-control return through
   the existing Checkpoints/Follow trails planner. NAV-002 progress uses
   distance-along-route plus heading/prior progress for overlapping A-B-A
-  geometry. The v1.4.7 candidate adds a transient active-run **Navigate back** override for
+  geometry. v1.4.7 adds a transient active-run **Navigate back** override for
   Home/start, a map-selected route point, or reversed free-run breadcrumbs.
   Keep this explicit backtracking separate from automatic NAV-007 recovery,
   which remains forward-only. All 375 tests, 107-file formatting, and full
-  analysis passed on 2026-09-28; no device or outdoor GPS validation occurred.
+  analysis plus hosted release checks passed on 2026-09-28; no device or
+  outdoor GPS validation occurred.
 
 - v1.4.3 separates manual **Center view (keep zoom)** from explicit **Fit route
   and content (adjust zoom)**. Center view preserves both scale and rotation;
