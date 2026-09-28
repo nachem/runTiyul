@@ -54,7 +54,7 @@ instructions are mandatory for all future agents.
 | Activity GPX export | Implemented and serialization-tested; native save dialog unverified |
 | Android package size | v1.4.3 universal APK is 62.74 MB (59.83 MiB), primarily three CPU-architecture library sets. An ARM64-only payload is estimated at roughly 24 MB; no split build or size optimization was performed. App/User data remain distinct. See the [size audit](07-release-and-distribution.md#apk-size-audit-2026-09-22). |
 | Latest published release | [v1.4.6+16](releases/v1.4.6.md) published 2026-09-24 from `7816c76` on `main`, after hosted CI and CodeQL passed. Public APK/IPA checksums, Android identity/certificate, exact tagged-workflow provenance, and stable latest URLs verify. Mobile testing is planned by the user and remains unverified. |
-| Release candidate | [v1.4.7+17](releases/v1.4.7.md) prepared 2026-09-28 with 375 passing tests, 107-file formatting, clean analysis, wiki links, whitespace checks, and a debug APK verified as package/version `1.4.7+17`. Signed hosted checks, tag, publication, and device validation remain pending. |
+| Release candidate | [v1.4.7+17](releases/v1.4.7.md) approved for publication on 2026-09-28 with 375 passing tests, 107-file formatting, clean analysis, wiki links, whitespace checks, a debug APK verified as package/version `1.4.7+17`, and passing hosted CI/CodeQL. Tag, signed release build, publication, and device validation remain pending. |
 | Release workflow | [Run 36030762592](https://github.com/nachem/runTiyul/actions/runs/36030762592) passed metadata, Android permanent-signature/identity verification, unsigned iOS build, checksums, APK+IPA provenance, and publication for `v1.4.6`; `v1.2.1` remains an unpublished tag with no artifacts |
 | Android update compatibility | `v1.4.6` retains the `v1.2.2` permanent certificate and increases `versionCode` to 16. On 2026-09-04, a locally rebuilt, matching-signed `1.4.0+10` APK replaced the installed `1.4.0+10` app on a Pixel 10 with `pm install -r`; Android preserved the original install timestamp and recorded a new update timestamp. A true cross-version upgrade and manual inspection of retained routes/maps remain unverified. Published builds through `v1.2.0` used incompatible ephemeral debug keys and require a one-time uninstall |
 | Offline map downloads | Implemented behind provider-policy gate. The top-level picker offers **MBTiles / vector** and **Current map: _layer_**. Debug immediately enables public Streets/CyclOSM as `DEV`; release starts locked but this repository compiles the developer capability on by default, so seven taps plus warning/confirmation unlocks eligible sources on that device. Topographic/Satellite remain view-only unless a separately authorized internal build explicitly enables `ALLOW_AUTHORIZED_VIEW_RASTER_DEV_DOWNLOADS`; arbitrary providers remain excluded. Provider id + format persist per area for correct resume/render/delete. Android foreground keep-alive and foreground resume remain device-unverified |
@@ -90,8 +90,8 @@ out-and-back with **Return to start**, run through the turnaround with and
 without a reliable heading, and exercise mid-run Home/start plus a selected
 route point. Confirm the guidance line trims with movement, Resume route keeps
 the original progress, free-run breadcrumbs retrace correctly, and no saved
-route/activity data changes. The 2026-09-28 implementation is prepared as the
-v1.4.7 candidate and remains untagged.
+route/activity data changes. The v1.4.7 candidate passed local and hosted gates
+on 2026-09-28 and remains untagged pending publication.
 
 Non-road verification gate: obtain a failing GPX or map location and compare the
 vector geometry with the actual trail. Exercise exact/noisy hairpin taps,

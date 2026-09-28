@@ -85,8 +85,10 @@ recovery. Candidate validation passed 375 tests, a read-only 107-file format
 check, full analysis, wiki links, diff whitespace, and an Android debug APK
 build. Android SDK inspection verified package/version `1.4.7+17`; the debug
 artifact is not the public permanently signed update. No device, outdoor GPS,
-signed artifact, iOS runtime, tag, push, or publication had occurred at this
-preparation point. The private backup remains excluded from Git.
+signed artifact, or iOS runtime was tested. Candidate commit `1854fa9` was
+pushed to `main` and passed hosted CI `36427286223` plus CodeQL `36427285579`.
+Tagging and publication remained pending at this approval point. The private
+backup remains excluded from Git.
 
 ### 1.4.6 publication
 
