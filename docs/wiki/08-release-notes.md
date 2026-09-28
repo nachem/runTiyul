@@ -1,6 +1,6 @@
 # Release Notes Index
 
-Last reviewed: 2026-09-24
+Last reviewed: 2026-09-28
 
 This page is the durable index and policy for RunTiyul release notes. Detailed,
 authored notes live under [`releases/`](releases/) and are also used verbatim as
@@ -30,6 +30,7 @@ Do not create a tag first and write notes afterward.
 
 | Version | Date | Status | Summary |
 | --- | --- | --- | --- |
+| [v1.4.7](releases/v1.4.7.md) | 2026-09-28 | Candidate | Return-to-start planning, overlap-aware out-and-back progress, and explicit mid-run guidance to start or a selected route point. |
 | [v1.4.6](releases/v1.4.6.md) | 2026-09-24 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.6) | Curved path/track snap candidates, near-exact endpoint preservation, and connected hairpin editing. |
 | [v1.4.5](releases/v1.4.5.md) | 2026-09-23 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.5) | Live checkpoint route preview, wider candidate routing, bounded short-gap connections, and exact-preview saving. |
 | [v1.4.4](releases/v1.4.4.md) | 2026-09-23 | [Published](https://github.com/nachem/runTiyul/releases/tag/v1.4.4) | Mapped bends and T-junctions, nearby waypoint snapping with explicit direct connections, and the authorized Esri DEV workflow. |

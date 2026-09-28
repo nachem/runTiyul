@@ -152,9 +152,11 @@ class ForwardRouteRecovery {
     required double minimumAlongMeters,
   }) {
     for (var index = 1; index < path.length; index++) {
-      final projection = nearestOnPolyline(
+      final projection = nearestOnPolylineForProgress(
         path[index],
         plannedRoute,
+        completedRouteMeters: minimumAlongMeters,
+        requireForward: true,
         distance: distance,
       );
       if (projection == null ||

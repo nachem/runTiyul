@@ -8,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:trail_runner/app/app_store.dart';
+import 'package:trail_runner/core/geo/distance.dart';
 import 'package:trail_runner/data/app_database.dart';
 import 'package:trail_runner/data/app_repository.dart';
 import 'package:trail_runner/features/map/trail_map.dart';
@@ -321,6 +322,52 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
+
+  testWidgets('RTE-003: Return to start appends an out-and-back leg', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 932);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final builder = _PlanningBuilder();
+    final planningStore = (await tester.runAsync(
+      () => AppStore.forTesting(
+        repository: AppRepository(database),
+        tileStore: store.tileStore,
+        mapProvider: _provider,
+        routeTrailBuilder: builder,
+        locationService: const _CurrentLocationService(),
+      ),
+    ))!;
+    addTearDown(planningStore.dispose);
+    planningStore.mapTileMode = MapTileMode.offline;
+    planningStore.vectorSourceUrl = 'https://example.invalid/planet';
+    await tester.pumpWidget(
+      MaterialApp(home: ManualRouteEditor(store: planningStore)),
+    );
+    await tester.pumpAndSettle();
+    TrailMap map() => tester.widget<TrailMap>(find.byType(TrailMap));
+    const start = LatLng(31.8004, 35.20005);
+    map().onTap!(start);
+    await tester.pumpAndSettle();
+    map().onTap!(const LatLng(31.8021, 35.2018));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('return-route-to-start')));
+    await tester.pumpAndSettle();
+
+    expect(map().waypointMarkers, hasLength(3));
+    expect(
+      const GeoDistance().metersBetween(
+        map().waypoints.first,
+        map().waypoints.last,
+      ),
+      lessThan(1),
+    );
+    expect(find.byKey(const ValueKey('return-route-to-start')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'RTE-003 dense editor preserves geometry and exposes sparse clickable controls',

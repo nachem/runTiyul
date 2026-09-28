@@ -168,6 +168,94 @@ void main() {
     },
   );
 
+  test(
+    'NAV-011 back guidance is temporary and preserves the saved route',
+    () async {
+      sqfliteFfiInit();
+      final database = AppDatabase(
+        factory: databaseFactoryFfi,
+        databasePath: inMemoryDatabasePath,
+      );
+      final repository = _Repository(database);
+      final directory = await Directory.systemTemp.createTemp(
+        'recording_back_navigation',
+      );
+      final locations = _Locations();
+      final now = DateTime.now().toUtc();
+      final route = TrailRoute(
+        id: 'out-and-back',
+        name: 'Out and back',
+        source: RouteSource.manual,
+        createdAt: now,
+        updatedAt: now,
+        points: const [
+          RoutePoint(latitude: 0, longitude: 0),
+          RoutePoint(latitude: 0, longitude: 0.004),
+          RoutePoint(latitude: 0, longitude: 0),
+        ],
+      );
+      await repository.saveRoute(route);
+      final store = await AppStore.forTesting(
+        repository: repository,
+        tileStore: await TileStore.at(directory),
+        locationService: locations,
+        mapProvider: const MapProviderConfig(
+          id: 'test',
+          urlTemplate: 'https://example.invalid/{z}/{x}/{y}',
+          attribution: 'Test',
+          offlineDownloadsAllowed: false,
+          isDevelopmentOsmOverride: false,
+        ),
+      );
+      addTearDown(() async {
+        store.dispose();
+        await locations.positionsController.close();
+        await database.close();
+        await directory.delete(recursive: true);
+      });
+      store.selectRoute(store.routes.single);
+      await store.startActivity();
+      repository.saved = Completer<void>();
+      locations.positionsController.add(
+        Position(
+          latitude: 0,
+          longitude: 0.002,
+          timestamp: now,
+          accuracy: 3,
+          altitude: 0,
+          altitudeAccuracy: 3,
+          heading: 90,
+          headingAccuracy: 5,
+          speed: 3,
+          speedAccuracy: 0.2,
+        ),
+      );
+      await repository.saved!.future;
+
+      expect(store.plannedRouteProgressMeters, closeTo(222, 5));
+      expect(store.navigateBackHome(), isTrue);
+      expect(store.navigatingBack, isTrue);
+      expect(store.backNavigationLabel, 'Home / start');
+      expect(store.backNavigationPath.first.longitude, closeTo(0.002, 1e-8));
+      expect(store.backNavigationPath.last, const LatLng(0, 0));
+
+      store.cancelBackNavigation();
+      expect(store.navigatingBack, isFalse);
+      expect(store.plannedRouteProgressMeters, closeTo(222, 5));
+      expect(store.navigateBackToRoutePoint(const LatLng(0, 0.001)), isTrue);
+      expect(store.backNavigationLabel, 'Selected route point');
+
+      final savedRoute = (await repository.loadRoutes()).single;
+      final savedActivity = (await repository.loadActivities()).single;
+      expect(savedRoute.points.map((point) => point.latLng), [
+        const LatLng(0, 0),
+        const LatLng(0, 0.004),
+        const LatLng(0, 0),
+      ]);
+      expect(savedActivity.routeId, route.id);
+    },
+  );
+
   test('ACT-004 recording accepts a plausible delayed location fix', () async {
     sqfliteFfiInit();
     final database = AppDatabase(

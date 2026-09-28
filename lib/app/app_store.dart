@@ -25,6 +25,7 @@ import '../services/gpx_service.dart';
 import '../services/location_service.dart';
 import '../services/map_provider.dart';
 import '../services/navigation_alert_feedback.dart';
+import '../services/navigation_back_planner.dart';
 import '../services/navigation_monitor.dart';
 import '../services/offline_download_service.dart';
 import '../services/route_geometry_cleaner.dart';
@@ -97,6 +98,8 @@ class AppStore extends ChangeNotifier {
       const RouteGeometryCleaner();
   final ForwardRouteRecovery _forwardRouteRecovery =
       const ForwardRouteRecovery();
+  final NavigationBackPlanner _navigationBackPlanner =
+      const NavigationBackPlanner();
   final NavigationMonitor _navMonitor = NavigationMonitor();
 
   List<TrailRoute> routes = [];
@@ -233,6 +236,7 @@ class AppStore extends ChangeNotifier {
 
   StreamSubscription<Position>? _positionSubscription;
   Timer? _elapsedTimer;
+  List<LatLng> _plannedNavRoute = const [];
   List<LatLng> _navRoute = const [];
   List<LatLng> _navJunctions = const [];
   TrailNetwork _navTrailNetwork = const TrailNetwork([]);
@@ -243,6 +247,28 @@ class AppStore extends ChangeNotifier {
   DateTime? _lastNavigationNetworkAt;
   LatLng? _navigationNetworkCenter;
   String? _navigationActivityId;
+  double _plannedRouteProgressMeters = 0;
+  List<LatLng> _backNavigationPath = const [];
+  LatLng? _backNavigationDestination;
+  String? _backNavigationLabel;
+
+  bool get navigatingBack => _backNavigationPath.length >= 2;
+  List<LatLng> get backNavigationPath => _navigationBackPlanner.remainingPath(
+    _backNavigationPath,
+    navStatus.routeCompletedMeters ?? 0,
+  );
+  LatLng? get backNavigationDestination => _backNavigationDestination;
+  String? get backNavigationLabel => _backNavigationLabel;
+  double get plannedRouteProgressMeters => _plannedRouteProgressMeters;
+  bool get backNavigationArrived =>
+      navigatingBack &&
+      (navStatus.routeRemainingMeters ?? double.infinity) <= 15;
+  bool get canNavigateBackHome =>
+      activeActivity != null &&
+      ((_plannedNavRoute.length >= 2 && _plannedRouteProgressMeters > 5) ||
+          activeActivity!.samples.length >= 2);
+  bool get canNavigateBackToRoutePoint =>
+      activeActivity != null && _plannedNavRoute.length >= 2;
 
   static Future<AppStore> create() async {
     final repository = AppRepository(AppDatabase());
@@ -442,6 +468,7 @@ class AppStore extends ChangeNotifier {
         );
         await repository.updateActivity(activeActivity!);
       }
+      if (activeActivity != null) _beginNavigation();
       errorMessage = null;
     } on Object catch (error) {
       errorMessage = 'Could not load local data: $error';
@@ -1051,6 +1078,76 @@ class AppStore extends ChangeNotifier {
     }
   }
 
+  bool navigateBackHome() {
+    final activity = activeActivity;
+    if (activity == null) return false;
+    final plan = _navigationBackPlanner.planHome(
+      plannedRoute: _plannedNavRoute,
+      breadcrumbs: activity.samples
+          .map((sample) => sample.latLng)
+          .toList(growable: false),
+      completedRouteMeters: _plannedRouteProgressMeters,
+      currentPosition: currentLocation ?? activity.samples.lastOrNull?.latLng,
+      headingDegrees:
+          currentCourseDegrees ?? activity.samples.lastOrNull?.heading,
+    );
+    if (plan == null) {
+      _setError('Move farther from the start before navigating back.');
+      return false;
+    }
+    _activateBackNavigation(plan, 'Home / start');
+    return true;
+  }
+
+  bool navigateBackToRoutePoint(LatLng target) {
+    final activity = activeActivity;
+    if (activity == null || _plannedNavRoute.length < 2) return false;
+    final plan = _navigationBackPlanner.planToRoutePoint(
+      plannedRoute: _plannedNavRoute,
+      target: target,
+      completedRouteMeters: _plannedRouteProgressMeters,
+      currentPosition: currentLocation ?? activity.samples.lastOrNull?.latLng,
+      headingDegrees:
+          currentCourseDegrees ?? activity.samples.lastOrNull?.heading,
+    );
+    if (plan == null) {
+      _setError('Choose a different point on the active route.');
+      return false;
+    }
+    _activateBackNavigation(plan, 'Selected route point');
+    return true;
+  }
+
+  void _activateBackNavigation(NavigationBackPlan plan, String label) {
+    _backNavigationPath = plan.path;
+    _backNavigationDestination = plan.destination;
+    _backNavigationLabel = label;
+    _navRoute = plan.path;
+    _navMonitor
+      ..config = navAlertConfig
+      ..reset();
+    navStatus = NavStatus.idle;
+    _activeForwardRecovery = null;
+    _lastForwardRecoveryAttemptAt = null;
+    errorMessage = null;
+    notifyListeners();
+  }
+
+  void cancelBackNavigation() {
+    if (!navigatingBack) return;
+    _backNavigationPath = const [];
+    _backNavigationDestination = null;
+    _backNavigationLabel = null;
+    _navRoute = _plannedNavRoute;
+    _navMonitor
+      ..config = navAlertConfig
+      ..reset(routeProgressMeters: _plannedRouteProgressMeters);
+    navStatus = NavStatus.idle;
+    _activeForwardRecovery = null;
+    _lastForwardRecoveryAttemptAt = null;
+    notifyListeners();
+  }
+
   void _startLocationStream() {
     _positionSubscription?.cancel();
     _positionSubscription = _locationService.positions().listen(
@@ -1094,9 +1191,14 @@ class AppStore extends ChangeNotifier {
     final route = routes
         .where((item) => item.id == activeActivity?.routeId)
         .firstOrNull;
-    _navRoute = route == null
+    _plannedNavRoute = route == null
         ? const []
         : route.points.map((point) => point.latLng).toList(growable: false);
+    _navRoute = _plannedNavRoute;
+    _plannedRouteProgressMeters = 0;
+    _backNavigationPath = const [];
+    _backNavigationDestination = null;
+    _backNavigationLabel = null;
     _navJunctions = const [];
     _navTrailNetwork = const TrailNetwork([]);
     _activeForwardRecovery = null;
@@ -1148,11 +1250,16 @@ class AppStore extends ChangeNotifier {
     _loadingNavigationNetwork = false;
     _lastNavigationNetworkAt = null;
     _navigationNetworkCenter = null;
+    _plannedNavRoute = const [];
     _navRoute = const [];
     _navJunctions = const [];
     _navTrailNetwork = const TrailNetwork([]);
     _activeForwardRecovery = null;
     _lastForwardRecoveryAttemptAt = null;
+    _plannedRouteProgressMeters = 0;
+    _backNavigationPath = const [];
+    _backNavigationDestination = null;
+    _backNavigationLabel = null;
     navStatus = NavStatus.idle;
     currentCourseDegrees = null;
     _navMonitor.reset();
@@ -1226,6 +1333,10 @@ class AppStore extends ChangeNotifier {
       );
     }
     navStatus = updatedStatus;
+    if (!navigatingBack) {
+      _plannedRouteProgressMeters =
+          navStatus.routeCompletedMeters ?? _plannedRouteProgressMeters;
+    }
     if (navStatus.triggered != NavAlert.none) {
       unawaited(
         _navigationAlertFeedback.notify(

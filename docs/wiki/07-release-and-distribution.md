@@ -1,6 +1,6 @@
 # Release & Distribution
 
-Last reviewed: 2026-09-24
+Last reviewed: 2026-09-28
 
 This page documents how RunTiyul is packaged, published, and marketed: the
 public website, the release artifacts, and the CI that produces them. It
@@ -13,8 +13,8 @@ hosted run or release.
 | Concern | Mechanism | Status |
 | --- | --- | --- |
 | Marketing/landing site | Static site in [`site/`](../../site/), deployed to GitHub Pages | Deployed and live at https://nachem.github.io/runTiyul/; run `30808751792` passed on 2026-08-03 |
-| Android artifact | `RunTiyul.apk` published to GitHub Releases | Permanently signed `v1.4.6+16` published (62,905,152 bytes); package/version/certificate, provenance, checksum, and stable latest URL independently verified on 2026-09-24 |
-| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.4.6+16` published (16,060,156 bytes); checksum, provenance, and stable latest URL verified on 2026-09-24. On-device sideload remains unverified |
+| Android artifact | `RunTiyul.apk` published to GitHub Releases | `v1.4.7+17` candidate prepared locally; permanently signed `v1.4.6+16` remains the latest verified public APK until publication completes |
+| iOS artifact | `RunTiyul.ipa` (unsigned) published to GitHub Releases | `v1.4.7+17` candidate prepared locally; `v1.4.6+16` remains the latest verified public IPA. On-device sideload remains unverified |
 | Pull-request validation | Format, analyzer, test, and dependency-review jobs in `ci.yml` | Push run `36030535334` passed formatting, analysis, and the complete committed-source test suite with Flutter 3.44.6. Dependency review awaits a pull request |
 | Release supply chain | SHA-pinned Actions, least-privilege tokens, fixed Flutter version, APK identity gate, checksums, and GitHub provenance | Release run `36030762592` passed signing/identity, checksums, APK+IPA provenance, and publication for `v1.4.6` |
 | Community and security | Public policies/templates plus GitHub security settings | Community files implemented; private reporting, Dependabot alerts/security updates, secret scanning, and push protection enabled on 2026-08-01 |
@@ -73,6 +73,20 @@ and caches may contribute. `TrailNetworkCache` caps its routing-data disk cache
 at 64 MiB / 256 tiles; that is a retention limit, not preallocated storage or
 evidence of the actual bytes on a phone. A device storage breakdown is needed
 to attribute a reported 64 MB specifically to User data rather than App size.
+
+### 1.4.7 preparation
+
+[v1.4.7+17](releases/v1.4.7.md) was prepared on 2026-09-28 with explicit
+return-to-start/selected-control route planning, overlap-aware out-and-back
+progress, and active-run guidance to Home/start or a map-selected route point.
+Free runs reverse accepted breadcrumbs. The override is transient, leaves saved
+route/activity records unchanged, and is separate from automatic forward-only
+recovery. Candidate validation passed 375 tests, a read-only 107-file format
+check, full analysis, wiki links, diff whitespace, and an Android debug APK
+build. Android SDK inspection verified package/version `1.4.7+17`; the debug
+artifact is not the public permanently signed update. No device, outdoor GPS,
+signed artifact, iOS runtime, tag, push, or publication had occurred at this
+preparation point. The private backup remains excluded from Git.
 
 ### 1.4.6 publication
 

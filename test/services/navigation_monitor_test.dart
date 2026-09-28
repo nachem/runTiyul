@@ -147,6 +147,61 @@ void main() {
     expect(jitterBack.routeCompletedMeters, milestone.routeCompletedMeters);
   });
 
+  test('NAV-002 overlapping out-and-back advances onto the return leg', () {
+    final monitor = NavigationMonitor(
+      config: const NavAlertConfig(
+        offRouteEnabled: false,
+        junctionEnabled: false,
+        progressEnabled: false,
+      ),
+    );
+    const outAndBack = [LatLng(0, 0), LatLng(0, 0.004), LatLng(0, 0)];
+
+    final outbound = monitor.update(
+      const LatLng(0, 0.0038),
+      route: outAndBack,
+      headingDegrees: 90,
+    );
+    final returning = monitor.update(
+      const LatLng(0, 0.0035),
+      route: outAndBack,
+      headingDegrees: 270,
+    );
+
+    expect(outbound.routeCompletedMeters, lessThan(450));
+    expect(returning.routeCompletedMeters, greaterThan(490));
+    expect(returning.routeRemainingMeters, lessThan(400));
+  });
+
+  test(
+    'NAV-002 a near-turnaround fix can enter the return leg without heading',
+    () {
+      final monitor = NavigationMonitor(
+        config: const NavAlertConfig(
+          offRouteEnabled: false,
+          junctionEnabled: false,
+          progressEnabled: false,
+        ),
+      );
+      const outAndBack = [LatLng(0, 0), LatLng(0, 0.004), LatLng(0, 0)];
+
+      final nearTurnaround = monitor.update(
+        const LatLng(0, 0.0039),
+        route: outAndBack,
+      );
+      final returning = monitor.update(
+        const LatLng(0, 0.0038),
+        route: outAndBack,
+      );
+
+      expect(nearTurnaround.routeCompletedMeters, greaterThan(430));
+      expect(
+        returning.routeCompletedMeters,
+        greaterThan(nearTurnaround.routeCompletedMeters!),
+      );
+    },
+  );
+
   test('time progress announces only while on route', () {
     final monitor = NavigationMonitor(
       config: const NavAlertConfig(

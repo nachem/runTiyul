@@ -289,12 +289,12 @@ class NavigationMonitor {
   bool _advanceAnnounced = false;
   bool _apexAnnounced = false;
 
-  void reset() {
+  void reset({double routeProgressMeters = 0}) {
     _offRouteStreak = 0;
     _offRouteActive = false;
     _lastOffRouteCueAt = null;
     _distanceAtLastOffRouteCue = null;
-    _maxRouteProgressMeters = 0;
+    _maxRouteProgressMeters = routeProgressMeters;
     _nextProgressMeters = null;
     _nextProgressElapsed = null;
     _maneuverRoute = null;
@@ -321,7 +321,12 @@ class NavigationMonitor {
     double? distanceToRoute;
     double? userAlong;
     if (route.length >= 2) {
-      userProjection = nearestOnPolyline(position, route);
+      userProjection = nearestOnPolylineForProgress(
+        position,
+        route,
+        completedRouteMeters: _maxRouteProgressMeters,
+        headingDegrees: headingDegrees,
+      );
       distanceToRoute = userProjection?.distanceMeters;
       if (userProjection != null) {
         userAlong = maneuverPlanner.alongRoute(route, userProjection);

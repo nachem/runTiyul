@@ -277,6 +277,24 @@ GPS jitter, widget rebuilds, and audio completion cannot re-arm them
 accidentally. Off-route and maneuver events take priority over progress on the
 same GPS update.
 
+Route projection must retain both distance-to-line and distance-along-route.
+When route geometry overlaps itself (especially A-B-A out-and-backs), live
+progress chooses among spatially tied segments using prior monotonic progress
+and a reliable moving heading. A small forward preference may bridge a missed
+turnaround fix when heading is absent, but must not permit an arbitrary jump to
+a distant crossing or return leg.
+
+`NavigationBackPlanner` owns explicit NAV-011 overrides. It slices the same
+saved route between the runner's progress-aware projection and a route target,
+in either direction; without a selected route it reverses accepted persisted
+activity samples. `AppStore` swaps this temporary polyline into
+`NavigationMonitor`, preserves the original route progress separately, and
+restores that progress when the runner cancels. The override is not persisted
+and never mutates route geometry or the activity's route id. After process
+recovery, the last sample/heading may seed a newly requested plan. This explicit
+user action is separate from `ForwardRouteRecovery`, which remains mapped,
+bounded, and forward-only.
+
 `ForwardRouteRecovery` accepts a reliable moving course and a locally loaded
 recognized trail/road network. One multi-target Dijkstra search chooses the
 shortest mapped path to sampled ahead contacts; the initial forward cone is a
@@ -669,6 +687,8 @@ instructions.
 - Geodesic distance and metric accumulation.
 - GPS accuracy/jump filters.
 - Route progress and off-route persistence.
+- Overlapping out-and-back progress with and without heading; explicit
+  route/start/selected-point and free-run breadcrumb return plans.
 - Navigation output-mode routing, off-route trend cadence, relative/compass
   voice guidance, progress milestones, matching missing-TTS tone fallback, and
   bundled-audio validation, final-cue focus release, and overlapping-alert

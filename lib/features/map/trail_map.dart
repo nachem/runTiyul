@@ -25,6 +25,7 @@ class TrailMap extends StatefulWidget {
     this.routes = const [],
     this.track = const [],
     this.recoveryPath = const [],
+    this.navigationDestination,
     this.waypoints = const [],
     this.selection,
     this.selectionStart,
@@ -55,6 +56,7 @@ class TrailMap extends StatefulWidget {
   final List<TrailRoute> routes;
   final List<LatLng> track;
   final List<LatLng> recoveryPath;
+  final LatLng? navigationDestination;
   final List<LatLng> waypoints;
   final GeoBounds? selection;
 
@@ -894,6 +896,32 @@ class _TrailMapState extends State<TrailMap> {
                         border: const Border.fromBorderSide(
                           BorderSide(color: Colors.white, width: 3),
                         ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            if (widget.navigationDestination != null)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: widget.navigationDestination!,
+                    width: 36,
+                    height: 36,
+                    child: DecoratedBox(
+                      key: const ValueKey('navigation-destination-marker'),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.flag,
+                        color: Theme.of(context).colorScheme.primary,
+                        size: 22,
                       ),
                     ),
                   ),

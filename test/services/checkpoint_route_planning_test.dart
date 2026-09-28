@@ -161,6 +161,30 @@ void main() {
   });
 
   test(
+    'RTE-003: an explicit return checkpoint keeps the full out-and-back',
+    () {
+      const start = LatLng(0, 0);
+      const turnaround = LatLng(0, 0.004);
+      const network = TrailNetwork([
+        TrailPolyline(points: [start, turnaround], kind: 'path'),
+      ]);
+
+      final plan = RouteTrailBuilder().planOnNetwork(
+        const [start, turnaround, start],
+        network,
+        checkpointRouting: true,
+      )!;
+
+      expect(plan.directSegments, isEmpty);
+      expect(plan.waypointIndices, hasLength(3));
+      expect(plan.points.first, start);
+      expect(plan.points[plan.waypointIndices[1]], turnaround);
+      expect(plan.points.last, start);
+      expect(plan.points.length, greaterThanOrEqualTo(3));
+    },
+  );
+
+  test(
     'RTE-003: planning picks the shorter complete route through all checkpoints',
     () {
       const network = TrailNetwork([

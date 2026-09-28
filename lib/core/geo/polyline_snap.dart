@@ -12,6 +12,8 @@ class PolylineProjection {
     required this.distanceMeters,
     required this.segmentIndex,
     required this.t,
+    required this.alongRouteMeters,
+    required this.segmentBearingDegrees,
   });
 
   /// The closest point on the polyline.
@@ -25,6 +27,12 @@ class PolylineProjection {
 
   /// Fraction `[0, 1]` along that segment where [point] lies.
   final double t;
+
+  /// Distance from the start of the polyline to [point].
+  final double alongRouteMeters;
+
+  /// Direction of travel encoded by the projected segment.
+  final double segmentBearingDegrees;
 }
 
 const double _earthRadiusMeters = 6378137.0;
@@ -40,7 +48,29 @@ PolylineProjection? nearestOnPolyline(
   List<LatLng> polyline, {
   GeoDistance distance = const GeoDistance(),
 }) {
-  if (polyline.length < 2) return null;
+  final projections = projectionsOnPolyline(
+    query,
+    polyline,
+    distance: distance,
+  );
+  PolylineProjection? best;
+  for (final projection in projections) {
+    if (best == null || projection.distanceMeters < best.distanceMeters) {
+      best = projection;
+    }
+  }
+  return best;
+}
+
+/// Projects [query] onto every segment, retaining each occurrence's position
+/// along the polyline. Repeated or reversed geometry therefore remains
+/// distinguishable even when several projections share the same coordinate.
+List<PolylineProjection> projectionsOnPolyline(
+  LatLng query,
+  List<LatLng> polyline, {
+  GeoDistance distance = const GeoDistance(),
+}) {
+  if (polyline.length < 2) return const [];
 
   final lonScale = math.cos(query.latitude * _degToRad);
 
@@ -55,13 +85,15 @@ PolylineProjection? nearestOnPolyline(
     query.longitude + east / (_degToRad * _earthRadiusMeters * lonScale),
   );
 
-  PolylineProjection? best;
+  final projections = <PolylineProjection>[];
+  var alongRouteMeters = 0.0;
   for (var i = 0; i < polyline.length - 1; i++) {
     final (ax, ay) = local(polyline[i]);
     final (bx, by) = local(polyline[i + 1]);
     final dx = bx - ax;
     final dy = by - ay;
     final lengthSq = dx * dx + dy * dy;
+    final segmentMeters = distance.metersBetween(polyline[i], polyline[i + 1]);
 
     double t;
     if (lengthSq == 0) {
@@ -76,15 +108,92 @@ PolylineProjection? nearestOnPolyline(
     final footNorth = ay + t * dy;
     final foot = fromLocal(footEast, footNorth);
     final meters = distance.metersBetween(query, foot);
-
-    if (best == null || meters < best.distanceMeters) {
-      best = PolylineProjection(
+    projections.add(
+      PolylineProjection(
         point: foot,
         distanceMeters: meters,
         segmentIndex: i,
         t: t,
-      );
+        alongRouteMeters: alongRouteMeters + segmentMeters * t,
+        segmentBearingDegrees: segmentMeters == 0
+            ? 0
+            : distance.bearingDegrees(polyline[i], polyline[i + 1]),
+      ),
+    );
+    alongRouteMeters += segmentMeters;
+  }
+  return projections;
+}
+
+/// Selects the plausible projection nearest the runner's established progress.
+///
+/// Spatially overlapping route legs are first kept within
+/// [distanceTieToleranceMeters] of the closest segment. Prior progress prevents
+/// a large backward jump, while a reliable [headingDegrees] distinguishes an
+/// outbound segment from the same geometry traversed in reverse.
+PolylineProjection? nearestOnPolylineForProgress(
+  LatLng query,
+  List<LatLng> polyline, {
+  required double completedRouteMeters,
+  double? headingDegrees,
+  double distanceTieToleranceMeters = 12,
+  bool requireForward = false,
+  GeoDistance distance = const GeoDistance(),
+}) {
+  final projections = projectionsOnPolyline(
+    query,
+    polyline,
+    distance: distance,
+  );
+  if (projections.isEmpty) return null;
+  final closestDistance = projections
+      .map((projection) => projection.distanceMeters)
+      .reduce(math.min);
+  var candidates = projections
+      .where(
+        (projection) =>
+            projection.distanceMeters <=
+            closestDistance + distanceTieToleranceMeters,
+      )
+      .toList(growable: false);
+  if (requireForward) {
+    candidates = candidates
+        .where(
+          (projection) => projection.alongRouteMeters >= completedRouteMeters,
+        )
+        .toList(growable: false);
+    if (candidates.isEmpty) return null;
+  }
+
+  double score(PolylineProjection projection) {
+    final progressDelta = projection.alongRouteMeters - completedRouteMeters;
+    final progress = progressDelta >= 0
+        ? progressDelta
+        : progressDelta.abs() + 50;
+    final spatial = (projection.distanceMeters - closestDistance) * 4;
+    final heading = headingDegrees == null || !headingDegrees.isFinite
+        ? 0
+        : _headingDifference(projection.segmentBearingDegrees, headingDegrees) *
+              0.5;
+    return progress + spatial + heading;
+  }
+
+  var best = candidates.first;
+  var bestScore = score(best);
+  for (final candidate in candidates.skip(1)) {
+    final candidateScore = score(candidate);
+    if (candidateScore < bestScore ||
+        (candidateScore == bestScore &&
+            candidate.alongRouteMeters > best.alongRouteMeters)) {
+      best = candidate;
+      bestScore = candidateScore;
     }
   }
   return best;
+}
+
+double _headingDifference(double left, double right) {
+  var difference = (left - right).abs() % 360;
+  if (difference > 180) difference = 360 - difference;
+  return difference;
 }

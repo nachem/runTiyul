@@ -21,7 +21,16 @@ describes a dated snapshot. Code and tests determine what is currently real.
 
 ## 2. Current handoff
 
-As of 2026-09-22:
+As of 2026-09-28:
+
+- RTE-003 now exposes **Return to start** and selected-control return through
+  the existing Checkpoints/Follow trails planner. NAV-002 progress uses
+  distance-along-route plus heading/prior progress for overlapping A-B-A
+  geometry. The v1.4.7 candidate adds a transient active-run **Navigate back** override for
+  Home/start, a map-selected route point, or reversed free-run breadcrumbs.
+  Keep this explicit backtracking separate from automatic NAV-007 recovery,
+  which remains forward-only. All 375 tests, 107-file formatting, and full
+  analysis passed on 2026-09-28; no device or outdoor GPS validation occurred.
 
 - v1.4.3 separates manual **Center view (keep zoom)** from explicit **Fit route
   and content (adjust zoom)**. Center view preserves both scale and rotation;
@@ -204,6 +213,10 @@ Exit criteria:
 - Keep off-route recovery on strict connected mapped ways, reconnect beyond
   monotonic progress, and never convert a nearest-route point behind the runner
   into a backtracking instruction.
+- Permit backtracking only through the runner's explicit NAV-011 action. Keep
+  the temporary target/path out of saved route and activity records, preserve
+  original monotonic progress for Resume route, and use persisted breadcrumbs
+  only for a free-run/recovered-run fallback.
 - Preserve intentional U-turns while cleaning only bounded return-to-junction
   artifacts. GPX matching and navigation recovery must not silently invent
   mapped bridges. Checkpoint planning may use explicit approach/gap/direct

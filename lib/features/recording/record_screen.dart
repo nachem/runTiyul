@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../app/app_store.dart';
 import '../../core/units/formatters.dart';
@@ -102,17 +103,85 @@ class _ReadyToRecord extends StatelessWidget {
   }
 }
 
-class _ActiveRecording extends StatelessWidget {
+class _ActiveRecording extends StatefulWidget {
   const _ActiveRecording({required this.store, required this.activity});
 
   final AppStore store;
   final RunActivity activity;
 
   @override
+  State<_ActiveRecording> createState() => _ActiveRecordingState();
+}
+
+class _ActiveRecordingState extends State<_ActiveRecording> {
+  bool _choosingRoutePoint = false;
+
+  void _showStoreError() {
+    final message = widget.store.errorMessage;
+    if (message == null || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  void _showBackOptions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.home_outlined),
+              title: const Text('Home / start'),
+              subtitle: const Text(
+                'Follow the same route or recorded path back',
+              ),
+              enabled: widget.store.canNavigateBackHome,
+              onTap: !widget.store.canNavigateBackHome
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      if (!widget.store.navigateBackHome()) _showStoreError();
+                    },
+            ),
+            ListTile(
+              key: const ValueKey('choose-back-route-point'),
+              leading: const Icon(Icons.add_location_alt_outlined),
+              title: const Text('Choose point on route'),
+              subtitle: const Text('Tap any point on the active route'),
+              enabled: widget.store.canNavigateBackToRoutePoint,
+              onTap: !widget.store.canNavigateBackToRoutePoint
+                  ? null
+                  : () {
+                      Navigator.pop(sheetContext);
+                      setState(() => _choosingRoutePoint = true);
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _chooseRoutePoint(LatLng point) {
+    if (!widget.store.navigateBackToRoutePoint(point)) {
+      _showStoreError();
+      return;
+    }
+    setState(() => _choosingRoutePoint = false);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final store = widget.store;
+    final activity = widget.activity;
     final route = store.routes
         .where((item) => item.id == activity.routeId)
         .firstOrNull;
+    final guidancePath = store.navStatus.hasForwardRecovery
+        ? store.navStatus.forwardRecoveryPath
+        : store.backNavigationPath;
     return Column(
       children: [
         Expanded(
@@ -121,7 +190,9 @@ class _ActiveRecording extends StatelessWidget {
             route: route,
             routes: store.routes,
             track: activity.samples.map((sample) => sample.latLng).toList(),
-            recoveryPath: store.navStatus.forwardRecoveryPath,
+            recoveryPath: guidancePath,
+            navigationDestination: store.backNavigationDestination,
+            onTap: _choosingRoutePoint ? _chooseRoutePoint : null,
             showControls: true,
             followCurrentLocation: store.recordingMapFollow,
             orientationMode: store.recordingMapOrientation,
@@ -132,6 +203,28 @@ class _ActiveRecording extends StatelessWidget {
                 unawaited(store.setRecordingMapOrientation(mode)),
           ),
         ),
+        if (_choosingRoutePoint)
+          Material(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.touch_app_outlined),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text('Tap a point on the active route'),
+                  ),
+                  TextButton(
+                    onPressed: () =>
+                        setState(() => _choosingRoutePoint = false),
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (store.navigatingBack) _BackNavigationBanner(store: store),
         if (store.navStatus.offRoute || store.navStatus.junctionAhead != null)
           _NavBanner(status: store.navStatus),
         Padding(
@@ -162,6 +255,24 @@ class _ActiveRecording extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  key: const ValueKey('navigate-back-action'),
+                  onPressed:
+                      store.canNavigateBackHome ||
+                          store.canNavigateBackToRoutePoint
+                      ? () => _showBackOptions(context)
+                      : null,
+                  icon: const Icon(Icons.alt_route),
+                  label: Text(
+                    store.navigatingBack
+                        ? 'Change back destination'
+                        : 'Navigate back',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -224,6 +335,53 @@ class _ActiveRecording extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _BackNavigationBanner extends StatelessWidget {
+  const _BackNavigationBanner({required this.store});
+
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final arrived = store.backNavigationArrived;
+    final remaining = store.navStatus.routeRemainingMeters;
+    final label = store.backNavigationLabel ?? 'destination';
+    final text = arrived
+        ? 'Arrived at $label'
+        : remaining == null
+        ? 'Navigating to $label'
+        : 'Navigating to $label \u00b7 ${formatDistance(remaining)} remaining';
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Icon(
+              arrived ? Icons.flag : Icons.navigation,
+              color: scheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: scheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: store.cancelBackNavigation,
+              child: Text(arrived ? 'Done' : 'Resume route'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

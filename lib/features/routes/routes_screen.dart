@@ -211,6 +211,16 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
 
   List<LatLng> get _activeMarkers => _draft.controls;
 
+  List<LatLng> get _returnTargets => _draft.checkpointInputs ?? _activeMarkers;
+
+  bool get _canReturnToStart =>
+      _returnTargets.length >= 2 &&
+      const GeoDistance().metersBetween(
+            _returnTargets.first,
+            _returnTargets.last,
+          ) >
+          1;
+
   bool get _plansCheckpoints =>
       !_followTrails &&
       _snap &&
@@ -368,6 +378,12 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
     }
     result ??= edit(allowDirectConnections: true);
     _applyEdit(result);
+  }
+
+  Future<void> _appendReturnTo(LatLng point) async {
+    if (_loadingTrails || _saving) return;
+    setState(() => _moving = false);
+    await _editAt(point);
   }
 
   void _applyEdit(RouteEditorDraft? result) {
@@ -574,39 +590,68 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
                     horizontal: 12,
                     vertical: 4,
                   ),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: Text(
-                          _moving
-                              ? 'Point ${_selected! + 1}: tap the map to move it'
-                              : (_followTrails
-                                    ? 'Anchor ${_selected! + 1} selected'
-                                    : 'Point ${_selected! + 1} selected'),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _moving
+                                  ? 'Point ${_selected! + 1}: tap the map to move it'
+                                  : (_followTrails
+                                        ? 'Anchor ${_selected! + 1} selected'
+                                        : 'Point ${_selected! + 1} selected'),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Deselect',
+                            onPressed: () => setState(() {
+                              _selected = null;
+                              _moving = false;
+                            }),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                      TextButton.icon(
-                        onPressed: _loadingTrails || _saving
-                            ? null
-                            : () => setState(() => _moving = true),
-                        icon: const Icon(Icons.open_with),
-                        label: const Text('Move'),
-                      ),
-                      TextButton.icon(
-                        onPressed: _loadingTrails || _saving
-                            ? null
-                            : () => unawaited(_deleteControl()),
-                        icon: const Icon(Icons.delete_outline),
-                        label: const Text('Delete'),
-                      ),
-                      IconButton(
-                        tooltip: 'Deselect',
-                        onPressed: () => setState(() {
-                          _selected = null;
-                          _moving = false;
-                        }),
-                        icon: const Icon(Icons.close),
+                      Wrap(
+                        alignment: WrapAlignment.end,
+                        children: [
+                          IconButton(
+                            key: const ValueKey(
+                              'return-to-selected-route-point',
+                            ),
+                            tooltip: 'Append return to this point',
+                            onPressed:
+                                _loadingTrails ||
+                                    _saving ||
+                                    const GeoDistance().metersBetween(
+                                          _returnTargets[_selected!],
+                                          _returnTargets.last,
+                                        ) <=
+                                        1
+                                ? null
+                                : () => unawaited(
+                                    _appendReturnTo(_returnTargets[_selected!]),
+                                  ),
+                            icon: const Icon(Icons.u_turn_left),
+                          ),
+                          TextButton.icon(
+                            onPressed: _loadingTrails || _saving
+                                ? null
+                                : () => setState(() => _moving = true),
+                            icon: const Icon(Icons.open_with),
+                            label: const Text('Move'),
+                          ),
+                          TextButton.icon(
+                            onPressed: _loadingTrails || _saving
+                                ? null
+                                : () => unawaited(_deleteControl()),
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('Delete'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -620,53 +665,78 @@ class _ManualRouteEditorState extends State<ManualRouteEditor> {
               ),
             Padding(
               padding: const EdgeInsets.all(16),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Expanded(child: Text('${_activeMarkers.length} controls')),
-                  FilledButton.icon(
-                    onPressed:
-                        _saving ||
-                            _loadingTrails ||
-                            _points.length < 2 ||
-                            _nameController.text.trim().isEmpty
-                        ? null
-                        : () async {
-                            setState(() => _saving = true);
-                            final initial = widget.initialRoute;
-                            final saved = initial == null
-                                ? await widget.store.saveManualRoute(
-                                    _nameController.text,
-                                    _points,
-                                    snapToTrailsOverride:
-                                        _snap &&
-                                        !_followTrails &&
-                                        _draft.checkpointInputs == null,
-                                    preserveGeometry: true,
-                                  )
-                                : await widget.store.updateManualRoute(
-                                    initial,
-                                    _nameController.text,
-                                    _points,
-                                    snapToTrailsOverride:
-                                        _snap &&
-                                        !_followTrails &&
-                                        _draft.checkpointInputs == null,
-                                    preserveGeometry: true,
-                                  );
-                            if (!context.mounted) return;
-                            if (saved) {
-                              Navigator.of(context).pop(true);
-                            } else {
-                              setState(() => _saving = false);
-                            }
-                          },
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.save),
-                    label: const Text('Save'),
+                  Text('${_activeMarkers.length} controls'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_canReturnToStart) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            key: const ValueKey('return-route-to-start'),
+                            onPressed: _loadingTrails || _saving
+                                ? null
+                                : () => unawaited(
+                                    _appendReturnTo(_returnTargets.first),
+                                  ),
+                            icon: const Icon(Icons.u_turn_left),
+                            label: const Text('Return to start'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed:
+                              _saving ||
+                                  _loadingTrails ||
+                                  _points.length < 2 ||
+                                  _nameController.text.trim().isEmpty
+                              ? null
+                              : () async {
+                                  setState(() => _saving = true);
+                                  final initial = widget.initialRoute;
+                                  final saved = initial == null
+                                      ? await widget.store.saveManualRoute(
+                                          _nameController.text,
+                                          _points,
+                                          snapToTrailsOverride:
+                                              _snap &&
+                                              !_followTrails &&
+                                              _draft.checkpointInputs == null,
+                                          preserveGeometry: true,
+                                        )
+                                      : await widget.store.updateManualRoute(
+                                          initial,
+                                          _nameController.text,
+                                          _points,
+                                          snapToTrailsOverride:
+                                              _snap &&
+                                              !_followTrails &&
+                                              _draft.checkpointInputs == null,
+                                          preserveGeometry: true,
+                                        );
+                                  if (!context.mounted) return;
+                                  if (saved) {
+                                    Navigator.of(context).pop(true);
+                                  } else {
+                                    setState(() => _saving = false);
+                                  }
+                                },
+                          icon: _saving
+                              ? const SizedBox.square(
+                                  dimension: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.save),
+                          label: const Text('Save'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
